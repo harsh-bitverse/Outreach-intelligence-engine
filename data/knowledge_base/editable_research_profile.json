@@ -1,0 +1,115 @@
+{
+  "profile_version": "2.0.0",
+  "last_updated": "2026-10-29T22:50:00Z",
+  "student_identity": {
+    "full_name": "Harshith N",
+    "entry_number": "2025CH11635",
+    "institution": "Indian Institute of Technology Delhi (IIT Delhi)",
+    "department": "Department of Chemical Engineering",
+    "program": "Bachelor of Technology (B.Tech)",
+    "current_status": "Undergraduate Student",
+    "institutional_email": "ch1251635@iitd.ac.in",
+    "target_internship_term": "Summer 2027",
+    "target_duration_weeks": "10–12 weeks (May – July 2027)",
+    "funding_terms": "Self-funded / home institution support. No funding or open position demanded in outreach."
+  },
+  "source_documents_audit": {
+    "approved_cv_pdf": {
+      "path": "data/private/approved_cv.pdf",
+      "status": "MISSING_FROM_DISK",
+      "mandatory_before_dispatch": true,
+      "remediation": "Student must upload or place their finalized approved CV PDF at 'data/private/approved_cv.pdf'. Outgoing email attachments will be blocked until verified."
+    },
+    "final_research_report_pdf": {
+      "path": "reports/final_research_report.pdf",
+      "status": "VERIFIED_PRESENT",
+      "description": "Numerical analysis, Krasowski et al. reproduction, and PINN residual defect solvers."
+    },
+    "thermodynamics_project_report_pdf": {
+      "path": "reports/FINAL_PROJECT_REPORT.pdf",
+      "status": "VERIFIED_PRESENT",
+      "description": "C++17 Peng-Robinson cubic equation of state solver and thermodynamic departure properties."
+    },
+    "github_neural_process_twin": {
+      "status": "VERIFIED_PRESENT",
+      "description": "PyTorch surrogate modeling for 2D heat equation and physical PDE fields."
+    },
+    "github_llm_inference_engine": {
+      "status": "VERIFIED_PRESENT",
+      "description": "Hardware roofline model diagnostics, TTFT and TPOT measurement across CPU/GPU."
+    }
+  },
+  "verified_technical_projects": [
+    {
+      "id": "neural-process-twin",
+      "name": "Neural Process Twin",
+      "category": "Scientific Machine Learning / Neural Operators",
+      "substantiated_facts": [
+        "Constructed physics-aware deep learning surrogate models in PyTorch for 2D steady-state heat conduction.",
+        "Demonstrated orders-of-magnitude faster inference speedup compared to standard finite-difference solvers.",
+        "Maintained physical consistency and quantified predictive uncertainty across parameter spaces."
+      ],
+      "suitable_domains": ["SciML", "Scientific Machine Learning", "Neural Operators", "Physics-Informed ML", "Fluid Dynamics", "Heat Transfer"]
+    },
+    {
+      "id": "llm-inference-engine",
+      "name": "LLM Inference Intelligence Engine",
+      "category": "AI Systems / Performance Engineering",
+      "substantiated_facts": [
+        "Built measurement-driven benchmarking suite profiling hardware ceilings across CPU and GPU topologies.",
+        "Instrumented TTFT (prefill latency) and TPOT (decode throughput) under dynamic batching loads.",
+        "Implemented Roofline model diagnostics isolating memory-bandwidth saturation versus compute bounds."
+      ],
+      "suitable_domains": ["AI Systems", "Computer Systems", "LLM Serving", "Distributed Systems", "High Performance Computing"]
+    },
+    {
+      "id": "pinn-error-estimation",
+      "name": "PINN Residual Defect Solvers & Error Estimation",
+      "category": "Scientific Computing / Numerical Analysis",
+      "substantiated_facts": [
+        "Independently audited and reproduced Krasowski et al. (arXiv:2603.15526) residual-based error estimation methodology.",
+        "Extended methodology to soft boundary constraints, rigorously validating defect propagation without analytical solutions."
+      ],
+      "suitable_domains": ["Applied Mathematics", "Numerical Analysis", "Scientific Computing", "Partial Differential Equations"]
+    },
+    {
+      "id": "thermo-cpp-solver",
+      "name": "C++17 Peng-Robinson Real-Gas Cubic EOS Engine",
+      "category": "Computational Engineering / Thermodynamics",
+      "substantiated_facts": [
+        "Developed modern C++17 Peng-Robinson cubic equation of state solver with analytic derivatives (dP/dv)_T.",
+        "Classified thermodynamic mechanical stability and evaluated enthalpy, entropy, and fugacity departures."
+      ],
+      "suitable_domains": ["Thermodynamics", "Chemical Engineering", "Molecular Simulation", "Computational Physics"]
+    },
+    {
+      "id": "humanoid-robotics",
+      "name": "Multi-DOF Servo Kinematics & Embedded Microcontroller Loops",
+      "category": "Robotics / Embedded Systems",
+      "substantiated_facts": [
+        "Designed and assembled multi-DOF servo-actuated kinematic mechanisms with low-latency control loops.",
+        "Implemented sensor telemetry and positional feedback algorithms for closed-loop physical coordination."
+      ],
+      "suitable_domains": ["Robotics", "Embedded Systems", "Control Systems", "Mechatronics"]
+    }
+  ],
+  "writing_preferences": {
+    "preferred_structure": "Strictly 4 paragraphs, 130–180 words excluding salutation and signature.",
+    "tone": "Intellectually curious, concise, rigorous, evidence-grounded. Zero generic flattery.",
+    "signature_rules": "Strictly name, department, institution, and institutional email. NO LinkedIn or GitHub links permitted in signature."
+  },
+  "aspirations_vs_facts": {
+    "verified_facts": [
+      "IIT Delhi Chemical Engineering B.Tech undergraduate student.",
+      "Proven implementations in SciML surrogate modeling, C++17 thermodynamics, PINN error estimation, and LLM latency diagnostics."
+    ],
+    "future_aspirations": [
+      "Seeking 10–12 week Summer 2027 research internship in scientific AI, machine learning systems, or robotics.",
+      "Long-term systems-building and AI-native founder mindset focused on scalable scientific infrastructure."
+    ],
+    "explicit_boundaries": [
+      "Never fabricate unpublished papers, laboratory openings, or pre-arranged funding.",
+      "Do not claim senior researcher status or unverified industrial employment."
+    ]
+  }
+}

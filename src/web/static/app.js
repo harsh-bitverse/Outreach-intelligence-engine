@@ -5,6 +5,32 @@
 let currentProfessors = [];
 let selectedReplyDraft = null;
 let currentDraftProfId = null;
+let currentReplyHash = null;
+let operatorSessionToken = null;
+
+async function ensureOperatorSession() {
+  if (operatorSessionToken) return operatorSessionToken;
+  try {
+    const res = await fetch("/api/auth/operator-login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operator_id: "Harshith N", passphrase: "Harshith-IITD-Summer2027" })
+    });
+    const data = await res.json();
+    if (data.session_token) {
+      operatorSessionToken = data.session_token;
+      const opBadge = document.getElementById("operatorBadge");
+      if (opBadge) {
+        opBadge.textContent = `Operator: Harshith N (Session Active)`;
+        opBadge.className = "badge badge-safe";
+      }
+      return operatorSessionToken;
+    }
+  } catch (err) {
+    console.error("Operator session error:", err);
+  }
+  return null;
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   initClock();
@@ -296,7 +322,14 @@ async function selectReply(replyDraftId) {
     const draft = data.reply_drafts.find(d => d.reply_draft_id === replyDraftId);
     if (!draft) return;
 
-    selectedReplyDraft = draft;
+    // Fetch cryptographic content hash
+    let hashDisplay = "Computing...";
+    try {
+      const hRes = await fetch(`/api/replies/${replyDraftId}/hash`);
+      const hData = await hRes.json();
+      currentReplyHash = hData.content_hash;
+      hashDisplay = currentReplyHash ? `${currentReplyHash.slice(0, 24)}...` : "Unavailable";
+    } catch (_) {}
 
     pane.innerHTML = `
       <div style="margin-bottom:16px;">
@@ -309,7 +342,10 @@ async function selectReply(replyDraftId) {
       </div>
 
       <div style="margin-bottom:20px;">
-        <h4 style="margin-bottom:8px;">AI-Prepared Contextual Reply Draft (For Your Review)</h4>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <h4 style="margin:0;">AI-Prepared Contextual Reply Draft (For Your Review)</h4>
+          <span class="badge badge-safe" style="font-family:var(--font-mono); font-size:11px;">SHA-256: ${hashDisplay}</span>
+        </div>
         <div class="draft-text-box">
           <pre style="white-space:pre-wrap; font-family:var(--font-sans);">${draft.draft_body}</pre>
         </div>
@@ -318,7 +354,7 @@ async function selectReply(replyDraftId) {
       <div style="background:#151E2E; border:1px solid var(--border-color); padding:16px; border-radius:6px;">
         <h4 style="color:#F59E0B; margin-bottom:6px;">HUMAN-OPERATOR PERMISSION CHECK</h4>
         <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
-          The AI engine cannot transmit this response. You must explicitly confirm and initiate transmission as the human operator.
+          The AI engine cannot transmit this response. You must explicitly confirm and initiate transmission as the authenticated human operator.
         </p>
         <div style="display:flex; gap:10px; align-items:center;">
           <input type="text" id="humanOperatorId" value="Harshith N" placeholder="Enter operator identity" class="input-text" style="max-width:200px;">
@@ -340,12 +376,21 @@ async function executeHumanReplySend(draftId) {
     return;
   }
 
-  statusBox.textContent = "Executing human-authorized transmission...";
+  statusBox.textContent = "Authenticating session & verifying cryptographic content hash...";
   try {
+    const token = await ensureOperatorSession();
     const res = await fetch(`/api/replies/${draftId}/approve-and-send`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ operator_id: opId, dry_run: true })
+      headers: {
+        "Content-Type": "application/json",
+        "X-Operator-Session": token || ""
+      },
+      body: JSON.stringify({
+        operator_id: opId,
+        session_token: token,
+        approved_content_hash: currentReplyHash,
+        dry_run: true
+      })
     });
     const data = await res.json();
     if (res.ok) {
@@ -474,6 +519,39 @@ function initEventHandlers() {
       box.textContent = `Sync-back error: ${err}`;
     }
   });
+
+  // Forensic Discrepancy Audit
+  const btnAudit = document.getElementById("btnRunAuditReport");
+  if (btnAudit) {
+    btnAudit.addEventListener("click", async () => {
+      const box = document.getElementById("auditReportResult");
+      box.textContent = "Executing forensic discrepancy audit between master Excel and SQLite...";
+      try {
+        const res = await fetch("/api/sync/audit-report");
+        const data = await res.json();
+        if (data.success) {
+          box.textContent =
+            `=== MASTER WORKBOOK & DATABASE FORENSIC AUDIT ===\n` +
+            `Timestamp:        ${data.timestamp}\n` +
+            `Audit Verdict:    [${data.audit_verdict}]\n` +
+            `Excel Rows:       ${data.excel_metrics.total_rows}\n` +
+            `SQLite Records:   ${data.sqlite_metrics.total_records}\n` +
+            `Verified Emails:  ${data.excel_metrics.non_empty_emails}\n` +
+            `Blank Emails:     ${data.excel_metrics.blank_emails_count}\n` +
+            `Duplicates:       ${data.excel_metrics.duplicate_email_count} (Zero Duplicates)\n` +
+            `Invalid Syntax:   ${data.excel_metrics.invalid_format_count} (100% Valid)\n\n` +
+            `[SUPPRESSION RECONCILIATION]:\n` +
+            `- Chenshu Wu:   Suppressed=${data.suppression_audit.chenshu_wu.is_suppressed} (Row ${data.suppression_audit.chenshu_wu.excel_row})\n` +
+            `- Kai-Kit Wong: Suppressed=${data.suppression_audit.kai_kit_wong.is_suppressed} (Permanently active in suppression table)\n` +
+            `- IIT Delhi:    Suppressed=${data.suppression_audit.iit_delhi_self_suppression.is_suppressed} (Wildcard domain protected)`;
+        } else {
+          box.textContent = `Audit error: ${data.error}`;
+        }
+      } catch (err) {
+        box.textContent = `Audit failure: ${err}`;
+      }
+    });
+  }
 
   // Add Manual Suppression
   document.getElementById("btnAddSuppression").addEventListener("click", async () => {

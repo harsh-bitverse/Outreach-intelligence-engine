@@ -27,12 +27,22 @@
         </div>
 
         <div class="status-pills">
+          <div id="operatorBadge" class="badge badge-safe">Operator: Harshith N (Session Active)</div>
           <div id="emergencyBadge" class="badge badge-safe">Emergency Stop: INACTIVE</div>
           <div id="gatewayBadge" class="badge badge-warning">Sending Gateway: OFF (Dry-Run)</div>
           <div id="cscBadge" class="badge badge-neutral">IITD CSC: Review Pending</div>
         </div>
       </div>
     </header>
+
+    <!-- Knowledge Base & CV Disclosure Alert -->
+    <div id="sourceAlertBanner" class="alert-banner" style="background:#2D1B00; border:1px solid #F59E0B; padding:10px 16px; margin: 12px 0; border-radius:6px; font-size:13px; color:#FDE68A; display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <strong>[!] Mandatory Source Document Missing:</strong>
+        <span id="sourceAlertText"><code>data/private/approved_cv.pdf</code> is missing from disk. Outbound attachments remain blocked until student uploads finalized CV.</span>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="alert('Please place your finalized CV PDF into data/private/approved_cv.pdf on your local machine.')">Upload Instructions</button>
+    </div>
 
     <!-- Metrics Bar -->
     <section class="metrics-grid">
@@ -243,6 +253,13 @@
           <p>Synchronize outreach statuses and generate/update the 'Time Blocks and Distribution' sheet. An automatic <code>.bak</code> backup is created first.</p>
           <button id="btnSyncBackWorkbook" class="btn btn-secondary">Sync Back to Authoritative Excel</button>
           <div id="syncBackResult" class="sync-status-box"></div>
+        </div>
+
+        <div class="card" style="grid-column: 1 / -1;">
+          <h3>Forensic Discrepancy & Suppression Audit</h3>
+          <p>Rigorously audit 1,357 master Excel rows vs SQLite, verify 0 email duplicates, 0 syntax errors, and confirm permanent suppression of Chenshu Wu, Kai-Kit Wong, and IIT Delhi.</p>
+          <button id="btnRunAuditReport" class="btn btn-secondary">Run Forensic Discrepancy Audit</button>
+          <div id="auditReportResult" class="sync-status-box" style="margin-top:12px; font-family:var(--font-mono); font-size:12px; white-space:pre-wrap; max-height:220px; overflow-y:auto;"></div>
         </div>
       </div>
     </main>

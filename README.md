@@ -9,12 +9,12 @@
 The **International Research Outreach Intelligence Engine** is an integrated software system engineered for **Harshith N**, an undergraduate in the Department of Chemical Engineering at the **Indian Institute of Technology Delhi (IIT Delhi)**.
 
 Targeting elite international research groups across QS World University Rankings 2027 top-120 institutions, the engine replaces superficial bulk emailing with:
-1. **Authoritative Master Data Reconciliation**: Dynamically imports and non-destructively synchronizes with `Summer_2027_QS_Top_120_Professor_Research_Database.xlsx` (1,288 faculty prospects across 121 universities).
-2. **Personal Intelligence Base**: Grounded strictly in verified student projects (Neural Process Twin, LLM Inference Engine, PINN Error Estimation, C++17 Peng-Robinson Thermodynamics, Humanoid Robotics).
-3. **Four-Paragraph Personalization Engine**: Produces concise 130–180 word emails bridging faculty research to substantiated student code, with strict signature integrity (no social links).
-4. **Destination-Local Scheduler**: Targets professor-local weekday 8:00 AM – 9:00 AM arrival times across 13 regional clusters, mapped to operator IST (`Asia/Kolkata`) with date-dependent IANA zoneinfo and Daylight Saving Time (DST) calculations.
-5. **Critical Permission Boundary**: Application-level security barring autonomous AI reply or follow-up transmissions. All replies and follow-ups require explicit, manual human review and approval.
-6. **IIT Delhi Institutional Mail Integration**: Secure IMAP (`mailstore.iitd.ac.in:993`) and SMTP (`smtp.iitd.ac.in:465`) gateways with dry-run protection, disabled sending defaults, and permanent suppressions.
+1. **Authoritative Master Data Reconciliation**: Dynamically imports and non-destructively synchronizes with `Summer_2027_QS_Top_120_Professor_Research_Database.xlsx` (1,357 faculty prospects across 121 universities, with 0 email duplicates and 0 syntax errors).
+2. **Personal Intelligence Base**: Grounded strictly in verified student projects (Neural Process Twin, LLM Inference Engine, PINN Error Estimation, C++17 Peng-Robinson Thermodynamics, Humanoid Robotics), with transparent audit disclosing missing source documents without fabrication.
+3. **Four-Paragraph Personalization Engine**: Produces concise 130–180 word emails bridging faculty research to substantiated student code, with strict signature integrity (no social links) and evidence confidence scoring.
+4. **Destination-Local Scheduler & Recovery**: Targets professor-local weekday 8:00 AM – 9:00 AM arrival times across 13 regional clusters, with 0 UTC fallbacks and automatic Missed-Window Recovery rolling expired windows to the next business day morning.
+5. **Critical Human-Only Reply Security**: Cryptographic server-side authenticated operator sessions (`OperatorSession`), immutable draft content hashing (SHA-256), and single-use execution tickets preventing privilege escalation, replay attacks, and direct SMTP invocation.
+6. **IIT Delhi Institutional Mail Integration**: Secure IMAP (`mailstore.iitd.ac.in:993`) with RFC 3501 read-only EXAMINE diagnostic mode, and SMTP (`smtp.iitd.ac.in:465`) with local TLS CA certificate validation.
 
 ```
                              ┌──────────────────────────────────────────────┐
@@ -202,17 +202,17 @@ GATEWAY_ENABLED=False
 DRY_RUN=True
 ```
 
-### Step 2: Run Full Test Suite
-Execute the 30 unit and integration tests:
+### Step 2: Run Full Test Suite (37 Unit & Adversarial Tests)
+Execute all unit, integration, and adversarial security tests:
 ```powershell
 python -m pytest
 ```
-*Expected output: `30 passed in ~3.8s`.*
+*Expected output: `37 passed in ~1.9s`.*
 
-### Step 3: Run Demonstration Script
-Verify the end-to-end pipeline in dry-run mode:
+### Step 3: Run Session 02 Hardened Demonstration Script
+Verify the full 8-stage hardened pipeline (discrepancy audit, 10 drafts, 13 timezones, missed-window recovery, read-only IMAP examination, adversarial attacks blocked, authenticated human approval):
 ```powershell
-python scripts/run_demo.py
+python scripts/run_session02_demo.py
 ```
 
 ### Step 4: Launch Operator Dashboard

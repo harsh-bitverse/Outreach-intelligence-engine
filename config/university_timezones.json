@@ -27,7 +27,12 @@
     "Norway": "Europe/Oslo",
     "Finland": "Europe/Helsinki",
     "Austria": "Europe/Vienna",
-    "India": "Asia/Kolkata"
+    "India": "Asia/Kolkata",
+    "Hong Kong SAR": "Asia/Hong_Kong",
+    "Russia": "Europe/Moscow",
+    "Chile": "America/Santiago",
+    "Qatar": "Asia/Qatar",
+    "Argentina": "America/Argentina/Buenos_Aires"
   },
   "university_timezones": {
     "Massachusetts Institute of Technology (MIT)": "America/New_York",
@@ -131,6 +136,12 @@
     "Universiti Malaya (UM)": "Asia/Kuala_Lumpur",
     "King Abdulaziz University (KAU)": "Asia/Riyadh",
     "King Fahd University of Petroleum & Minerals": "Asia/Riyadh",
-    "Indian Institute of Technology Delhi (IITD)": "Asia/Kolkata"
+    "Indian Institute of Technology Delhi (IITD)": "Asia/Kolkata",
+    "City University of Hong Kong (CityUHK)": "Asia/Hong_Kong",
+    "The Hong Kong Polytechnic University (PolyU)": "Asia/Hong_Kong",
+    "Lomonosov Moscow State University": "Europe/Moscow",
+    "Pontificia Universidad Católica de Chile (UC)": "America/Santiago",
+    "Qatar University": "Asia/Qatar",
+    "Universidad de Buenos Aires (UBA)": "America/Argentina/Buenos_Aires"
   }
 }

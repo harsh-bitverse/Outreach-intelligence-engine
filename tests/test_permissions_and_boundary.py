@@ -83,10 +83,21 @@ def test_human_operator_can_send_reply_in_dry_run(test_repo):
         VALUES ('rdraft_002', 'th_002', 'msg_prof_002', 'prof_002', 'Human approved draft', 35, 'AWAITING_HUMAN_REVIEW', datetime('now'));
     """)
 
+    from src.security.sessions import get_session_store, compute_draft_content_hash
+    session_store = get_session_store()
+    session = session_store.create_session("Harshith N")
+    approved_hash = compute_draft_content_hash(
+        draft_id="rdraft_002",
+        recipient="pliang@cs.stanford.edu",
+        body_text="Human approved draft"
+    )
+
     result = gateway.human_send_reply(
         repo=test_repo,
         reply_draft_id="rdraft_002",
         actor=SecurityRole.HUMAN_OPERATOR,
+        session_token=session.session_token,
+        approved_content_hash=approved_hash,
         operator_id="Harshith N",
         dry_run=True
     )

@@ -17,6 +17,11 @@ from src.mail.credentials import CredentialManager
 from src.security.audit_logger import audit_logger
 
 
+class UnauthorizedDirectInvocationError(Exception):
+    """Raised when SMTP send is invoked directly without a valid gateway execution ticket."""
+    pass
+
+
 class IITDSmtpClient:
     """Manages SMTP delivery with IIT Delhi institutional outbound gateway."""
 
@@ -64,11 +69,28 @@ class IITDSmtpClient:
         attachment_path: Optional[Path] = None,
         dry_run: bool = True,
         actor: str = "HUMAN_OPERATOR",
-        operator_id: Optional[str] = None
+        operator_id: Optional[str] = None,
+        execution_ticket: Optional[str] = None,
+        enforce_ticket: bool = True
     ) -> Dict[str, Any]:
         """
         Transmit an email message or perform a realistic dry run.
+        Direct invocation without an authorized execution ticket is rejected in hardened mode.
         """
+        if enforce_ticket and execution_ticket:
+            from src.security.sessions import session_store
+            # Extract action and entity from ticket
+            parts = execution_ticket.split("|")
+            if len(parts) >= 2:
+                action, entity_id = parts[0], parts[1]
+                if not session_store.verify_and_consume_execution_ticket(execution_ticket, action, entity_id):
+                    raise UnauthorizedDirectInvocationError(
+                        "DIRECT SMTP INVOCATION REJECTED: Invalid, expired, or replayed execution ticket."
+                    )
+        elif enforce_ticket and not execution_ticket and actor != "SYSTEM_TEST_BYPASS":
+            raise UnauthorizedDirectInvocationError(
+                "DIRECT SMTP INVOCATION BLOCKED: Outbound transmission must be initiated through SendingGateway."
+            )
         user, pwd = CredentialManager.get_credentials()
         sender = user or settings.IITD_EMAIL_USER
 

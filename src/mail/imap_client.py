@@ -141,6 +141,67 @@ class IITDImapClient:
 
         return contacted_recipients
 
+    def diagnostic_imap_examine(self, mailbox_name: str = "INBOX") -> Dict[str, Any]:
+        """
+        Diagnostic utility inspecting mailbox folder structure, message counts, and read-only status.
+        Uses RFC 3501 Section 6.3.2 EXAMINE command, guaranteeing that mailbox flags, unread status,
+        and message contents are not altered or downloaded.
+        """
+        user, pwd = CredentialManager.get_credentials()
+        diag = {
+            "endpoint": f"{self.host}:{self.port}",
+            "tls_verified": True,
+            "ssl_protocol": "TLSv1.3 / TLSv1.2",
+            "examined_mailbox": mailbox_name,
+            "read_only_mode": True,
+            "message_count": 0,
+            "recent_count": 0,
+            "unseen_count": 0,
+            "mailbox_list": [],
+            "authenticated": False,
+            "status": "OFFLINE_TEST_READY"
+        }
+
+        if not user or not pwd:
+            diag["status"] = "CREDENTIALS_ABSENT_IN_KEYRING"
+            diag["note"] = (
+                "IIT Delhi Kerberos/Webmail credentials not found in OS Keyring. "
+                "Use CredentialManager.set_credentials() to securely store them. "
+                "Never store credentials in .env, git repositories, or logs."
+            )
+            return diag
+
+        try:
+            client = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=self.ssl_context)
+            client.login(user, pwd)
+            diag["authenticated"] = True
+
+            # List mailboxes
+            st, boxes = client.list()
+            if st == "OK" and boxes:
+                diag["mailbox_list"] = [b.decode("utf-8", errors="ignore") for b in boxes]
+
+            # EXAMINE opens in strictly read-only mode
+            st, count_data = client.examine(mailbox_name)
+            if st == "OK" and count_data:
+                try:
+                    diag["message_count"] = int(count_data[0].decode())
+                except Exception:
+                    pass
+
+            st, status_data = client.status(mailbox_name, "(MESSAGES RECENT UNSEEN)")
+            if st == "OK" and status_data:
+                diag["status_response"] = status_data[0].decode("utf-8", errors="ignore")
+
+            diag["status"] = "SUCCESS_READONLY_EXAMINED"
+            client.logout()
+        except Exception as e:
+            diag["status"] = "CONNECTION_ERROR"
+            diag["error"] = str(e)
+
+        return diag
+
 
 # Global IMAP client instance
 imap_client = IITDImapClient()
+

@@ -1,6 +1,7 @@
 """
-Personal Intelligence Base Loader.
-Loads verified student identity, academic credentials, substantiated projects, and guidelines.
+Personal Intelligence Base and Profile Manager.
+Loads verified student identity, academic credentials, substantiated projects,
+guidelines, and manages the editable research profile with missing source document auditing.
 """
 
 import json
@@ -10,10 +11,11 @@ from config.settings import settings
 
 
 class KnowledgeBase:
-    """Provides access to verified student profile, projects, and guidelines."""
+    """Provides access to verified student profile, projects, guidelines, and document audits."""
 
     def __init__(self, kb_dir: Optional[Path] = None):
         self.kb_dir = kb_dir or settings.KNOWLEDGE_BASE_DIR
+        self.editable_profile_path = self.kb_dir / "editable_research_profile.json"
         self._profile: Optional[Dict[str, Any]] = None
         self._projects: Optional[List[Dict[str, Any]]] = None
         self._guidelines: Optional[str] = None
@@ -84,6 +86,73 @@ class KnowledgeBase:
         # Fallback to Neural Process Twin as foundational SciML project if score is 0
         return best_project or (self.projects[0] if self.projects else {})
 
+    # --------------------------------------------------------------------------
+    # Editable Research Profile & Missing Sources Audit
+    # --------------------------------------------------------------------------
+    def load_editable_profile(self) -> Dict[str, Any]:
+        """Load the comprehensive editable research profile."""
+        if not self.editable_profile_path.exists():
+            return {}
+        with open(self.editable_profile_path, "r", encoding="utf-8") as f:
+            profile = json.load(f)
+        self._refresh_documents_audit(profile)
+        return profile
 
-# Global knowledge base singleton
+    def save_editable_profile(self, new_profile_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist updated research profile."""
+        self._refresh_documents_audit(new_profile_data)
+        self.editable_profile_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.editable_profile_path, "w", encoding="utf-8") as f:
+            json.dump(new_profile_data, f, indent=2)
+        return new_profile_data
+
+    load_profile = load_editable_profile
+    save_profile = save_editable_profile
+
+    def _refresh_documents_audit(self, profile: Dict[str, Any]) -> None:
+        """Inspect actual local filesystem for source files and update status."""
+        docs = profile.get("source_documents_audit", {})
+        cv_entry = docs.get("approved_cv_pdf", {})
+        cv_path_str = cv_entry.get("path", "data/private/approved_cv.pdf")
+        cv_file = Path(cv_path_str)
+
+        if cv_file.exists():
+            cv_entry["status"] = "VERIFIED_PRESENT"
+            cv_entry["file_size_bytes"] = cv_file.stat().st_size
+        else:
+            cv_entry["status"] = "MISSING_FROM_DISK"
+            cv_entry["file_size_bytes"] = 0
+
+    def audit_missing_sources(self) -> Dict[str, Any]:
+        """Return dedicated audit report of available vs missing source documents."""
+        profile = self.load_editable_profile()
+        docs = profile.get("source_documents_audit", {})
+        missing = []
+        present = []
+
+        for doc_key, doc_info in docs.items():
+            if doc_info.get("status") == "MISSING_FROM_DISK":
+                missing.append({
+                    "document_key": doc_key,
+                    "expected_path": doc_info.get("path"),
+                    "mandatory": doc_info.get("mandatory_before_dispatch", False),
+                    "remediation": doc_info.get("remediation")
+                })
+            else:
+                present.append({
+                    "document_key": doc_key,
+                    "description": doc_info.get("description", "Available")
+                })
+
+        return {
+            "all_mandatory_sources_ready": len(missing) == 0,
+            "missing_count": len(missing),
+            "present_count": len(present),
+            "missing_documents": missing,
+            "present_documents": present
+        }
+
+
+# Global knowledge base singletons
 knowledge_base = KnowledgeBase()
+kb_manager = knowledge_base

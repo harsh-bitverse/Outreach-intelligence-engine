@@ -102,6 +102,8 @@ class DynamicWorkbookSync:
         stats["professors_imported"] = prof_stats["imported"]
         stats["suppressed_detected"] = prof_stats["suppressed"]
 
+        repo.conn.commit()
+
         audit_logger.log_event(
             event_type="WORKBOOK_IMPORTED",
             actor="SYSTEM_SYNC",

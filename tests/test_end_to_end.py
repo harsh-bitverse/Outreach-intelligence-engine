@@ -171,10 +171,21 @@ def test_full_engine_lifecycle():
                 )
 
             # 12. Human Operator Approves & Sends Reply (Dry-Run)
+            from src.security.sessions import get_session_store, compute_draft_content_hash
+            session_store = get_session_store()
+            op_session = session_store.create_session("Harshith N")
+            reply_hash = compute_draft_content_hash(
+                draft_id=reply_draft.reply_draft_id,
+                recipient="bodner@mit.edu",
+                body_text=reply_draft.draft_body
+            )
+
             send_res = gateway.human_send_reply(
                 repo=repo,
                 reply_draft_id=reply_draft.reply_draft_id,
                 actor=SecurityRole.HUMAN_OPERATOR,
+                session_token=op_session.session_token,
+                approved_content_hash=reply_hash,
                 operator_id="Harshith N",
                 dry_run=True
             )

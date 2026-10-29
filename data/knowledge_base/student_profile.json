@@ -1,0 +1,44 @@
+{
+  "identity": {
+    "full_name": "Harshith N",
+    "entry_number": "2025CH11635",
+    "institution": "Indian Institute of Technology Delhi (IIT Delhi)",
+    "department": "Department of Chemical Engineering",
+    "program": "Bachelor of Technology (B.Tech)",
+    "current_status": "Undergraduate Student",
+    "institutional_email": "ch1251635@iitd.ac.in",
+    "target_internship_term": "Summer 2027",
+    "target_duration": "10-12 weeks (May - July 2027)"
+  },
+  "verified_academic_milestones": [
+    {
+      "course_code": "CHL2001",
+      "course_name": "Numerical Analysis for Chemical Engineers",
+      "instructor": "Prof. Jayati Sarkar",
+      "achievement": "Audited and reproduced Krasowski et al. (arXiv:2603.15526) on Finite-Difference Error Estimation in Physics-Informed Neural Networks, extended benchmark to soft boundary constraints."
+    },
+    {
+      "course_code": "CHL2002",
+      "course_name": "Thermodynamics",
+      "achievement": "Engineered modern C++17 Peng-Robinson cubic equation of state solver with analytic derivatives, mechanical stability criteria, and departure functions."
+    }
+  ],
+  "research_interests": [
+    "Scientific Machine Learning (SciML) and Physics-Informed Neural Networks (PINNs)",
+    "Neural Operators and Surrogate Modeling for Physical Field Simulation",
+    "LLM Inference Optimization, Latency Profiling, and Serving Architectures",
+    "High-Performance Scientific Computing and Numerical PDE Solvers",
+    "Embedded Systems, Servo-Actuated Kinematics, and Autonomous Robotics",
+    "Constrained Optimization and Non-Linear Engineering Systems"
+  ],
+  "technical_competencies": {
+    "languages": ["Python", "C++17", "SQL", "Bash", "TypeScript"],
+    "machine_learning": ["PyTorch", "Hugging Face", "SciPy", "NumPy", "ONNX Runtime"],
+    "systems_and_web": ["FastAPI", "Uvicorn", "CMake", "Docker", "Git"],
+    "robotics_embedded": ["Embedded C/C++", "Servo Actuation", "Microcontrollers", "Sensor Fusion"]
+  },
+  "founder_and_research_mindset": {
+    "philosophy": "AI-native systems builder focused on foundational computational performance, empirical measurement, and scalable scientific impact.",
+    "boundary": "Never exaggerate claims, never invent funding availability or open lab positions, maintain rigorous intellectual honesty."
+  }
+}

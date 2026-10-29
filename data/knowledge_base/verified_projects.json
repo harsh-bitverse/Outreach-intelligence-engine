@@ -1,0 +1,84 @@
+{
+  "projects": [
+    {
+      "id": "neural-process-twin",
+      "title": "Neural Process Twin",
+      "tagline": "Physics-Aware Machine Learning Surrogate Simulator for Physical Field Prediction",
+      "domains": ["Scientific Machine Learning", "Neural Operators", "PDE Simulation", "Digital Twins"],
+      "verified_outcomes": [
+        "Constructed deep learning surrogate models mapping thermal conductivity fields and volumetric heat sources to 2D steady-state temperature distributions.",
+        "Demonstrated orders-of-magnitude faster inference compared to conventional finite difference and finite element solvers.",
+        "Preserved physical consistency by embedding physical PDE constraints and quantifying predictive uncertainty."
+      ],
+      "technologies": ["PyTorch", "NumPy", "SciPy", "FastAPI", "HDF5", "Matplotlib"],
+      "suitable_for_professors_in": [
+        "SciML", "Scientific Machine Learning", "Physics-Informed ML", "Digital Twins",
+        "Fluid Dynamics", "Computational Heat Transfer", "Surrogate Modeling", "Neural Operators"
+      ]
+    },
+    {
+      "id": "llm-inference-engine",
+      "title": "LLM Inference Intelligence Engine",
+      "tagline": "Measurement-Driven LLM Inference Benchmarking, Diagnostics & Optimization",
+      "domains": ["AI Systems", "LLM Inference", "Performance Engineering", "Hardware Profiling"],
+      "verified_outcomes": [
+        "Built modular framework for introspecting hardware ceilings (memory bandwidth, compute FLOPs) across CPU and GPU topologies.",
+        "Instrumented prefill (TTFT) and decode (TPOT/ITL) phases under variable batching and concurrency workloads.",
+        "Implemented Roofline model diagnostics to isolate memory-bandwidth saturation versus compute bounds in transformer serving."
+      ],
+      "technologies": ["Python", "FastAPI", "SQLAlchemy", "PyTorch", "ONNX Runtime", "Linux Profiling"],
+      "suitable_for_professors_in": [
+        "Systems for AI", "Machine Learning Systems", "Distributed Systems", "Computer Architecture",
+        "LLM Serving", "Inference Optimization", "Compilers for ML"
+      ]
+    },
+    {
+      "id": "pinn-error-estimation",
+      "title": "Finite-Difference Error Estimation in Physics-Informed Neural Networks",
+      "tagline": "Independent Audit, Reproduction & Boundary Constraint Extension for PINN Residual Defect Solvers",
+      "domains": ["Scientific Computing", "PINNs", "Numerical Analysis", "Applied Mathematics"],
+      "verified_outcomes": [
+        "Audited and independently reproduced Krasowski et al. (arXiv:2603.15526) residual-based error estimation methodology on 1D Heat Equation benchmarks.",
+        "Extended the benchmark evaluation to soft boundary constraints, analyzing pointwise defect propagation without closed-form analytical solutions.",
+        "Conducted rigorous validation across discretization intervals and neural network architectural variations."
+      ],
+      "technologies": ["Python", "PyTorch", "NumPy", "SciPy", "Matplotlib"],
+      "suitable_for_professors_in": [
+        "Applied Mathematics", "Scientific Computing", "Numerical Analysis", "Physics-Informed Deep Learning",
+        "Partial Differential Equations", "Computational Mechanics"
+      ]
+    },
+    {
+      "id": "thermo-cpp-solver",
+      "title": "Peng-Robinson Real-Gas Cubic Equation of State Solver",
+      "tagline": "Modern C++17 Scientifically Validated High-Performance Thermodynamic Engine",
+      "domains": ["Thermodynamics", "Chemical Engineering", "C++ Systems", "Scientific Simulation"],
+      "verified_outcomes": [
+        "Engineered robust C++17 pure-component PVT state solver implementing the canonical Peng-Robinson (PR-1976) cubic equation of state.",
+        "Solved dimensionless cubic polynomials in compressibility factor Z, discarding unphysical roots (Z <= B).",
+        "Evaluated analytical derivative (dP/dv)_T for thermodynamic mechanical stability classification and computed departure enthalpy, entropy, and fugacity coefficients."
+      ],
+      "technologies": ["C++17", "CMake", "MinGW/GCC", "Object-Oriented Architecture"],
+      "suitable_for_professors_in": [
+        "Chemical Engineering", "Molecular Thermodynamics", "Process Systems Engineering",
+        "High-Performance Computing", "Computational Chemistry"
+      ]
+    },
+    {
+      "id": "humanoid-robotics",
+      "title": "Humanoid Robotics & Embedded Control Platform",
+      "tagline": "Multi-Degree-of-Freedom Servo Kinematics and Microcontroller Perception System",
+      "domains": ["Robotics", "Embedded Systems", "Control Theory", "Mechatronics"],
+      "verified_outcomes": [
+        "Designed and assembled multi-DOF servo-actuated robotic mechanisms with closed-loop positional feedback.",
+        "Programmed embedded microcontrollers for low-latency motor control, trajectory generation, and sensor telemetry.",
+        "Implemented sensor integration routines for environmental perception and basic gait/motion coordination."
+      ],
+      "technologies": ["Embedded C/C++", "Microcontrollers", "Servo Actuation", "Sensors", "Kinematics"],
+      "suitable_for_professors_in": [
+        "Robotics", "Mechatronics", "Embedded Systems", "Control Systems", "Autonomous Systems",
+        "Biomechatronics", "Humanoid Robotics"
+      ]
+    }
+  ]
+}

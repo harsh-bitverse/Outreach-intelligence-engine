@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Outreach Intelligence Engine — Summer 2027</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-badge">IITD • SciML & Systems</div>
+        <h1>Outreach Intelligence Engine</h1>
+        <p class="subtitle">Summer 2027 International Research Internship Platform</p>
+      </div>
+
+      <div class="header-controls">
+        <div class="clock-card">
+          <span class="clock-label">Operator Clock (IST)</span>
+          <span id="istClock" class="clock-time">--:--:-- IST</span>
+          <span class="clock-sub">Arrival Target: 8:00–9:00 AM Local</span>
+        </div>
+
+        <div class="status-pills">
+          <div id="emergencyBadge" class="badge badge-safe">Emergency Stop: INACTIVE</div>
+          <div id="gatewayBadge" class="badge badge-warning">Sending Gateway: OFF (Dry-Run)</div>
+          <div id="cscBadge" class="badge badge-neutral">IITD CSC: Review Pending</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Metrics Bar -->
+    <section class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-title">Faculty Prospects</div>
+        <div id="mTotalProspects" class="metric-value">--</div>
+        <div class="metric-desc">QS Top-120 Database</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Verified Emails</div>
+        <div id="mVerifiedEmails" class="metric-value">--</div>
+        <div class="metric-desc">Institutional Addresses</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Universities</div>
+        <div id="mTotalUniversities" class="metric-value">--</div>
+        <div class="metric-desc">Global Coverage</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Drafts Prepared</div>
+        <div id="mDraftsReady" class="metric-value">--</div>
+        <div class="metric-desc">4-Paragraph Formatted</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Replies Received</div>
+        <div id="mRepliesCount" class="metric-value">--</div>
+        <div class="metric-desc">Human-Review Queue</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-title">Active Suppressions</div>
+        <div id="mSuppressedCount" class="metric-value">--</div>
+        <div class="metric-desc">IITD, Wu, Wong & Replies</div>
+      </div>
+    </section>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-prospects">Faculty Prospects & Personalization</button>
+      <button class="tab-btn" data-tab="tab-scheduler">IST Scheduler & Time Blocks</button>
+      <button class="tab-btn" data-tab="tab-replies">Reply Intelligence & Review Inbox <span id="replyPillCount" class="pill-badge">0</span></button>
+      <button class="tab-btn" data-tab="tab-followups">Follow-Up Queue</button>
+      <button class="tab-btn" data-tab="tab-suppression">Suppression & Safeguards</button>
+      <button class="tab-btn" data-tab="tab-sync">Master Workbook Sync</button>
+      <button class="tab-btn" data-tab="tab-diagnostics">Diagnostics & Safety</button>
+    </nav>
+
+    <!-- Tab 1: Faculty Prospects & Personalization -->
+    <main id="tab-prospects" class="tab-content active">
+      <div class="action-bar">
+        <div class="filter-group">
+          <input type="text" id="profSearch" placeholder="Search professor, university, or keyword..." class="input-text">
+          <select id="countryFilter" class="select-box">
+            <option value="">All Countries</option>
+          </select>
+          <select id="statusFilter" class="select-box">
+            <option value="">All Outreach Statuses</option>
+            <option value="NEW">NEW</option>
+            <option value="DRAFT_READY">DRAFT_READY</option>
+            <option value="APPROVED">APPROVED</option>
+            <option value="SENT">SENT</option>
+            <option value="SUPPRESSED">SUPPRESSED</option>
+          </select>
+        </div>
+        <div class="btn-group">
+          <button id="btnReloadProfs" class="btn btn-secondary">Refresh</button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>QS</th>
+              <th>Professor & Title</th>
+              <th>University & Country</th>
+              <th>Department</th>
+              <th>Official Email</th>
+              <th>Research Overlap</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="profsTableBody">
+            <tr><td colspan="8" class="text-center">Loading faculty prospects...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </main>
+
+    <!-- Tab 2: IST Scheduler & Time Blocks -->
+    <main id="tab-scheduler" class="tab-content">
+      <div class="section-header">
+        <h2>Regional IST Time Blocks (Target: 8:00–9:00 AM Local Morning Arrival)</h2>
+        <p>Dynamic IANA zoneinfo and Daylight Saving Time (DST) calculation. Ascending QS rank priority within clusters.</p>
+      </div>
+
+      <div class="blocks-container" id="timeBlocksList">
+        <div class="text-center">Loading regional scheduling blocks...</div>
+      </div>
+    </main>
+
+    <!-- Tab 3: Reply Intelligence & Review Inbox -->
+    <main id="tab-replies" class="tab-content">
+      <div class="section-header">
+        <h2>Reply Intelligence & Human-Review Inbox</h2>
+        <p class="warning-callout">
+          <strong>CRITICAL SAFETY PROTOCOL:</strong> The AI may NEVER autonomously send a reply. Contextual drafts are prepared for your exclusive review. Transmission requires human operator approval and explicit trigger.
+        </p>
+      </div>
+
+      <div class="replies-split-view">
+        <div class="replies-list" id="repliesList">
+          <div class="text-center">Loading incoming messages...</div>
+        </div>
+
+        <div class="reply-detail-pane" id="replyDetailPane">
+          <div class="empty-state">Select an incoming reply to inspect conversation thread and draft.</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Tab 4: Follow-Up Queue -->
+    <main id="tab-followups" class="tab-content">
+      <div class="section-header">
+        <h2>Follow-Up Queue (User-Controlled Workflow)</h2>
+        <p>Follow-up drafts for unanswered first contacts. Human operator alone decides whether to approve and dispatch any follow-up.</p>
+      </div>
+
+      <div id="followupsList" class="followups-container">
+        <div class="text-center">No unanswered follow-up drafts currently pending review.</div>
+      </div>
+    </main>
+
+    <!-- Tab 5: Suppression & Safeguards -->
+    <main id="tab-suppression" class="tab-content">
+      <div class="section-header">
+        <h2>Permanent Suppression List & Exclusion Safeguards</h2>
+        <p>All institutional exclusions (IIT Delhi), previously contacted faculty (Chenshu Wu, Kai-Kit Wong), replies, rejections, bounces, and opt-outs are strictly blocked here.</p>
+      </div>
+
+      <div class="suppression-layout">
+        <div class="card form-card">
+          <h3>Add Manual Suppression</h3>
+          <div class="form-group">
+            <label>Email Address</label>
+            <input type="email" id="suppEmail" placeholder="professor@university.edu" class="input-text">
+          </div>
+          <div class="form-group">
+            <label>Domain</label>
+            <input type="text" id="suppDomain" placeholder="e.g. iitd.ac.in" class="input-text">
+          </div>
+          <div class="form-group">
+            <label>Reason</label>
+            <select id="suppReason" class="select-box">
+              <option value="MANUAL">MANUAL</option>
+              <option value="PREVIOUSLY_CONTACTED">PREVIOUSLY_CONTACTED</option>
+              <option value="INSTITUTIONAL_SELF">INSTITUTIONAL_SELF</option>
+              <option value="DECLINED">DECLINED</option>
+              <option value="BOUNCED">BOUNCED</option>
+              <option value="OPTED_OUT">OPTED_OUT</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Notes / Context</label>
+            <input type="text" id="suppNotes" placeholder="Reason for suppression" class="input-text">
+          </div>
+          <button id="btnAddSuppression" class="btn btn-primary">Add Permanent Suppression</button>
+        </div>
+
+        <div class="card table-card">
+          <h3>Active Suppressions</h3>
+          <div class="table-container small">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Target (Email/Domain)</th>
+                  <th>Reason</th>
+                  <th>Notes</th>
+                  <th>Date Added</th>
+                </tr>
+              </thead>
+              <tbody id="suppressionTableBody">
+                <tr><td colspan="4" class="text-center">Loading suppression list...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Tab 6: Master Workbook Sync -->
+    <main id="tab-sync" class="tab-content">
+      <div class="section-header">
+        <h2>Authoritative Master Workbook Reconciliation</h2>
+        <p>Atomic synchronization with <code>Summer_2027_QS_Top_120_Professor_Research_Database.xlsx</code>. Non-destructive updates with timestamped backups, schema validation, and locking.</p>
+      </div>
+
+      <div class="sync-grid">
+        <div class="card">
+          <h3>Dynamic Schema Import</h3>
+          <p>Read all faculty prospects, universities, and notes from the master Excel workbook without hardcoding columns or losing formulas.</p>
+          <button id="btnImportWorkbook" class="btn btn-primary">Import / Reconcile from Master Excel</button>
+          <div id="importResult" class="sync-status-box"></div>
+        </div>
+
+        <div class="card">
+          <h3>Atomic Sync-Back to Workbook</h3>
+          <p>Synchronize outreach statuses and generate/update the 'Time Blocks and Distribution' sheet. An automatic <code>.bak</code> backup is created first.</p>
+          <button id="btnSyncBackWorkbook" class="btn btn-secondary">Sync Back to Authoritative Excel</button>
+          <div id="syncBackResult" class="sync-status-box"></div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Tab 7: Diagnostics & Safety -->
+    <main id="tab-diagnostics" class="tab-content">
+      <div class="section-header">
+        <h2>Diagnostics, Mail Credentials & Safety Killswitch</h2>
+        <p>Verify IIT Delhi IMAP/SMTP endpoints, inspect credentials status, and manage the system-wide emergency stop.</p>
+      </div>
+
+      <div class="diag-grid">
+        <div class="card">
+          <h3>IIT Delhi Webmail Diagnostic</h3>
+          <p>IMAP: <code>mailstore.iitd.ac.in:993 (SSL)</code><br>SMTP: <code>smtp.iitd.ac.in:465 (SSL)</code></p>
+          <button id="btnTestMail" class="btn btn-secondary">Run Connectivity Check</button>
+          <div id="mailTestResult" class="sync-status-box"></div>
+        </div>
+
+        <div class="card">
+          <h3>Emergency Stop Killswitch</h3>
+          <p>Instantly aborts all active queues and locks outbound transmission gateways across the entire system.</p>
+          <div class="killswitch-group">
+            <button id="btnToggleEmergencyStop" class="btn btn-danger">TOGGLE EMERGENCY STOP</button>
+            <span id="emergencyStatusLabel" class="bold text-danger">STATUS: INACTIVE</span>
+          </div>
+        </div>
+
+        <div class="card full-width">
+          <h3>Immutable Event Audit Trail</h3>
+          <div class="log-stream" id="auditLogStream">
+            <div class="text-center">Loading audit log events...</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Draft Preview Modal -->
+    <div id="draftModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="modalTitle">Personalized Outreach Draft</h3>
+          <button id="btnCloseModal" class="close-btn">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="draft-meta">
+            <div><strong>Recipient:</strong> <span id="modalRecipient"></span></div>
+            <div><strong>Subject:</strong> <span id="modalSubject"></span></div>
+            <div><strong>Word Count:</strong> <span id="modalWordCount" class="badge badge-safe"></span> (Target: 130–180 words)</div>
+          </div>
+          <div class="draft-text-box">
+            <pre id="modalBodyText"></pre>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btnModalClose" class="btn btn-secondary">Close</button>
+          <button id="btnModalApprove" class="btn btn-primary">Approve Draft for Schedule</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

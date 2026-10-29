@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment and Secrets (CRITICAL SECURITY)
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+*key*
+*.pem
+*.pfx
+
+# Local Database and SQLite
+*.db
+*.sqlite
+*.sqlite3
+data/*.db
+data/*.sqlite
+
+# Excel Backups and Temp Files
+*.bak
+*.tmp
+*.tmp.xlsx
+~$*.xlsx
+
+# Private User Documents & CVs
+data/private/
+*.pdf
+!docs/*.pdf
+
+# Local logs and task outputs
+logs/
+*.log
+
+# Testing & IDE caches
+.pytest_cache/
+.coverage
+htmlcov/
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node / frontend build (if any)
+node_modules/
+dist/
+build/

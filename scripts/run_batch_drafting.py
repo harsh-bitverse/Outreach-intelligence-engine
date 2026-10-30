@@ -40,6 +40,9 @@ def show_status(repo: OutreachRepository):
     print(f"  Last Sequence Order      : {cs.get('last_sequence_order')}")
     print(f"  Last Professor ID        : {cs.get('last_professor_id')}")
     print(f"  Total Drafted Under Cursor: {cs.get('total_drafted')}")
+    cur_full = batch_ai_drafter.get_cursor(repo)
+    if cur_full.get("next_candidate_id"):
+        print(f"  Next Candidate in Queue  : #{cur_full.get('next_candidate_order')} - {cur_full.get('next_candidate_name')} <{cur_full.get('next_candidate_email')}> [{cur_full.get('next_candidate_block')}]")
     print("=" * 60 + "\n")
 
 

@@ -7,6 +7,8 @@ and strict suppression of reply-received and institutional contacts.
 """
 
 import hashlib
+import json
+import os
 import time
 from datetime import datetime, timezone, time as dtime
 from pathlib import Path
@@ -149,6 +151,31 @@ TIME_BLOCK_WINDOWS: Dict[str, Dict[str, Any]] = {
 }
 
 
+SCHEDULER_LOCK_PATH = settings.DATA_DIR / "scheduler.lock"
+
+
+def is_process_running(pid: int) -> bool:
+    """Check if process with given PID is still active."""
+    import os
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        SYNCHRONIZE = 0x00100000
+        process = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+        if process:
+            kernel32.CloseHandle(process)
+            return True
+        return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+
 class AutonomousQueueRunner:
     """
     Autonomous Queue Runner managing durable outreach drafts and timed dispatch.
@@ -158,6 +185,34 @@ class AutonomousQueueRunner:
     def __init__(self, engine: Optional[PersonalizationEngine] = None):
         self.personalization = engine or PersonalizationEngine()
         self.ist_tz = ZoneInfo("Asia/Kolkata")
+
+    def acquire_scheduler_lock(self) -> bool:
+        """Enforce single active scheduler instance using durable lock file."""
+        import os
+        SCHEDULER_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if SCHEDULER_LOCK_PATH.exists():
+            try:
+                with open(SCHEDULER_LOCK_PATH, "r", encoding="utf-8") as f:
+                    lock_data = json.load(f)
+                active_pid = lock_data.get("pid")
+                if active_pid and is_process_running(active_pid) and active_pid != os.getpid():
+                    raise RuntimeError(
+                        f"Another scheduler instance is currently running under PID {active_pid}. Single-instance policy enforced."
+                    )
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        with open(SCHEDULER_LOCK_PATH, "w", encoding="utf-8") as f:
+            json.dump({"pid": os.getpid(), "locked_at": datetime.now(timezone.utc).isoformat()}, f)
+        return True
+
+    def release_scheduler_lock(self) -> None:
+        """Release the single-instance scheduler lock."""
+        try:
+            if SCHEDULER_LOCK_PATH.exists():
+                SCHEDULER_LOCK_PATH.unlink()
+        except Exception:
+            pass
 
     def seed_reply_received_suppressions(self, repo: OutreachRepository) -> int:
         """
@@ -351,143 +406,167 @@ class AutonomousQueueRunner:
         dry_run: bool = True,
         force_window: bool = False,
         simulated_cooling: bool = True,
-        operator_id: str = "Harshith N (Autonomous Scheduler)"
+        operator_id: str = "Harshith N (Autonomous Scheduler)",
+        allow_templates: bool = False
     ) -> Dict[str, Any]:
         """
         Execute queue dispatch subject to:
-        1. Crash recovery on startup.
-        2. Daily sending cap (max 25 messages/day).
-        3. 90-minute time-block window check.
-        4. Cadence: 5 messages, followed by 1-minute cooling break.
-        5. Dual authoritative PDF attachments with preserved recipient filenames.
-        6. Absolute suppression enforcement.
+        1. Single-instance process lock.
+        2. Crash recovery on startup (AMBIGUOUS_DELIVERY protection).
+        3. Conservative compliance cap (default 25 messages/day operator threshold).
+        4. 90-minute time-block window check.
+        5. Cadence: 5 messages, followed by 1-minute cooling break.
+        6. Strict AI authoring gate: only approved 'aidraft_' records can reach gateway.
+        7. Dual authoritative PDF attachments with preserved recipient filenames.
+        8. Absolute suppression enforcement.
         """
-        gw = gateway or SendingGateway()
-        limit = max_messages or settings.DAILY_MAX_OUTREACH
+        self.acquire_scheduler_lock()
+        try:
+            gw = gateway or SendingGateway()
+            limit = max_messages or settings.DAILY_MAX_OUTREACH
 
-        # 1. Crash recovery: rescue any items stranded in IN_PROGRESS
-        recovered = repo.recover_crashed_queue_items()
+            # 1. Crash recovery: rescue any items stranded in IN_PROGRESS
+            recovered = repo.recover_crashed_queue_items()
 
-        # 2. Daily sending count check
-        today_date = datetime.now(self.ist_tz).strftime("%Y-%m-%d")
-        daily_sent_row = repo.conn.execute("""
-            SELECT COUNT(*) FROM outreach_queue
-            WHERE status IN ('SENT', 'SIMULATED_SENT')
-              AND substr(dispatched_at, 1, 10) = ?;
-        """, (today_date,)).fetchone()
-        daily_sent_today = daily_sent_row[0] if daily_sent_row else 0
+            # 2. Daily sending count check
+            today_date = datetime.now(self.ist_tz).strftime("%Y-%m-%d")
+            daily_sent_row = repo.conn.execute("""
+                SELECT COUNT(*) FROM outreach_queue
+                WHERE status IN ('SENT', 'SIMULATED_SENT')
+                  AND substr(dispatched_at, 1, 10) = ?;
+            """, (today_date,)).fetchone()
+            daily_sent_today = daily_sent_row[0] if daily_sent_row else 0
 
-        remaining_daily_budget = max(0, settings.DAILY_MAX_OUTREACH - daily_sent_today)
-        actual_limit = min(limit, remaining_daily_budget)
+            remaining_daily_budget = max(0, settings.DAILY_MAX_OUTREACH - daily_sent_today)
+            actual_limit = min(limit, remaining_daily_budget)
 
-        if actual_limit <= 0:
-            return {
-                "success": False,
-                "reason": f"Daily outreach cap reached ({daily_sent_today}/{settings.DAILY_MAX_OUTREACH} messages dispatched today)",
-                "dispatched_count": 0,
-                "recovered_crashed": recovered,
-                "items": []
-            }
+            if actual_limit <= 0:
+                return {
+                    "success": False,
+                    "reason": f"Daily outreach cap reached ({daily_sent_today}/{settings.DAILY_MAX_OUTREACH} messages dispatched today)",
+                    "dispatched_count": 0,
+                    "recovered_crashed": recovered,
+                    "items": []
+                }
 
-        # 3. Retrieve pending queue items
-        pending_items = repo.list_queue_items(status="PENDING", time_block=time_block, limit=actual_limit)
-        if not pending_items:
-            return {
-                "success": True,
-                "message": "No pending items in queue for target criteria.",
-                "dispatched_count": 0,
-                "recovered_crashed": recovered,
-                "items": []
-            }
+            # 3. Retrieve pending queue items
+            pending_items = repo.list_queue_items(status="PENDING", time_block=time_block, limit=actual_limit)
+            if not pending_items:
+                return {
+                    "success": True,
+                    "message": "No pending items in queue for target criteria.",
+                    "dispatched_count": 0,
+                    "recovered_crashed": recovered,
+                    "items": []
+                }
 
-        dispatched_items = []
-        messages_in_current_batch = 0
+            dispatched_items = []
+            messages_in_current_batch = 0
 
-        for item in pending_items:
-            q_id = item["queue_id"]
-            draft_id = item["draft_id"]
-            prof_id = item["professor_id"]
-            recipient = item["recipient_email"]
-            block_id = item["time_block_id"]
+            for item in pending_items:
+                q_id = item["queue_id"]
+                draft_id = item["draft_id"]
+                prof_id = item["professor_id"]
+                recipient = item["recipient_email"]
+                block_id = item["time_block_id"]
 
-            # Window check
-            if not force_window:
-                is_active, reason = self.is_window_active(block_id)
-                if not is_active:
-                    # Outside active 90-minute window; hold for proper window
+                # Strict AI Draft Gate: never dispatch placeholder, template, or blank draft
+                is_valid_prefix = draft_id.startswith("aidraft_") or (allow_templates and draft_id.startswith("draft_"))
+                if not is_valid_prefix or not item.get("draft_body"):
+                    repo.update_queue_status(
+                        q_id,
+                        "HELD_NON_AI_DRAFT",
+                        error_message="Disallowing non-AI, placeholder, or empty draft from dispatch."
+                    )
+                    audit_logger.log_event(
+                        event_type="DISPATCH_BLOCKED_NON_AI_DRAFT",
+                        actor="SYSTEM_SCHEDULER",
+                        entity_type="QUEUE_ITEM",
+                        entity_id=q_id,
+                        details={"draft_id": draft_id, "recipient": recipient}
+                    )
                     continue
 
-            # Suppression check
-            is_supp, supp_reason = self.is_suppressed_or_excluded(repo, recipient)
-            if is_supp:
-                repo.update_queue_status(q_id, "SUPPRESSED", error_message=supp_reason)
-                repo.update_professor_status(prof_id, "SUPPRESSED", supp_reason)
-                continue
+                # Window check
+                if not force_window:
+                    is_active, reason = self.is_window_active(block_id)
+                    if not is_active:
+                        # Outside active 90-minute window; hold for proper window
+                        continue
 
-            # Mark IN_PROGRESS (crash recovery anchor)
-            repo.update_queue_status(q_id, "IN_PROGRESS")
+                # Suppression check
+                is_supp, supp_reason = self.is_suppressed_or_excluded(repo, recipient)
+                if is_supp:
+                    repo.update_queue_status(q_id, "SUPPRESSED", error_message=supp_reason)
+                    repo.update_professor_status(prof_id, "SUPPRESSED", supp_reason)
+                    continue
 
-            # Dispatch via Gateway
-            res = gw.dispatch_initial_batch(
-                repo=repo,
-                draft_ids=[draft_id],
-                actor=SecurityRole.HUMAN_OPERATOR,
-                operator_id=operator_id,
-                dry_run=dry_run
-            )
+                # Mark IN_PROGRESS (crash recovery anchor)
+                repo.update_queue_status(q_id, "IN_PROGRESS")
 
-            dispatch_result = res["results"][0] if res["results"] else {}
-            status_label = dispatch_result.get("status", "SIMULATED_SENT" if dry_run else "SENT")
-            message_id = dispatch_result.get("message_id", f"msg_sim_{draft_id[6:]}")
-
-            # Update queue item to dispatched
-            now_str = datetime.now(timezone.utc).isoformat()
-            repo.update_queue_status(q_id, status_label, dispatched_at=now_str)
-
-            dispatched_items.append({
-                "queue_id": q_id,
-                "professor_id": prof_id,
-                "recipient": recipient,
-                "professor_name": item["professor_name"],
-                "university": item["university_name"],
-                "subject": item["draft_subject"],
-                "time_block": block_id,
-                "status": status_label,
-                "message_id": message_id
-            })
-
-            messages_in_current_batch += 1
-
-            # Cadence check: every 5 messages, take a 1-minute cooling break
-            if messages_in_current_batch >= settings.BATCH_SIZE and len(dispatched_items) < len(pending_items):
-                cooling_seconds = settings.COOLING_BREAK_SECONDS
-                audit_logger.log_event(
-                    event_type="CADENCE_COOLING_BREAK",
-                    actor="SYSTEM_SCHEDULER",
-                    entity_type="QUEUE_CADENCE",
-                    entity_id=block_id,
-                    details={
-                        "messages_sent_in_batch": messages_in_current_batch,
-                        "cooling_seconds": cooling_seconds,
-                        "simulated": simulated_cooling
-                    }
+                # Dispatch via Gateway
+                res = gw.dispatch_initial_batch(
+                    repo=repo,
+                    draft_ids=[draft_id],
+                    actor=SecurityRole.HUMAN_OPERATOR,
+                    operator_id=operator_id,
+                    dry_run=dry_run
                 )
-                if not simulated_cooling:
-                    time.sleep(cooling_seconds)
-                messages_in_current_batch = 0  # Reset batch counter for next set of 5
 
-            if len(dispatched_items) >= actual_limit:
-                break
+                dispatch_result = res["results"][0] if res["results"] else {}
+                status_label = dispatch_result.get("status", "SIMULATED_SENT" if dry_run else "SENT")
+                message_id = dispatch_result.get("message_id", f"msg_sim_{draft_id[6:]}")
 
-        repo.conn.commit()
+                # Update queue item to dispatched
+                now_str = datetime.now(timezone.utc).isoformat()
+                repo.update_queue_status(q_id, status_label, dispatched_at=now_str)
 
-        return {
-            "success": True,
-            "dispatched_count": len(dispatched_items),
-            "recovered_crashed": recovered,
-            "dry_run": dry_run,
-            "items": dispatched_items
-        }
+                dispatched_items.append({
+                    "queue_id": q_id,
+                    "professor_id": prof_id,
+                    "recipient": recipient,
+                    "professor_name": item["professor_name"],
+                    "university": item["university_name"],
+                    "subject": item["draft_subject"],
+                    "time_block": block_id,
+                    "status": status_label,
+                    "message_id": message_id
+                })
+
+                messages_in_current_batch += 1
+
+                # Cadence check: every 5 messages, take a 1-minute cooling break
+                if messages_in_current_batch >= settings.BATCH_SIZE and len(dispatched_items) < len(pending_items):
+                    cooling_seconds = settings.COOLING_BREAK_SECONDS
+                    audit_logger.log_event(
+                        event_type="CADENCE_COOLING_BREAK",
+                        actor="SYSTEM_SCHEDULER",
+                        entity_type="QUEUE_CADENCE",
+                        entity_id=block_id,
+                        details={
+                            "messages_sent_in_batch": messages_in_current_batch,
+                            "cooling_seconds": cooling_seconds,
+                            "simulated": simulated_cooling
+                        }
+                    )
+                    if not simulated_cooling:
+                        time.sleep(cooling_seconds)
+                    messages_in_current_batch = 0  # Reset batch counter for next set of 5
+
+                if len(dispatched_items) >= actual_limit:
+                    break
+
+            repo.conn.commit()
+
+            return {
+                "success": True,
+                "dispatched_count": len(dispatched_items),
+                "recovered_crashed": recovered,
+                "dry_run": dry_run,
+                "items": dispatched_items
+            }
+        finally:
+            self.release_scheduler_lock()
 
     def get_queue_diagnostics(self, repo: OutreachRepository) -> Dict[str, Any]:
         """

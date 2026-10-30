@@ -58,38 +58,53 @@ class BatchAIDrafter:
         cur.execute("SELECT * FROM ai_drafting_cursor WHERE cursor_id = ?;", (self.CURSOR_ID,))
         row = cur.fetchone()
 
+        # Compute next unwritten candidate dynamically
+        next_cand = cur.execute("""
+            SELECT professor_id, full_name, email, time_block, time_block_order
+            FROM professors
+            WHERE email IS NOT NULL AND email != ''
+              AND outreach_status NOT IN ('SUPPRESSED', 'SENT', 'SIMULATED_SENT', 'DRAFT_READY', 'NEEDS_RESEARCH', 'FAILED_VALIDATION')
+              AND professor_id NOT IN (SELECT professor_id FROM outreach_drafts WHERE draft_id LIKE 'aidraft_%')
+            ORDER BY time_block ASC, time_block_order ASC, qs_rank ASC
+            LIMIT 1;
+        """).fetchone()
+
+        total_drafted_db = cur.execute("SELECT COUNT(*) FROM outreach_drafts WHERE draft_id LIKE 'aidraft_%';").fetchone()[0]
+        total_failed_db = cur.execute("SELECT COUNT(*) FROM professors WHERE outreach_status = 'FAILED_VALIDATION';").fetchone()[0]
+        total_skipped_db = cur.execute("SELECT COUNT(*) FROM professors WHERE outreach_status = 'NEEDS_RESEARCH';").fetchone()[0]
+
         if row:
-            return {
-                "cursor_id": row["cursor_id"],
-                "last_sequence_order": row["last_sequence_order"],
-                "last_professor_id": row["last_professor_id"],
-                "last_time_block": row["last_time_block"],
-                "total_drafted": row["total_drafted"],
-                "total_failed": row["total_failed"],
-                "total_skipped": row["total_skipped"],
-                "updated_at": row["updated_at"]
-            }
+            last_order = row["last_sequence_order"]
+            last_prof_id = row["last_professor_id"]
+            last_block = row["last_time_block"]
+            total_drafted = max(row["total_drafted"] or 0, total_drafted_db)
+            total_failed = max(row["total_failed"] or 0, total_failed_db)
+            total_skipped = max(row["total_skipped"] or 0, total_skipped_db)
+        else:
+            last_order = (next_cand["time_block_order"] - 1) if next_cand and next_cand["time_block_order"] else 0
+            last_prof_id = None
+            last_block = next_cand["time_block"] if next_cand else "BLOCK_01"
+            total_drafted = total_drafted_db
+            total_failed = total_failed_db
+            total_skipped = total_skipped_db
 
-        # Check JSON state file
-        if STATE_FILE_PATH.exists():
-            try:
-                with open(STATE_FILE_PATH, "r", encoding="utf-8") as f:
-                    state = json.load(f)
-                    return state
-            except Exception:
-                pass
-
-        # Default initial cursor
-        return {
+        cursor_info = {
             "cursor_id": self.CURSOR_ID,
-            "last_sequence_order": 0,
-            "last_professor_id": None,
-            "last_time_block": "BLOCK_01",
-            "total_drafted": 0,
-            "total_failed": 0,
-            "total_skipped": 0,
-            "updated_at": datetime.now(timezone.utc).isoformat()
+            "last_sequence_order": last_order,
+            "last_professor_id": last_prof_id,
+            "last_time_block": last_block,
+            "next_candidate_order": next_cand["time_block_order"] if next_cand else None,
+            "next_candidate_id": next_cand["professor_id"] if next_cand else None,
+            "next_candidate_name": next_cand["full_name"] if next_cand else None,
+            "next_candidate_email": next_cand["email"] if next_cand else None,
+            "next_candidate_block": next_cand["time_block"] if next_cand else None,
+            "total_drafted": total_drafted,
+            "total_failed": total_failed,
+            "total_skipped": total_skipped,
+            "updated_at": row["updated_at"] if row else datetime.now(timezone.utc).isoformat()
         }
+
+        return cursor_info
 
     def save_cursor(self, repo: OutreachRepository, cursor: Dict[str, Any]) -> None:
         """Persist cursor to SQLite and write transparent JSON state."""
@@ -139,25 +154,18 @@ class BatchAIDrafter:
     ) -> List[Dict[str, Any]]:
         """
         Retrieve next eligible professors strictly in workbook order.
-        Resumes from cursor position unless from_beginning is True.
+        Resumes from cursor position without skipping any unprocessed candidates.
         """
-        cursor = self.get_cursor(repo)
-        start_order = 0 if from_beginning else cursor.get("last_sequence_order", 0)
-
         query = """
             SELECT p.*
             FROM professors p
             WHERE p.email IS NOT NULL AND p.email != ''
-              AND p.outreach_status NOT IN ('SUPPRESSED', 'SENT', 'SIMULATED_SENT')
+              AND p.outreach_status NOT IN ('SUPPRESSED', 'SENT', 'SIMULATED_SENT', 'DRAFT_READY', 'NEEDS_RESEARCH', 'FAILED_VALIDATION')
               AND p.professor_id NOT IN (
                   SELECT professor_id FROM outreach_drafts WHERE draft_id LIKE 'aidraft_%'
               )
         """
         params: List[Any] = []
-
-        if not from_beginning and start_order > 0:
-            query += " AND (p.time_block_order > ? OR p.time_block_order IS NULL)"
-            params.append(start_order)
 
         if time_block:
             query += " AND p.time_block = ?"
@@ -183,10 +191,12 @@ class BatchAIDrafter:
         self,
         repo: OutreachRepository,
         draft_payload: Dict[str, Any],
-        actor: str = "ANTIGRAVITY_AGENT"
+        actor: str = "ANTIGRAVITY_AGENT",
+        is_demo: bool = False
     ) -> Dict[str, Any]:
         """
         Validate and import an AI-authored draft, then advance the durable cursor.
+        Demonstration samples (is_demo=True) are staged without skipping unprocessed candidates.
         """
         prof_id = draft_payload.get("professor_id")
         prof = repo.get_professor(prof_id)
@@ -197,21 +207,21 @@ class BatchAIDrafter:
 
         cursor = self.get_cursor(repo)
         if import_res["imported_count"] > 0:
-            cursor["total_drafted"] = cursor.get("total_drafted", 0) + 1
             if prof:
-                cursor["last_sequence_order"] = max(cursor.get("last_sequence_order", 0), prof.get("time_block_order") or 0)
                 cursor["last_professor_id"] = prof["professor_id"]
                 cursor["last_time_block"] = prof.get("time_block") or cursor.get("last_time_block")
+                if not is_demo:
+                    cursor["last_sequence_order"] = prof.get("time_block_order") or cursor.get("last_sequence_order", 0)
             self.save_cursor(repo, cursor)
-            return {"success": True, "result": import_res["results"][0]}
+            return {"success": True, "result": import_res["results"][0], "cursor": cursor}
         else:
-            cursor["total_failed"] = cursor.get("total_failed", 0) + 1
-            self.save_cursor(repo, cursor)
             # Update professor status to FAILED_VALIDATION
             if prof:
                 err = import_res["results"][0].get("error", "Unknown validation error")
                 repo.update_professor_status(prof["professor_id"], "FAILED_VALIDATION", notes=err)
-            return {"success": False, "error": import_res["results"][0].get("error")}
+            cursor = self.get_cursor(repo)
+            self.save_cursor(repo, cursor)
+            return {"success": False, "error": import_res["results"][0].get("error"), "cursor": cursor}
 
     def mark_needs_research(
         self,

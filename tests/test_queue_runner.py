@@ -179,14 +179,15 @@ def test_cadence_batching_and_cooling_break(queue_test_env):
     assert items[5]["batch_number"] == 2
     assert items[6]["batch_number"] == 2
 
-    # Dispatch batch in dry run
+    # Dispatch batch in dry run with allow_templates=True
     dispatch_res = runner.dispatch_queue(
         repo=repo,
         time_block="BLOCK_01",
         max_messages=7,
         dry_run=True,
         force_window=True,
-        simulated_cooling=True
+        simulated_cooling=True,
+        allow_templates=True
     )
 
     assert dispatch_res["dispatched_count"] == 7
@@ -194,7 +195,10 @@ def test_cadence_batching_and_cooling_break(queue_test_env):
 
 
 def test_crash_recovery_mechanisms(queue_test_env):
-    """Verify crash recovery for items stranded in IN_PROGRESS."""
+    """
+    Verify crash recovery prevents duplicate sending via AMBIGUOUS_DELIVERY state.
+    Process crashes after SMTP accepts but before SQLite commits must require reconciliation.
+    """
     repo, runner, _ = queue_test_env
 
     # Seed 2 professors and build queue
@@ -236,18 +240,23 @@ def test_crash_recovery_mechanisms(queue_test_env):
 
     # For q2, no message exists in email_messages (crashed before send)
 
-    # Trigger recovery
+    # Trigger recovery: both items resolved
     recovered_count = repo.recover_crashed_queue_items()
-    assert recovered_count == 1  # 1 un-sent item rolled back to PENDING
+    assert recovered_count == 2
 
-    # Check statuses
+    # Check statuses: q1 marked SENT, q2 marked AMBIGUOUS_DELIVERY (not blindly reset to PENDING!)
     cur = repo.conn.cursor()
     s1 = cur.execute("SELECT status FROM outreach_queue WHERE queue_id = ?;", (q1_id,)).fetchone()[0]
     s2 = cur.execute("SELECT status, error_message FROM outreach_queue WHERE queue_id = ?;", (q2_id,)).fetchone()
 
     assert s1 == "SENT"
-    assert s2[0] == "PENDING"
-    assert "Recovered from unexpected process interruption" in s2[1]
+    assert s2[0] == "AMBIGUOUS_DELIVERY"
+    assert "Requires mail server reconciliation before retry" in s2[1]
+
+    # Reconcile q2 after verifying with server that no email was transmitted
+    repo.reconcile_ambiguous_delivery(q2_id, verified_sent=False, notes="Verified not in sent folder")
+    s2_after = cur.execute("SELECT status FROM outreach_queue WHERE queue_id = ?;", (q2_id,)).fetchone()[0]
+    assert s2_after == "PENDING"
 
 
 def test_duplicate_outreach_prevention(queue_test_env):
@@ -267,9 +276,38 @@ def test_duplicate_outreach_prevention(queue_test_env):
 
     # Build queue and dispatch once
     runner.build_queue_from_professors(repo)
-    res1 = runner.dispatch_queue(repo, time_block="BLOCK_08", max_messages=1, dry_run=True, force_window=True)
+    res1 = runner.dispatch_queue(repo, time_block="BLOCK_08", max_messages=1, dry_run=True, force_window=True, allow_templates=True)
     assert res1["dispatched_count"] == 1
 
     # Attempt second dispatch: must find 0 pending items
-    res2 = runner.dispatch_queue(repo, time_block="BLOCK_08", max_messages=1, dry_run=True, force_window=True)
+    res2 = runner.dispatch_queue(repo, time_block="BLOCK_08", max_messages=1, dry_run=True, force_window=True, allow_templates=True)
     assert res2["dispatched_count"] == 0
+
+
+def test_non_ai_draft_blocked_by_default(queue_test_env):
+    """Verify that by default, non-AI or template drafts are blocked with HELD_NON_AI_DRAFT."""
+    repo, runner, _ = queue_test_env
+
+    repo.upsert_professor(Professor(
+        professor_id="prof_block_01",
+        university_name="Cambridge",
+        country="United Kingdom",
+        full_name="Prof Template",
+        email="temp@cam.ac.uk",
+        research_areas="Theoretical CS",
+        time_block="BLOCK_08",
+        time_block_order=1
+    ))
+
+    # Enqueue deterministic template draft
+    runner.build_queue_from_professors(repo)
+
+    # Attempt dispatch with default allow_templates=False
+    res = runner.dispatch_queue(repo, time_block="BLOCK_08", max_messages=1, dry_run=True, force_window=True)
+    assert res["dispatched_count"] == 0
+
+    # Queue item should be marked HELD_NON_AI_DRAFT
+    cur = repo.conn.cursor()
+    row = cur.execute("SELECT status, error_message FROM outreach_queue WHERE professor_id = 'prof_block_01';").fetchone()
+    assert row["status"] == "HELD_NON_AI_DRAFT"
+    assert "Disallowing non-AI" in row["error_message"]

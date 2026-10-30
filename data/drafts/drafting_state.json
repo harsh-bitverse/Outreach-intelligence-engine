@@ -1,10 +1,13 @@
 {
   "cursor_id": "WORKBOOK_SEQUENTIAL",
-  "last_sequence_order": 909,
-  "last_professor_id": "prof_4a47c95f6d8a4766",
-  "last_time_block": "BLOCK_10",
+  "last_sequence_order": 1,
+  "next_candidate_order": 2,
+  "next_candidate_id": "prof_aebd96ccdbc2acaa",
+  "next_candidate_name": "Jiamou Liu",
+  "next_candidate_email": "jiamou.liu@auckland.ac.nz",
+  "next_candidate_block": "BLOCK_01",
   "total_drafted": 10,
   "total_failed": 0,
   "total_skipped": 0,
-  "updated_at": "2026-10-30T13:11:57.898203+00:00"
+  "updated_at": "2026-10-30T13:26:55.148135+00:00"
 }

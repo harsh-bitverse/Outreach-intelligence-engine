@@ -476,6 +476,8 @@ class OutreachRepository:
                 dispatched_at, error_message, batch_number, created_at, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(queue_id) DO UPDATE SET
+                professor_id = excluded.professor_id,
+                draft_id = excluded.draft_id,
                 time_block_id = excluded.time_block_id,
                 window_start_ist = excluded.window_start_ist,
                 window_end_ist = excluded.window_end_ist,
@@ -548,7 +550,9 @@ class OutreachRepository:
     def recover_crashed_queue_items(self) -> int:
         """
         Crash Recovery: Find any queue items left in 'IN_PROGRESS' due to abrupt shutdown.
-        If email was not actually dispatched in email_messages, roll back status to 'PENDING'.
+        If email was confirmed dispatched in email_messages, mark 'SENT'.
+        If NOT confirmed in email_messages, set to 'AMBIGUOUS_DELIVERY' requiring reconciliation
+        before retry, preventing duplicate transmissions if SMTP accepted before crash.
         """
         cursor = self.conn.execute("""
             SELECT q.queue_id, q.draft_id, d.recipient_email
@@ -570,8 +574,25 @@ class OutreachRepository:
                 )
             else:
                 self.conn.execute(
-                    "UPDATE outreach_queue SET status = 'PENDING', error_message = 'Recovered from unexpected process interruption', updated_at = datetime('now') WHERE queue_id = ?;",
+                    "UPDATE outreach_queue SET status = 'AMBIGUOUS_DELIVERY', error_message = 'Interrupted in progress. Requires mail server reconciliation before retry to prevent duplicate transmission.', updated_at = datetime('now') WHERE queue_id = ?;",
                     (item["queue_id"],)
                 )
-                recovered += 1
+            recovered += 1
+        self.conn.commit()
         return recovered
+
+    def reconcile_ambiguous_delivery(self, queue_id: str, verified_sent: bool, notes: str = "") -> None:
+        """
+        Reconcile an AMBIGUOUS_DELIVERY queue item following IMAP Sent-box or server audit.
+        If verified_sent is True, marks SENT. If False, safely unlocks to PENDING.
+        """
+        new_status = "SENT" if verified_sent else "PENDING"
+        err_msg = f"Reconciled: {notes}" if notes else f"Reconciled as {'sent' if verified_sent else 'not sent'}"
+        self.conn.execute("""
+            UPDATE outreach_queue
+            SET status = ?,
+                error_message = ?,
+                updated_at = datetime('now')
+            WHERE queue_id = ?;
+        """, (new_status, err_msg, queue_id))
+        self.conn.commit()

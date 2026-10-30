@@ -85,11 +85,19 @@ class SendingGateway:
             op_label = operator_id or "SYSTEM_OPERATOR"
             ticket = session_store.issue_execution_ticket("DISPATCH_INITIAL", draft_id, op_label)
 
+            # Both authoritative PDFs attached with exact recipient-facing filenames
+            attachments = []
+            if settings.CV_ATTACHMENT_PATH.exists():
+                attachments.append((settings.CV_ATTACHMENT_PATH, settings.CV_ATTACHMENT_FILENAME))
+            if settings.RESEARCH_INTERESTS_PATH.exists():
+                attachments.append((settings.RESEARCH_INTERESTS_PATH, settings.RESEARCH_INTERESTS_FILENAME))
+
             # Transmission (Live or Dry-Run)
             res = self.smtp.send_email(
                 recipient=recipient,
                 subject=draft["subject"],
                 body_text=draft["body_text"],
+                attachments=attachments,
                 dry_run=dry_run,
                 actor=actor.value,
                 operator_id=op_label,

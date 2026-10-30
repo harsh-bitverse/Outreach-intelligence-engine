@@ -90,6 +90,7 @@ class IITDSmtpClient:
         in_reply_to: Optional[str] = None,
         references: Optional[str] = None,
         attachment_path: Optional[Path] = None,
+        attachments: Optional[List[Any]] = None,
         dry_run: bool = True,
         actor: str = "HUMAN_OPERATOR",
         operator_id: Optional[str] = None,
@@ -133,11 +134,28 @@ class IITDSmtpClient:
 
         msg.attach(MIMEText(body_text, "plain", "utf-8"))
 
-        if attachment_path and attachment_path.exists():
-            with open(attachment_path, "rb") as f:
-                part = MIMEApplication(f.read(), Name=attachment_path.name)
-                part["Content-Disposition"] = f'attachment; filename="{attachment_path.name}"'
+        # Consolidate attachments preserving exact recipient-facing filenames & unchanged bytes
+        all_attachments: List[Tuple[Path, str]] = []
+        if attachments:
+            for item in attachments:
+                if isinstance(item, tuple):
+                    all_attachments.append((Path(item[0]), str(item[1])))
+                elif isinstance(item, (Path, str)):
+                    p = Path(item)
+                    all_attachments.append((p, p.name))
+        if attachment_path:
+            p = Path(attachment_path)
+            all_attachments.append((p, p.name))
+
+        attached_names = []
+        for att_path, att_name in all_attachments:
+            if att_path.exists():
+                with open(att_path, "rb") as f:
+                    file_bytes = f.read()
+                part = MIMEApplication(file_bytes, Name=att_name)
+                part["Content-Disposition"] = f'attachment; filename="{att_name}"'
                 msg.attach(part)
+                attached_names.append(att_name)
 
         # Dry-run handling: Never transmit packets over wire unless explicitly authorized diagnostic bypass
         if dry_run or (settings.DRY_RUN and actor != "SYSTEM_TEST_BYPASS"):
@@ -151,7 +169,8 @@ class IITDSmtpClient:
                     "recipient": recipient,
                     "subject": subject,
                     "dry_run": True,
-                    "in_reply_to": in_reply_to
+                    "in_reply_to": in_reply_to,
+                    "attachments": attached_names
                 }
             )
             return {
@@ -160,6 +179,7 @@ class IITDSmtpClient:
                 "message_id": message_id,
                 "recipient": recipient,
                 "subject": subject,
+                "attachments": attached_names,
                 "status": "SIMULATED_TRANSMISSION"
             }
 

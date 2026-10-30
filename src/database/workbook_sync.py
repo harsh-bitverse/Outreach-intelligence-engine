@@ -5,6 +5,7 @@ file locking, conflict detection, and Time Blocks synchronization.
 """
 
 import os
+import re
 import shutil
 import time
 from datetime import datetime, timezone
@@ -93,12 +94,20 @@ class DynamicWorkbookSync:
             stats["universities_imported"] = uni_stats
 
         # 2. Import Professors
-        prof_sheet_name = next((s for s in wb.sheetnames if "professor" in s.lower()), None)
-        if not prof_sheet_name:
-            raise ValueError(f"No 'Professor Database' sheet found in workbook. Available: {wb.sheetnames}")
+        tb_sheet_name = next(
+            (s for s in wb.sheetnames if "time block" in s.lower() or "distribution" in s.lower()),
+            None
+        )
+        if tb_sheet_name:
+            ws_tb = wb[tb_sheet_name]
+            prof_stats = self._import_professors_from_time_blocks(ws_tb, repo)
+        else:
+            prof_sheet_name = next((s for s in wb.sheetnames if "professor" in s.lower()), None)
+            if not prof_sheet_name:
+                raise ValueError(f"No professor or time blocks sheet found in workbook. Available: {wb.sheetnames}")
+            ws_prof = wb[prof_sheet_name]
+            prof_stats = self._import_professors(ws_prof, repo)
 
-        ws_prof = wb[prof_sheet_name]
-        prof_stats = self._import_professors(ws_prof, repo)
         stats["professors_imported"] = prof_stats["imported"]
         stats["suppressed_detected"] = prof_stats["suppressed"]
 
@@ -213,6 +222,152 @@ class DynamicWorkbookSync:
                 date_verified=date_ver,
                 notes=notes,
                 outreach_status=sheet_outreach_status
+            )
+            repo.upsert_professor(prof)
+            imported += 1
+
+        return {"imported": imported, "suppressed": suppressed_count}
+
+    def _import_professors_from_time_blocks(self, ws, repo: OutreachRepository) -> Dict[str, int]:
+        """
+        Dynamically import professors directly from the authoritative 'Time Blocks & Distribution' sheet.
+        Preserves:
+        1. Exact professor sequence across blocks.
+        2. Block association (BLOCK 01 to BLOCK 13), region, and target windows.
+        3. Research overlap, verified project links, and computational contributions.
+        4. University IANA Time Zones.
+        """
+        header_map: Dict[str, int] = {}
+        current_block_id = "BLOCK_01"
+        current_block_label = ""
+        current_region = ""
+        current_ist_window = ""
+
+        imported = 0
+        suppressed_count = 0
+        order_index = 0
+
+        def get_val_by_map(row, header_dict, *aliases) -> str:
+            for alias in aliases:
+                norm_alias = self._normalize_header(alias)
+                col_idx = header_dict.get(norm_alias)
+                if col_idx is not None and col_idx - 1 < len(row):
+                    val = row[col_idx - 1]
+                    return str(val).strip() if val is not None else ""
+            return ""
+
+        def get_int_by_map(row, header_dict, *aliases) -> Optional[int]:
+            for alias in aliases:
+                norm_alias = self._normalize_header(alias)
+                col_idx = header_dict.get(norm_alias)
+                if col_idx is not None and col_idx - 1 < len(row):
+                    val = row[col_idx - 1]
+                    try:
+                        return int(val) if val is not None else None
+                    except (ValueError, TypeError):
+                        pass
+            return None
+
+        for row in ws.iter_rows(values_only=True):
+            if not row or not any(cell is not None for cell in row):
+                continue
+
+            first_cell = str(row[0] or "").strip()
+
+            # Detect block banner line
+            # e.g., "BLOCK 01 / 13 | 01:00–02:00 IST | 1 university • 7 professor rows | Target: 09:00 Local (NZDT UTC+13) | Region: New Zealand"
+            if first_cell.upper().startswith("BLOCK "):
+                current_block_label = first_cell
+                parts = [p.strip() for p in first_cell.split("|")]
+                if len(parts) >= 1:
+                    match_block = re.search(r"BLOCK\s*(\d+)", parts[0], re.IGNORECASE)
+                    if match_block:
+                        current_block_id = f"BLOCK_{int(match_block.group(1)):02d}"
+                if len(parts) >= 2:
+                    current_ist_window = parts[1]
+                if len(parts) >= 5:
+                    current_region = parts[4].replace("Region:", "").strip()
+                continue
+
+            # Detect table headers under each block
+            if self._normalize_header(first_cell) in ("qsrank", "rank", "processingsequence"):
+                header_map = {}
+                for idx, col in enumerate(row, start=1):
+                    norm = self._normalize_header(col)
+                    if norm:
+                        header_map[norm] = idx
+                continue
+
+            # If headers are not yet established, skip promotional/notice rows
+            if not header_map:
+                continue
+
+            full_name = get_val_by_map(row, header_map, "Professor Full Name", "Professor Name", "Name")
+            uni_name = get_val_by_map(row, header_map, "University Name", "University", "Institution")
+
+            # Skip rows without name or university
+            if not full_name or not uni_name:
+                continue
+
+            # Check if this row is actually a header row
+            if self._normalize_header(full_name) in ("professorfullname", "fullname"):
+                continue
+
+            order_index += 1
+
+            email = get_val_by_map(row, header_map, "Official Institutional Email", "Email", "Email Address")
+            country = get_val_by_map(row, header_map, "Country")
+            title = get_val_by_map(row, header_map, "Academic Title / Position", "Title", "Position")
+            dept = get_val_by_map(row, header_map, "Department / Faculty", "Department")
+            qs_rank = get_int_by_map(row, header_map, "QS Rank", "Rank")
+            seq = get_int_by_map(row, header_map, "Processing Sequence", "Sequence", "Seq")
+            ver_status = get_val_by_map(row, header_map, "Email Verification Status", "Verification Status") or "UNVERIFIED"
+            ver_url = get_val_by_map(row, header_map, "Email Verification Source URL", "Verification Source")
+            profile_url = get_val_by_map(row, header_map, "Official Faculty Profile URL", "Profile URL")
+            research_areas = get_val_by_map(row, header_map, "Research Areas / Keywords", "Research Areas")
+            research_overlap = get_val_by_map(row, header_map, "Specific Research Overlap With My Interests", "Research Overlap")
+            cv_skill = get_val_by_map(row, header_map, "Relevant Skill or Project From My CV", "CV Project")
+            contribution = get_val_by_map(row, header_map, "Potential Software / Computational Contribution", "Contribution")
+            evidence_url = get_val_by_map(row, header_map, "Research Evidence URL", "Evidence URL")
+            date_ver = get_val_by_map(row, header_map, "Date Verified")
+            notes = get_val_by_map(row, header_map, "Notes / Unresolved Issues", "Notes")
+            iana_tz = get_val_by_map(row, header_map, "University IANA Time Zone", "Timezone", "IANA Time Zone")
+            sheet_outreach_status = get_val_by_map(row, header_map, "Outreach Status", "Mailing Status") or "NEW"
+
+            prof_id = compute_durable_professor_id(uni_name, full_name)
+
+            # Check suppression
+            suppressed, reason = repo.is_suppressed(email)
+            if suppressed:
+                sheet_outreach_status = "SUPPRESSED"
+                suppressed_count += 1
+                if reason and reason not in notes:
+                    notes = f"{notes} | {reason}".strip(" |")
+
+            prof = Professor(
+                professor_id=prof_id,
+                qs_rank=qs_rank,
+                processing_sequence=seq,
+                university_name=uni_name,
+                country=country,
+                full_name=full_name,
+                title=title,
+                department=dept,
+                email=email,
+                email_verification_status=ver_status,
+                verification_source_url=ver_url,
+                faculty_profile_url=profile_url,
+                research_areas=research_areas,
+                research_overlap=research_overlap,
+                cv_skill_project=cv_skill,
+                potential_contribution=contribution,
+                evidence_url=evidence_url,
+                date_verified=date_ver,
+                notes=notes,
+                outreach_status=sheet_outreach_status,
+                time_block=current_block_id,
+                time_block_order=order_index,
+                iana_timezone=iana_tz
             )
             repo.upsert_professor(prof)
             imported += 1

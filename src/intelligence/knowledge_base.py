@@ -111,17 +111,26 @@ class KnowledgeBase:
 
     def _refresh_documents_audit(self, profile: Dict[str, Any]) -> None:
         """Inspect actual local filesystem for source files and update status."""
+        import hashlib
         docs = profile.get("source_documents_audit", {})
-        cv_entry = docs.get("approved_cv_pdf", {})
-        cv_path_str = cv_entry.get("path", "data/private/approved_cv.pdf")
-        cv_file = Path(cv_path_str)
+        for doc_key, doc_entry in docs.items():
+            path_str = doc_entry.get("path")
+            if not path_str:
+                continue
+            doc_file = Path(path_str)
+            if not doc_file.is_absolute():
+                doc_file = settings.BASE_DIR / doc_file
 
-        if cv_file.exists():
-            cv_entry["status"] = "VERIFIED_PRESENT"
-            cv_entry["file_size_bytes"] = cv_file.stat().st_size
-        else:
-            cv_entry["status"] = "MISSING_FROM_DISK"
-            cv_entry["file_size_bytes"] = 0
+            if doc_file.exists():
+                doc_entry["status"] = "VERIFIED_PRESENT"
+                doc_entry["file_size_bytes"] = doc_file.stat().st_size
+                try:
+                    doc_entry["sha256"] = hashlib.sha256(doc_file.read_bytes()).hexdigest()
+                except Exception:
+                    pass
+            else:
+                doc_entry["status"] = "MISSING_FROM_DISK"
+                doc_entry["file_size_bytes"] = 0
 
     def audit_missing_sources(self) -> Dict[str, Any]:
         """Return dedicated audit report of available vs missing source documents."""

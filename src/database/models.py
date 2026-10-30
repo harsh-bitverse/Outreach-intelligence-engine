@@ -34,6 +34,29 @@ class Professor:
     date_verified: str = ""
     notes: str = ""
     outreach_status: str = "NEW"  # NEW, DRAFT_READY, APPROVED, QUEUED, SENT, REPLIED, DECLINED, BOUNCED, OPTED_OUT, SUPPRESSED
+    time_block: str = ""
+    time_block_order: Optional[int] = None
+    iana_timezone: str = ""
+    created_at: str = field(default_factory=utc_now_iso)
+    updated_at: str = field(default_factory=utc_now_iso)
+
+
+@dataclass
+class OutreachQueueItem:
+    """Represents a scheduled, persistent outreach item in the durable dispatch queue."""
+    queue_id: str
+    professor_id: str
+    draft_id: str
+    time_block_id: str
+    window_start_ist: str
+    window_end_ist: str
+    sequence_order: int
+    status: str = "PENDING"  # PENDING, IN_PROGRESS, SENT, FAILED, SUPPRESSED, RECOVERED, SKIPPED
+    attempts: int = 0
+    last_attempt_at: Optional[str] = None
+    dispatched_at: Optional[str] = None
+    error_message: Optional[str] = None
+    batch_number: int = 0
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)
 

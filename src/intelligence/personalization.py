@@ -38,6 +38,32 @@ class PersonalizationEngine:
     def __init__(self, kb=None):
         self.kb = kb or knowledge_base
 
+    @staticmethod
+    def format_subject_line(research_areas: str = "", research_overlap: str = "") -> str:
+        """
+        Produce exact required subject format:
+        Summer 2027 Research Internship — [Research Area] | IIT Delhi
+        """
+        raw = (research_areas or "").strip()
+        if not raw:
+            raw = (research_overlap or "").strip()
+        if not raw:
+            raw = "Computational & Process Systems"
+
+        # Split on separators to extract primary concise research area
+        parts = [p.strip() for p in re.split(r"[,;/|•]", raw) if p.strip()]
+        if len(parts) >= 2 and len(f"{parts[0]} & {parts[1]}") <= 42:
+            area = f"{parts[0]} & {parts[1]}"
+        elif parts:
+            area = parts[0]
+        else:
+            area = raw
+
+        if len(area) > 45:
+            area = area[:42].rstrip() + "..."
+
+        return f"Summer 2027 Research Internship — {area} | IIT Delhi"
+
     def calculate_evidence_confidence(self, professor: Dict[str, Any]) -> Tuple[float, str, List[str]]:
         """
         Calculate evidence confidence score (0.0 to 1.0) and determine review flags.
@@ -111,7 +137,8 @@ class PersonalizationEngine:
         project = self.kb.get_best_matching_project(combined_research_text)
 
         # Subject Line
-        subject = f"Prospective Summer 2027 Research Internship — Harshith N (IIT Delhi)"
+        # Required format: Summer 2027 Research Internship — [Research Area] | IIT Delhi
+        subject = self.format_subject_line(research_areas, research_overlap)
 
         # ----------------------------------------------------------------------
         # Paragraph 1: Identity & specific purpose (approx 25-30 words)

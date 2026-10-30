@@ -9,7 +9,8 @@ import sqlite3
 from typing import List, Optional, Dict, Any, Tuple
 from src.database.models import (
     Professor, University, OutreachDraft, EmailThread, EmailMessage,
-    ReplyClassificationRecord, ReplyDraftRecord, FollowUpDraftRecord, SuppressionRecord
+    ReplyClassificationRecord, ReplyDraftRecord, FollowUpDraftRecord, SuppressionRecord,
+    OutreachQueueItem
 )
 
 
@@ -95,8 +96,9 @@ class OutreachRepository:
                 full_name, title, department, email, email_verification_status,
                 verification_source_url, faculty_profile_url, research_areas,
                 research_overlap, cv_skill_project, potential_contribution,
-                evidence_url, date_verified, notes, outreach_status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                evidence_url, date_verified, notes, outreach_status,
+                time_block, time_block_order, iana_timezone, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             ON CONFLICT(professor_id) DO UPDATE SET
                 qs_rank = COALESCE(excluded.qs_rank, professors.qs_rank),
                 processing_sequence = COALESCE(excluded.processing_sequence, professors.processing_sequence),
@@ -117,13 +119,18 @@ class OutreachRepository:
                     WHEN excluded.outreach_status = 'SUPPRESSED' THEN 'SUPPRESSED'
                     ELSE professors.outreach_status
                 END,
+                time_block = COALESCE(NULLIF(excluded.time_block, ''), professors.time_block),
+                time_block_order = COALESCE(excluded.time_block_order, professors.time_block_order),
+                iana_timezone = COALESCE(NULLIF(excluded.iana_timezone, ''), professors.iana_timezone),
                 updated_at = datetime('now');
         """, (
             prof.professor_id, prof.qs_rank, prof.processing_sequence, prof.university_name, prof.country,
             prof.full_name, prof.title, prof.department, prof.email, prof.email_verification_status,
             prof.verification_source_url, prof.faculty_profile_url, prof.research_areas,
             prof.research_overlap, prof.cv_skill_project, prof.potential_contribution,
-            prof.evidence_url, prof.date_verified, prof.notes, initial_status, prof.created_at
+            prof.evidence_url, prof.date_verified, prof.notes, initial_status,
+            getattr(prof, "time_block", ""), getattr(prof, "time_block_order", None), getattr(prof, "iana_timezone", ""),
+            prof.created_at
         ))
         return prof.professor_id
 
@@ -454,3 +461,115 @@ class OutreachRepository:
             "suppressed_count": suppressed_count,
             "replies_breakdown": replies_breakdown,
         }
+
+    # --------------------------------------------------------------------------
+    # Durable Dispatch Queue Management
+    # --------------------------------------------------------------------------
+    def enqueue_outreach(self, item: OutreachQueueItem) -> str:
+        """Add or update an item in the persistent durable outreach queue."""
+        self.conn.execute("""
+            INSERT INTO outreach_queue (
+                queue_id, professor_id, draft_id, time_block_id, window_start_ist,
+                window_end_ist, sequence_order, status, attempts, last_attempt_at,
+                dispatched_at, error_message, batch_number, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(queue_id) DO UPDATE SET
+                time_block_id = excluded.time_block_id,
+                window_start_ist = excluded.window_start_ist,
+                window_end_ist = excluded.window_end_ist,
+                sequence_order = excluded.sequence_order,
+                status = excluded.status,
+                attempts = excluded.attempts,
+                last_attempt_at = excluded.last_attempt_at,
+                dispatched_at = excluded.dispatched_at,
+                error_message = excluded.error_message,
+                batch_number = excluded.batch_number,
+                updated_at = datetime('now');
+        """, (
+            item.queue_id, item.professor_id, item.draft_id, item.time_block_id,
+            item.window_start_ist, item.window_end_ist, item.sequence_order,
+            item.status, item.attempts, item.last_attempt_at, item.dispatched_at,
+            item.error_message, item.batch_number, item.created_at, item.updated_at
+        ))
+        return item.queue_id
+
+    def list_queue_items(
+        self,
+        status: Optional[str] = None,
+        time_block: Optional[str] = None,
+        limit: int = 1500
+    ) -> List[Dict[str, Any]]:
+        """List queue items with joined professor and draft metadata in sequence order."""
+        query = """
+            SELECT q.*, p.full_name as professor_name, p.university_name, p.email as recipient_email,
+                   p.research_areas, p.research_overlap, p.cv_skill_project, p.potential_contribution,
+                   p.iana_timezone, d.subject as draft_subject, d.body_text as draft_body,
+                   d.word_count as draft_word_count
+            FROM outreach_queue q
+            JOIN professors p ON q.professor_id = p.professor_id
+            JOIN outreach_drafts d ON q.draft_id = d.draft_id
+            WHERE 1=1
+        """
+        params: List[Any] = []
+        if status:
+            query += " AND q.status = ?"
+            params.append(status)
+        if time_block:
+            query += " AND q.time_block_id = ?"
+            params.append(time_block)
+
+        query += " ORDER BY q.sequence_order ASC, q.created_at ASC LIMIT ?;"
+        params.append(limit)
+
+        cursor = self.conn.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+    def update_queue_status(
+        self,
+        queue_id: str,
+        new_status: str,
+        error_message: Optional[str] = None,
+        dispatched_at: Optional[str] = None
+    ) -> None:
+        """Update execution status of a queued item."""
+        self.conn.execute("""
+            UPDATE outreach_queue
+            SET status = ?,
+                attempts = attempts + 1,
+                last_attempt_at = datetime('now'),
+                dispatched_at = COALESCE(?, dispatched_at),
+                error_message = ?,
+                updated_at = datetime('now')
+            WHERE queue_id = ?;
+        """, (new_status, dispatched_at, error_message, queue_id))
+
+    def recover_crashed_queue_items(self) -> int:
+        """
+        Crash Recovery: Find any queue items left in 'IN_PROGRESS' due to abrupt shutdown.
+        If email was not actually dispatched in email_messages, roll back status to 'PENDING'.
+        """
+        cursor = self.conn.execute("""
+            SELECT q.queue_id, q.draft_id, d.recipient_email
+            FROM outreach_queue q
+            JOIN outreach_drafts d ON q.draft_id = d.draft_id
+            WHERE q.status = 'IN_PROGRESS';
+        """)
+        crashed = cursor.fetchall()
+        recovered = 0
+        for item in crashed:
+            # Check if email exists in email_messages
+            msg = self.conn.execute(
+                "SELECT 1 FROM email_messages WHERE recipient = ?;", (item["recipient_email"],)
+            ).fetchone()
+            if msg:
+                self.conn.execute(
+                    "UPDATE outreach_queue SET status = 'SENT', updated_at = datetime('now') WHERE queue_id = ?;",
+                    (item["queue_id"],)
+                )
+            else:
+                self.conn.execute(
+                    "UPDATE outreach_queue SET status = 'PENDING', error_message = 'Recovered from unexpected process interruption', updated_at = datetime('now') WHERE queue_id = ?;",
+                    (item["queue_id"],)
+                )
+                recovered += 1
+        return recovered

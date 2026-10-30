@@ -26,9 +26,19 @@ class Settings(BaseSettings):
 
     # Master Authoritative Excel Workbook
     MASTER_WORKBOOK_PATH: Path = Field(
-        default=Path(r"C:\Users\ch1251635\antigravity\proud-planck\Summer_2027_QS_Top_120_Professor_Research_Database.xlsx")
+        default_factory=lambda: Path(__file__).resolve().parent.parent / "data" / "private" / "Summer_2027_Professor_Database_WITH_TIME_BLOCKS_EXPORT.xlsx"
     )
     SQLITE_DB_PATH: Path = DATA_DIR / "outreach_engine.db"
+
+    # Authoritative Attachment Documents
+    CV_ATTACHMENT_PATH: Path = Field(
+        default_factory=lambda: Path(__file__).resolve().parent.parent / "data" / "private" / "Harshith_N_Research_CV_Summer2027.pdf"
+    )
+    RESEARCH_INTERESTS_PATH: Path = Field(
+        default_factory=lambda: Path(__file__).resolve().parent.parent / "data" / "private" / "Harshith_N_Research_Interests_Summer2027.pdf"
+    )
+    CV_ATTACHMENT_FILENAME: str = "Harshith_N_Research_CV_Summer2027.pdf"
+    RESEARCH_INTERESTS_FILENAME: str = "Harshith_N_Research_Interests_Summer2027.pdf"
 
     # Application Mode
     APP_ENV: str = "DEVELOPMENT"
@@ -54,10 +64,14 @@ class Settings(BaseSettings):
     IITD_CSC_APPROVED: bool = False
     EMERGENCY_STOP: bool = False
 
-    # Rate Limiting
+    # Rate Limiting & 90-Minute Window Cadence
     MAX_EMAILS_PER_BATCH: int = 5
+    BATCH_SIZE: int = 5
+    COOLING_BREAK_SECONDS: int = 60
     MAX_EMAILS_PER_DAY: int = 25
+    DAILY_MAX_OUTREACH: int = 25
     MIN_INTERVAL_SECONDS_BETWEEN_EMAILS: int = 30
+    DISPATCH_WINDOW_MINUTES: int = 90
 
     # Operator Dashboard
     OPERATOR_TIMEZONE: str = "Asia/Kolkata"  # IST

@@ -28,9 +28,9 @@ def test_four_paragraph_structure_and_signature(engine):
 
     draft = engine.generate_draft(sample_prof)
 
-    # 1. Subject verification
-    assert "Summer 2027" in draft.subject
-    assert "Harshith N" in draft.subject
+    # 1. Subject verification (exact format: Summer 2027 Research Internship — [Research Area] | IIT Delhi)
+    assert "Summer 2027 Research Internship — " in draft.subject
+    assert "| IIT Delhi" in draft.subject
 
     # 2. Signature verification
     body = draft.body_text

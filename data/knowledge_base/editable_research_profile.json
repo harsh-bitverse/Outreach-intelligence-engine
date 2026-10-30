@@ -15,17 +15,22 @@
   },
   "source_documents_audit": {
     "approved_cv_pdf": {
-      "path": "data/private/approved_cv.pdf",
+      "path": "data/private/Harshith_N_Research_CV_Summer2027.pdf",
       "status": "VERIFIED_PRESENT",
       "mandatory_before_dispatch": true,
-      "sha256": "472280d440adbb14a7872655325ff4020a5991444bf19cfba99b247f08ca65a8",
-      "description": "Authoritative 2-page research CV for Harshith N. (IIT Delhi, CGPA 8.7/10, Summer 2027 Research)."
+      "sha256": "a80942f26ca0532e7f6f425b17232da984f1fa1f565530f91cc8a9fb779a8766",
+      "file_size_bytes": 75731,
+      "recipient_facing_name": "Harshith_N_Research_CV_Summer2027.pdf",
+      "description": "Authoritative research CV for Harshith N. (IIT Delhi, Summer 2027 Research)."
     },
     "research_interests_pdf": {
-      "path": "data/knowledge_base/research_interests.pdf",
+      "path": "data/private/Harshith_N_Research_Interests_Summer2027.pdf",
       "status": "VERIFIED_PRESENT",
-      "sha256": "86bc5790be6c2b18608d8102462e742111dfdb059eb7779d7ce7e6c46a6f671b",
-      "description": "Authoritative Research Interests Statement for Harshith N. covering 4 core technical pillars."
+      "mandatory_before_dispatch": true,
+      "sha256": "f69b8b37519ccd2918d2bfd03214977b6595bdc5a9c063587ba86fae0e3a5946",
+      "file_size_bytes": 71206,
+      "recipient_facing_name": "Harshith_N_Research_Interests_Summer2027.pdf",
+      "description": "Authoritative Research Interests Statement for Harshith N. Summer 2027."
     },
     "final_research_report_pdf": {
       "path": "reports/final_research_report.pdf",

@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS professors (
     date_verified TEXT,
     notes TEXT,
     outreach_status TEXT DEFAULT 'NEW',
+    time_block TEXT,
+    time_block_order INTEGER,
+    iana_timezone TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -44,6 +47,8 @@ CREATE INDEX IF NOT EXISTS idx_professors_email ON professors(email);
 CREATE INDEX IF NOT EXISTS idx_professors_university ON professors(university_name);
 CREATE INDEX IF NOT EXISTS idx_professors_status ON professors(outreach_status);
 CREATE INDEX IF NOT EXISTS idx_professors_qs ON professors(qs_rank);
+CREATE INDEX IF NOT EXISTS idx_professors_time_block ON professors(time_block);
+CREATE INDEX IF NOT EXISTS idx_professors_time_block_order ON professors(time_block_order);
 
 -- Universities Table
 CREATE TABLE IF NOT EXISTS universities (
@@ -81,6 +86,30 @@ CREATE TABLE IF NOT EXISTS outreach_drafts (
 
 CREATE INDEX IF NOT EXISTS idx_outreach_drafts_prof ON outreach_drafts(professor_id);
 CREATE INDEX IF NOT EXISTS idx_outreach_drafts_status ON outreach_drafts(status);
+
+-- Durable Outreach Queue Table (Independent Autonomous Scheduling)
+CREATE TABLE IF NOT EXISTS outreach_queue (
+    queue_id TEXT PRIMARY KEY,
+    professor_id TEXT NOT NULL REFERENCES professors(professor_id) ON DELETE CASCADE,
+    draft_id TEXT NOT NULL REFERENCES outreach_drafts(draft_id) ON DELETE CASCADE,
+    time_block_id TEXT NOT NULL,
+    window_start_ist TEXT NOT NULL,
+    window_end_ist TEXT NOT NULL,
+    sequence_order INTEGER NOT NULL,
+    status TEXT DEFAULT 'PENDING', -- PENDING, IN_PROGRESS, SENT, FAILED, SUPPRESSED, RECOVERED, SKIPPED
+    attempts INTEGER DEFAULT 0,
+    last_attempt_at TEXT,
+    dispatched_at TEXT,
+    error_message TEXT,
+    batch_number INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_outreach_queue_status ON outreach_queue(status);
+CREATE INDEX IF NOT EXISTS idx_outreach_queue_block ON outreach_queue(time_block_id);
+CREATE INDEX IF NOT EXISTS idx_outreach_queue_prof ON outreach_queue(professor_id);
+CREATE INDEX IF NOT EXISTS idx_outreach_queue_order ON outreach_queue(sequence_order);
 
 -- Email Threads Table
 CREATE TABLE IF NOT EXISTS email_threads (
@@ -211,8 +240,22 @@ def get_db(db_path: Path = None) -> Generator[sqlite3.Connection, None, None]:
 
 
 def initialize_database(db_path: Path = None) -> None:
-    """Execute schema script and seed mandatory suppressions."""
+    """Execute schema script and seed mandatory suppressions with non-destructive migrations."""
     with get_db(db_path) as conn:
+        # Pre-migration: if professors table already exists from an older schema, add new columns before creating index
+        try:
+            tbl = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='professors';").fetchone()
+            if tbl:
+                cols = {col["name"] for col in conn.execute("PRAGMA table_info(professors);").fetchall()}
+                if "time_block" not in cols:
+                    conn.execute("ALTER TABLE professors ADD COLUMN time_block TEXT;")
+                if "time_block_order" not in cols:
+                    conn.execute("ALTER TABLE professors ADD COLUMN time_block_order INTEGER;")
+                if "iana_timezone" not in cols:
+                    conn.execute("ALTER TABLE professors ADD COLUMN iana_timezone TEXT;")
+        except Exception:
+            pass
+
         conn.executescript(SCHEMA_SQL)
         seed_mandatory_suppressions(conn)
 

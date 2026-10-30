@@ -34,7 +34,8 @@ from src.security.audit_logger import audit_logger
 RECIPIENT_EMAIL = "hagrharsh@gmail.com"
 SENDER_EMAIL = "ch1251635@iitd.ac.in"
 SUBJECT = "Prospective Summer 2027 Research Internship — Harshith N (IIT Delhi)"
-ATTACHMENT_PATH = PROJECT_ROOT / "data" / "private" / "approved_cv.pdf"
+CV_ATTACHMENT_PATH = settings.CV_ATTACHMENT_PATH
+RI_ATTACHMENT_PATH = settings.RESEARCH_INTERESTS_PATH
 
 BODY_TEXT = """Dear Professor,
 
@@ -69,9 +70,13 @@ def compute_content_hash() -> str:
 def preview_draft():
     word_count = get_body_word_count()
     content_hash = compute_content_hash()
-    cv_exists = ATTACHMENT_PATH.exists()
-    cv_size = ATTACHMENT_PATH.stat().st_size if cv_exists else 0
-    cv_hash = hashlib.sha256(ATTACHMENT_PATH.read_bytes()).hexdigest() if cv_exists else "N/A"
+    cv_exists = CV_ATTACHMENT_PATH.exists()
+    cv_size = CV_ATTACHMENT_PATH.stat().st_size if cv_exists else 0
+    cv_hash = hashlib.sha256(CV_ATTACHMENT_PATH.read_bytes()).hexdigest() if cv_exists else "N/A"
+
+    ri_exists = RI_ATTACHMENT_PATH.exists()
+    ri_size = RI_ATTACHMENT_PATH.stat().st_size if ri_exists else 0
+    ri_hash = hashlib.sha256(RI_ATTACHMENT_PATH.read_bytes()).hexdigest() if ri_exists else "N/A"
 
     print("=" * 76)
     print(" SESSION 03A: PERSONALIZED RESEARCH OUTREACH DRAFT PREVIEW")
@@ -81,9 +86,10 @@ def preview_draft():
     print(f" Subject Line       : {SUBJECT}")
     print(f" Word Count (4 Para): {word_count} words (Gate: 130–180 words -> PASS)")
     print(f" Draft Content Hash : {content_hash}")
-    print(f" Attached File      : {ATTACHMENT_PATH.name} ({cv_size:,} bytes)")
-    print(f" Attachment SHA-256 : {cv_hash}")
-    print(f" Attachment Status  : {'VERIFIED PRESENT' if cv_exists else 'MISSING'}")
+    print(f" Attached CV        : {CV_ATTACHMENT_PATH.name} ({cv_size:,} bytes | Status: {'VERIFIED' if cv_exists else 'MISSING'})")
+    print(f" CV SHA-256         : {cv_hash}")
+    print(f" Attached Interests : {RI_ATTACHMENT_PATH.name} ({ri_size:,} bytes | Status: {'VERIFIED' if ri_exists else 'MISSING'})")
+    print(f" Interests SHA-256  : {ri_hash}")
     print("=" * 76)
     print("\n--- COMPLETE EMAIL BODY ---")
     print(BODY_TEXT)
@@ -98,8 +104,8 @@ def preview_draft():
 
 
 def execute_send() -> dict:
-    if not ATTACHMENT_PATH.exists():
-        raise FileNotFoundError(f"Attachment not found: {ATTACHMENT_PATH}")
+    if not CV_ATTACHMENT_PATH.exists() or not RI_ATTACHMENT_PATH.exists():
+        raise FileNotFoundError(f"Both attachments must exist: {CV_ATTACHMENT_PATH}, {RI_ATTACHMENT_PATH}")
 
     user, pwd = CredentialManager.get_credentials()
     if not pwd:
@@ -119,10 +125,14 @@ def execute_send() -> dict:
 
     msg.attach(MIMEText(BODY_TEXT, "plain", "utf-8"))
 
-    with open(ATTACHMENT_PATH, "rb") as f:
-        part = MIMEApplication(f.read(), Name=ATTACHMENT_PATH.name)
-        part["Content-Disposition"] = f'attachment; filename="{ATTACHMENT_PATH.name}"'
-        msg.attach(part)
+    for att_path, att_name in [
+        (CV_ATTACHMENT_PATH, settings.CV_ATTACHMENT_FILENAME),
+        (RI_ATTACHMENT_PATH, settings.RESEARCH_INTERESTS_FILENAME),
+    ]:
+        with open(att_path, "rb") as f:
+            part = MIMEApplication(f.read(), Name=att_name)
+            part["Content-Disposition"] = f'attachment; filename="{att_name}"'
+            msg.attach(part)
 
     # Transmit via SMTP_SSL
     ssl_context = ssl.create_default_context()

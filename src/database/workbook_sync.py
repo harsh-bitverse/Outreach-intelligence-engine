@@ -54,7 +54,7 @@ class DynamicWorkbookSync:
 
     def create_backup(self) -> Path:
         """Create a timestamped backup before any write operation."""
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         backup_name = f"{self.workbook_path.stem}_pre_sync_{timestamp}{self.workbook_path.suffix}.bak"
         backup_path = self.workbook_path.parent / backup_name
         shutil.copy2(self.workbook_path, backup_path)
@@ -485,6 +485,152 @@ class DynamicWorkbookSync:
                 entity_id=str(self.workbook_path),
                 details={"backup_created": str(backup_path)}
             )
+        finally:
+            self.release_lock()
+
+    def update_time_blocks_row(
+        self,
+        email: str,
+        status: str = "SENT",
+        sent_at: Optional[str] = None,
+        message_id: Optional[str] = None,
+        timeout_seconds: int = 5
+    ) -> bool:
+        """
+        Update the corresponding professor row in the SAME 'Time Blocks & Distribution' worksheet.
+        Preserves existing university information, research notes, ordering, formatting, and formulas.
+        Updates:
+          - Column 25 (Outreach Eligibility) -> status
+          - Column 29 (Outreach Status) -> status
+          - Column 30 (Sent Timestamp) -> sent_at (ISO formatted)
+          - Column 31 (Message-ID) -> message_id
+        Also updates the corresponding row in 'Professor Database' if present.
+        Non-fatal if Excel is locked: sent history remains preserved in SQLite.
+        """
+        if not email:
+            return False
+
+        target_email = email.strip().lower()
+        now_iso = sent_at or datetime.now(timezone.utc).isoformat()
+        msg_id = message_id or ""
+
+        try:
+            self.acquire_lock(timeout_seconds=timeout_seconds)
+        except WorkbookLockError as e:
+            audit_logger.log_event(
+                event_type="WORKBOOK_UPDATE_LOCKED",
+                actor="SYSTEM_SCHEDULER",
+                entity_type="WORKBOOK",
+                entity_id=str(self.workbook_path),
+                details={"email": email, "status": status, "warning": str(e)}
+            )
+            return False
+
+        try:
+            backup_path = self.create_backup()
+            wb = openpyxl.load_workbook(str(self.workbook_path))
+
+            # 1. Update in 'Time Blocks & Distribution'
+            tb_sheet_name = next(
+                (s for s in wb.sheetnames if "time blocks" in s.lower()),
+                None
+            )
+            updated_tb = False
+            if tb_sheet_name:
+                ws = wb[tb_sheet_name]
+                email_col_idx = 8  # Default Column 8 is 'Official Institutional Email'
+
+                for r_idx in range(1, ws.max_row + 1):
+                    first_cell = str(ws.cell(r_idx, 1).value or "").strip()
+                    # Check if this row is a table header row
+                    if self._normalize_header(first_cell) in ("qsrank", "rank", "processingsequence"):
+                        # Locate exact column index for email if present
+                        for c_idx in range(1, ws.max_column + 1):
+                            norm = self._normalize_header(ws.cell(r_idx, c_idx).value)
+                            if norm in ("officialinstitutionalemail", "email", "emailaddress"):
+                                email_col_idx = c_idx
+
+                        # Ensure columns 29, 30, 31 have headers in this block's header row
+                        if not ws.cell(r_idx, 29).value:
+                            ws.cell(r_idx, 29).value = "Outreach Status"
+                            ws.cell(r_idx, 29).font = Font(name="Calibri", size=10, bold=True)
+                        if not ws.cell(r_idx, 30).value:
+                            ws.cell(r_idx, 30).value = "Sent Timestamp"
+                            ws.cell(r_idx, 30).font = Font(name="Calibri", size=10, bold=True)
+                        if not ws.cell(r_idx, 31).value:
+                            ws.cell(r_idx, 31).value = "Message-ID"
+                            ws.cell(r_idx, 31).font = Font(name="Calibri", size=10, bold=True)
+                        continue
+
+                    # Check if row matches target email
+                    cell_email = ws.cell(r_idx, email_col_idx).value
+                    if cell_email and str(cell_email).strip().lower() == target_email:
+                        # Col 25: Outreach Eligibility
+                        ws.cell(r_idx, 25).value = status
+                        # Col 29: Outreach Status
+                        ws.cell(r_idx, 29).value = status
+                        # Col 30: Sent Timestamp
+                        ws.cell(r_idx, 30).value = now_iso
+                        # Col 31: Message-ID
+                        ws.cell(r_idx, 31).value = msg_id
+                        updated_tb = True
+                        break
+
+            # 2. Also update 'Professor Database' sheet if present
+            prof_sheet_name = next((s for s in wb.sheetnames if "professor" in s.lower()), None)
+            if prof_sheet_name:
+                ws_p = wb[prof_sheet_name]
+                p_email_col = 8
+                p_status_col = None
+                p_headers = [ws_p.cell(1, c).value for c in range(1, ws_p.max_column + 1)]
+                for c_idx, h in enumerate(p_headers, start=1):
+                    norm = self._normalize_header(h)
+                    if norm in ("officialinstitutionalemail", "email"):
+                        p_email_col = c_idx
+                    elif norm in ("outreachstatus", "status"):
+                        p_status_col = c_idx
+
+                if not p_status_col:
+                    p_status_col = len(p_headers) + 1
+                    ws_p.cell(1, p_status_col).value = "Outreach Status"
+                    ws_p.cell(1, p_status_col).font = Font(bold=True)
+
+                for r_idx in range(2, ws_p.max_row + 1):
+                    val = ws_p.cell(r_idx, p_email_col).value
+                    if val and str(val).strip().lower() == target_email:
+                        ws_p.cell(r_idx, p_status_col).value = status
+                        break
+
+            # 3. Save atomically via temp file
+            temp_path = self.workbook_path.with_suffix(f".tmp_{os.getpid()}_{int(time.time()*1000)}.xlsx")
+            wb.save(str(temp_path))
+            wb.close()
+            shutil.move(str(temp_path), str(self.workbook_path))
+
+            audit_logger.log_event(
+                event_type="WORKBOOK_ROW_UPDATED",
+                actor="SYSTEM_SCHEDULER",
+                entity_type="WORKBOOK_ROW",
+                entity_id=email,
+                details={
+                    "email": email,
+                    "status": status,
+                    "sent_at": now_iso,
+                    "message_id": msg_id,
+                    "sheet_updated": tb_sheet_name,
+                    "found": updated_tb
+                }
+            )
+            return True
+        except Exception as err:
+            audit_logger.log_event(
+                event_type="WORKBOOK_ROW_UPDATE_ERROR",
+                actor="SYSTEM_SCHEDULER",
+                entity_type="WORKBOOK_ROW",
+                entity_id=email,
+                details={"error": str(err)}
+            )
+            return False
         finally:
             self.release_lock()
 

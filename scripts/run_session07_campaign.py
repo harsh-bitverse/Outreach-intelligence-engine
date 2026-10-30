@@ -51,6 +51,7 @@ def main():
     parser.add_argument("--block", type=str, default="BLOCK_01", help="Initial block to process (default: BLOCK_01)")
     parser.add_argument("--next-block", type=str, default="BLOCK_02", help="Block to demonstrate automatic resumption (default: BLOCK_02)")
     parser.add_argument("--count", type=int, default=3, help="Number of professors to process in initial block (default: 3)")
+    parser.add_argument("--cli", action="store_true", default=False, help="Use official Antigravity CLI under user Google AI Pro account")
     parser.add_argument("--live", action="store_true", default=False, help="Enable live transmission (CAUTION: requires operator activation)")
     args = parser.parse_args()
 
@@ -59,6 +60,7 @@ def main():
     print(f"  Target: Summer 2027 Visiting Research Internship")
     print(f"  Authoritative Campaign Start: {CAMPAIGN_START_DATE.strftime('%A, %B %d, %Y')}")
     print(f"  Authoritative Workbook: {settings.MASTER_WORKBOOK_PATH.name}")
+    print(f"  AI Drafting Engine: {'OFFICIAL ANTIGRAVITY CLI (GOOGLE AI PRO ACCOUNT)' if args.cli else 'LOCAL VERIFIED DYNAMIC AUTHOR'}")
     print(f"  Execution Mode: {'LIVE SMTP DISPATCH' if args.live else 'SIMULATED DISPATCH (DRY-RUN SAFEGUARD ACTIVE)'}")
     print(f"  Timestamp: {datetime.now().isoformat()}")
 
@@ -105,7 +107,8 @@ def main():
         block_id=args.block,
         next_block_id=args.next_block,
         count=args.count,
-        dry_run=dry_run
+        dry_run=dry_run,
+        prefer_cli=args.cli
     )
 
     print(f"\n  Successfully Processed {len(res['professors_processed'])} Professors in {args.block}:")

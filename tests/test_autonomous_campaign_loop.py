@@ -16,6 +16,7 @@ from src.database.repository import OutreachRepository
 from src.database.workbook_sync import DynamicWorkbookSync
 from src.scheduler.autonomous_campaign_loop import (
     AutonomousCampaignLoop,
+    AntigravityCLIDrafter,
     CAMPAIGN_START_DATE
 )
 
@@ -176,3 +177,32 @@ def test_demonstration_sequence(test_loop):
     assert res["resumed_professor"] is not None
     assert res["resumed_professor"]["block_id"] == "BLOCK_02"
     assert res["resumed_professor"]["excel_updated"] is True
+
+
+def test_antigravity_cli_drafter_discovery():
+    """Verify AntigravityCLIDrafter locates official agy binary on Windows."""
+    drafter = AntigravityCLIDrafter()
+    assert drafter.is_available() is True
+    assert drafter.cli_path.name.lower() in ("agy.exe", "agy")
+
+
+def test_antigravity_sdk_authentication_limitation():
+    """
+    Verify documented architectural limitation:
+    google-antigravity Python SDK requires a GEMINI_API_KEY and cannot
+    directly authenticate via personal Google AI Pro OAuth keyring tokens.
+    """
+    import asyncio
+    from google.antigravity import Agent, LocalAgentConfig
+    from google.antigravity.types import AntigravityValidationError
+
+    async def run_unauthenticated_agent():
+        config = LocalAgentConfig(system_instructions="Test")
+        async with Agent(config) as agent:
+            await agent.chat("ping")
+
+    with pytest.raises(AntigravityValidationError) as exc_info:
+        asyncio.run(run_unauthenticated_agent())
+
+    assert "A Gemini API key is required" in str(exc_info.value)
+

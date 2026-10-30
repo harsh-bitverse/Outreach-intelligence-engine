@@ -14,6 +14,8 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import time
 from datetime import date, datetime, time as dtime, timezone
 from pathlib import Path
@@ -42,6 +44,148 @@ from src.security.audit_logger import audit_logger
 CAMPAIGN_START_DATE = date(2026, 11, 2)
 
 
+class AntigravityCLIDrafter:
+    """
+    Invokes the official Antigravity CLI (agy.exe) non-interactively
+    under the user's existing Google AI Pro account (keyring/OAuth credentials).
+    Requires zero external paid API keys or UI automation.
+    """
+
+    def __init__(self, cli_path: Optional[Path] = None):
+        if cli_path:
+            self.cli_path = Path(cli_path)
+        else:
+            default_loc = Path(os.environ.get("LOCALAPPDATA", "")) / "agy" / "bin" / "agy.exe"
+            which_loc = shutil.which("agy")
+            self.cli_path = default_loc if default_loc.exists() else (Path(which_loc) if which_loc else default_loc)
+
+    def is_available(self) -> bool:
+        """Check if official agy binary is present and executable."""
+        return self.cli_path.exists()
+
+    def generate_draft(self, prof_row: Dict[str, Any], timeout: int = 90) -> Optional[Dict[str, Any]]:
+        """
+        Execute non-interactive prompt via agy --print to generate context-grounded outreach.
+        """
+        if not self.is_available():
+            return None
+
+        full_name = prof_row.get("full_name", "")
+        title = prof_row.get("title", "Professor")
+        uni = prof_row.get("university", "")
+        dept = prof_row.get("department", "")
+        areas = prof_row.get("research_areas", "")
+        overlap = prof_row.get("research_overlap", "")
+        contrib = prof_row.get("potential_contribution", "")
+
+        prompt = f"""You are an assistant for Harshith N, an undergraduate in Chemical Engineering at IIT Delhi (ch1251635@iitd.ac.in).
+Generate a genuinely personalized, academically rigorous research internship outreach email to this professor for Summer 2027.
+
+PROFESSOR DETAILS:
+- Name: {full_name}
+- Title: {title}
+- University: {uni}
+- Department: {dept}
+- Research Areas: {areas}
+- Specific Research Overlap: {overlap}
+- Potential Contribution: {contrib}
+
+APPLICANT'S VERIFIED BACKGROUND:
+- Student: Harshith N, Department of Chemical Engineering, IIT Delhi.
+- Verified Projects:
+  1. Neural Process Twin: PyTorch surrogate models for 2D steady-state heat conduction, evaluating surrogate prediction accuracy against numerical finite difference solutions.
+  2. LLM Inference Intelligence Engine: Roofline model diagnostics isolating compute bounds from memory-bandwidth bottlenecks across CPU and GPU architectures.
+- Documents attached: Harshith_N_Research_CV_Summer2027.pdf, Harshith_N_Research_Interests_Summer2027.pdf.
+
+STRICT CONSTRAINTS:
+1. Subject line format: Summer 2027 Research Internship — [Specific Concise Research Area] | IIT Delhi
+2. Paragraph 1: State identity, department at IIT Delhi, and clear interest in visiting research internship in Summer 2027.
+3. Paragraph 2: Discuss specific overlap with professor's research topics.
+4. Paragraph 3: Connect to applicant's verified project (Neural Process Twin or LLM Inference Engine Roofline diagnostics) and realistic computational contribution.
+5. Paragraph 4: Availability (10–12 weeks in Summer 2027) and natural reference to attached CV and research interests statement.
+6. Total body word count across paragraphs 1-4 must be between 130 and 180 words.
+7. Zero hype, zero unverified speedup numbers, zero certified bound claims.
+
+Output ONLY valid JSON with keys:
+"subject", "salutation", "p1", "p2", "p3", "p4", "signature"
+"""
+        try:
+            cmd = [
+                str(self.cli_path),
+                "--effort", "low",
+                "--disable-slash-commands",
+                "--print", prompt
+            ]
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            if proc.returncode != 0:
+                audit_logger.log_event(
+                    event_type="ANTIGRAVITY_CLI_ERROR",
+                    actor="ANTIGRAVITY_CLI_DRAFTER",
+                    entity_type="CLI_PROCESS",
+                    entity_id=full_name,
+                    details={"exit_code": proc.returncode, "stderr": proc.stderr[:300]}
+                )
+                return None
+
+            raw_out = proc.stdout.strip()
+            json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_out, re.DOTALL)
+            if json_match:
+                json_str = json_match.group(1)
+            else:
+                start = raw_out.find("{")
+                end = raw_out.rfind("}")
+                if start != -1 and end != -1:
+                    json_str = raw_out[start:end+1]
+                else:
+                    return None
+
+            data = json.loads(json_str)
+
+            p1 = data.get("p1", "").strip()
+            p2 = data.get("p2", "").strip()
+            p3 = data.get("p3", "").strip()
+            p4 = data.get("p4", "").strip()
+            salutation = data.get("salutation", f"Dear Professor {full_name},").strip()
+            signature = data.get(
+                "signature",
+                "Sincerely,\nHarshith N\nDepartment of Chemical Engineering\nIndian Institute of Technology Delhi (IIT Delhi)\nch1251635@iitd.ac.in"
+            ).strip()
+
+            core_paras = [p1, p2, p3, p4]
+            content_wc = sum(len(p.split()) for p in core_paras)
+            full_body = f"{salutation}\n\n{p1}\n\n{p2}\n\n{p3}\n\n{p4}\n\n{signature}"
+
+            return {
+                "professor_name": full_name,
+                "recipient_email": prof_row["email"],
+                "subject": data.get("subject", "").strip(),
+                "body": full_body,
+                "salutation": salutation,
+                "p1": p1,
+                "p2": p2,
+                "p3": p3,
+                "p4": p4,
+                "signature": signature,
+                "content_word_count": content_wc,
+                "total_word_count": len(full_body.split()),
+                "attachments": [
+                    (settings.CV_ATTACHMENT_PATH, settings.CV_ATTACHMENT_FILENAME),
+                    (settings.RESEARCH_INTERESTS_PATH, settings.RESEARCH_INTERESTS_FILENAME),
+                ],
+                "authoring_engine": "GOOGLE_AI_PRO_ANTIGRAVITY_CLI",
+                "factual_grounding_verified": True
+            }
+        except Exception as err:
+            audit_logger.log_event(
+                event_type="ANTIGRAVITY_CLI_EXCEPTION",
+                actor="ANTIGRAVITY_CLI_DRAFTER",
+                entity_type="CLI_PROCESS",
+                entity_id=full_name,
+                details={"error": str(err)}
+            )
+            return None
+
+
 class AutonomousCampaignLoop:
     """
     Unified engine managing the exact autonomous outreach cycle.
@@ -53,12 +197,14 @@ class AutonomousCampaignLoop:
         sync: Optional[DynamicWorkbookSync] = None,
         gateway: Optional[SendingGateway] = None,
         smtp: Optional[IITDSmtpClient] = None,
+        cli_drafter: Optional[AntigravityCLIDrafter] = None,
         ist_tz: Optional[ZoneInfo] = None
     ):
         self.workbook_path = Path(workbook_path or settings.MASTER_WORKBOOK_PATH)
         self.sync = sync or DynamicWorkbookSync(self.workbook_path)
         self.gateway = gateway or sending_gateway
         self.smtp = smtp or smtp_client
+        self.cli_drafter = cli_drafter or AntigravityCLIDrafter()
         self.ist_tz = ist_tz or ZoneInfo("Asia/Kolkata")
         self.lock_path = SCHEDULER_LOCK_PATH
 
@@ -262,13 +408,19 @@ class AutonomousCampaignLoop:
     # --------------------------------------------------------------------------
     # 4. Context-Grounded AI Drafting
     # --------------------------------------------------------------------------
-    def generate_ai_draft(self, prof_row: Dict[str, Any]) -> Dict[str, Any]:
+    def generate_ai_draft(self, prof_row: Dict[str, Any], prefer_cli: bool = True) -> Dict[str, Any]:
         """
         Generate a genuine, personalized, 4-paragraph email for the professor.
-        Grounded in verified project data (Neural Process Twin or LLM Inference Engine),
-        natural reference to both PDF attachments, exact institutional signature,
-        and strict factual accuracy (zero unverified speedup or certified bound claims).
+        First attempts invocation of official Antigravity CLI (agy.exe) under user's Google AI Pro subscription.
+        Gracefully falls back to substantiated deterministic generator if CLI is unavailable or fails validation.
         """
+        if prefer_cli and self.cli_drafter.is_available():
+            cli_draft = self.cli_drafter.generate_draft(prof_row)
+            if cli_draft:
+                is_valid, val_errs = self.validate_draft(cli_draft, prof_row)
+                if is_valid:
+                    return cli_draft
+
         full_name = prof_row["full_name"]
         last_name = full_name.split()[-1] if full_name else "Professor"
         title = prof_row.get("title", "Professor")
@@ -550,7 +702,8 @@ class AutonomousCampaignLoop:
         block_id: str = "BLOCK_01",
         next_block_id: str = "BLOCK_02",
         count: int = 3,
-        dry_run: bool = True
+        dry_run: bool = True,
+        prefer_cli: bool = False
     ) -> Dict[str, Any]:
         """
         Execute the exact deliverable requested:
@@ -575,7 +728,7 @@ class AutonomousCampaignLoop:
 
             for prof in candidates:
                 # 1. Generate genuine personalized email
-                draft = self.generate_ai_draft(prof)
+                draft = self.generate_ai_draft(prof, prefer_cli=prefer_cli)
 
                 # 2. Validate factual claims, subject, recipient, attachments
                 is_valid, validation_errors = self.validate_draft(draft, prof)
@@ -596,7 +749,7 @@ class AutonomousCampaignLoop:
             next_candidates = self.find_eligible_professors_in_block(block_id=next_block_id, limit=1)
             if next_candidates:
                 next_prof = next_candidates[0]
-                next_draft = self.generate_ai_draft(next_prof)
+                next_draft = self.generate_ai_draft(next_prof, prefer_cli=prefer_cli)
                 next_valid, next_errors = self.validate_draft(next_draft, next_prof)
                 if next_valid:
                     resumed_dispatch = self.dispatch_and_persist(

@@ -115,7 +115,7 @@ def test_ai_draft_import_and_independent_scheduler_dispatch(isolated_ai_env):
         "In my project, Neural Process Twin, I developed physics-aware surrogate simulators in PyTorch for heat conduction, achieving real-time inference speedups while enforcing physical governing constraints. "
         "Combining this with my C++17 thermodynamic modeling tools, I am eager to assist in building high-fidelity dynamic models and simulation tooling for your ongoing industrial initiatives.\n\n"
         "I would welcome the opportunity to contribute to your process simulation research for 10–12 weeks in Summer 2027. "
-        "My CV is attached, and I would be grateful for the chance to discuss potential alignment over a brief discussion.\n\n"
+        "My CV and research interests statement are attached, and I would be grateful for the chance to discuss potential alignment over a brief discussion.\n\n"
         "Sincerely,\n"
         "Harshith N\n"
         "Undergraduate, Department of Chemical Engineering\n"

@@ -187,9 +187,11 @@ class OutreachRepository:
         if notes:
             self.conn.execute("""
                 UPDATE professors 
-                SET outreach_status = ?, notes = notes || ' | ' || ?, updated_at = datetime('now')
+                SET outreach_status = ?,
+                    notes = CASE WHEN notes IS NULL OR notes = '' THEN ? ELSE notes || ' | ' || ? END,
+                    updated_at = datetime('now')
                 WHERE professor_id = ?;
-            """, (new_status, notes, professor_id))
+            """, (new_status, notes, notes, professor_id))
         else:
             self.conn.execute("""
                 UPDATE professors 

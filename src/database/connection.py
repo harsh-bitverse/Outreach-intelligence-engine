@@ -111,6 +111,18 @@ CREATE INDEX IF NOT EXISTS idx_outreach_queue_block ON outreach_queue(time_block
 CREATE INDEX IF NOT EXISTS idx_outreach_queue_prof ON outreach_queue(professor_id);
 CREATE INDEX IF NOT EXISTS idx_outreach_queue_order ON outreach_queue(sequence_order);
 
+-- Durable AI Drafting Cursor Table (Tracks Batch Drafting Progress)
+CREATE TABLE IF NOT EXISTS ai_drafting_cursor (
+    cursor_id TEXT PRIMARY KEY,
+    last_sequence_order INTEGER DEFAULT 0,
+    last_professor_id TEXT,
+    last_time_block TEXT,
+    total_drafted INTEGER DEFAULT 0,
+    total_failed INTEGER DEFAULT 0,
+    total_skipped INTEGER DEFAULT 0,
+    updated_at TEXT NOT NULL
+);
+
 -- Email Threads Table
 CREATE TABLE IF NOT EXISTS email_threads (
     thread_id TEXT PRIMARY KEY,

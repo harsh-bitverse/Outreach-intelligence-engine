@@ -111,6 +111,16 @@ class AIDraftImporter:
         if word_count < 130 or word_count > 180:
             return False, f"Word Count Gate Failed: 4-paragraph word count is {word_count} words (strictly 130-180 words required)"
 
+        # Check natural reference to both attachments
+        has_cv_mention = "cv" in lower_body or "curriculum vitae" in lower_body
+        has_interests_mention = any(k in lower_body for k in [
+            "research interests", "interests statement", "research statement",
+            "statement of research", "research document", "statement are attached",
+            "interests are attached", "interests is attached", "statement is attached"
+        ])
+        if not (has_cv_mention and has_interests_mention):
+            return False, "Attachment Gate Failed: Body must naturally reference both attachments (CV and Research Interests statement)"
+
         # 4. Technical Grounding Metadata
         grounding = draft_data.get("grounding_evidence") or {}
         if not grounding.get("cv_project_id"):

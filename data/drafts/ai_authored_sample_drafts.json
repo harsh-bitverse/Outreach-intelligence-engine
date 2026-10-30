@@ -1,0 +1,82 @@
+[
+  {
+    "professor_id": "prof_b59389c8894bc7aa",
+    "recipient_email": "ccoley@mit.edu",
+    "professor_name": "Connor W. Coley",
+    "university_name": "Massachusetts Institute of Technology (MIT)",
+    "time_block_id": "BLOCK_10",
+    "subject": "Summer 2027 Research Internship — AI for Molecular Discovery & Synthesis | IIT Delhi",
+    "body_text": "Dear Professor Coley,\n\nMy name is Harshith N, an undergraduate in Chemical Engineering at the Indian Institute of Technology Delhi (IIT Delhi). I am writing to express my strong interest in a visiting undergraduate research internship in your laboratory for Summer 2027.\n\nI have closely followed your group's pioneering work at MIT integrating machine learning with automated chemical synthesis and molecular discovery. Your data-driven frameworks for predicting reaction outcomes and navigating complex chemical search spaces address fundamental challenges in computational chemistry.\n\nAt IIT Delhi, I developed a modern C++17 pure-component Peng-Robinson cubic equation of state solver with analytical isothermal derivatives, evaluating mechanical stability and thermodynamic departures. Bridging this chemical engineering foundation with surrogate modeling, I am eager to contribute to your computational pipelines for high-throughput molecular screening and property estimation.\n\nI would welcome the opportunity to contribute to your group's ongoing research for 10–12 weeks in Summer 2027. My CV and research statement are attached for your review, and I would be grateful for the chance to discuss potential alignment.\n\nSincerely,\nHarshith N\nUndergraduate, Department of Chemical Engineering\nIndian Institute of Technology Delhi (IIT Delhi)\nch1251635@iitd.ac.in",
+    "grounding_evidence": {
+      "cv_project_id": "thermo-cpp-solver",
+      "cv_project_name": "C++17 Peng-Robinson Real-Gas Cubic EOS Engine",
+      "faculty_evidence_url": "https://coley.mit.edu/",
+      "research_overlap": "Synergy between AI for molecular discovery, automated synthesis, and chemical engineering thermodynamics at IIT Delhi.",
+      "potential_contribution": "Developing high-throughput computational screening pipelines, ML surrogate models for property prediction, and process simulation tooling."
+    }
+  },
+  {
+    "professor_id": "prof_1326bdd155f81073",
+    "recipient_email": "patera@mit.edu",
+    "professor_name": "Anthony T. Patera",
+    "university_name": "Massachusetts Institute of Technology (MIT)",
+    "time_block_id": "BLOCK_10",
+    "subject": "Summer 2027 Research Internship — Reduced Basis Methods & Certified PDE Surrogates | IIT Delhi",
+    "body_text": "Dear Professor Patera,\n\nMy name is Harshith N, an undergraduate student in Chemical Engineering at the Indian Institute of Technology Delhi (IIT Delhi). I am writing to inquire about a visiting research internship in your laboratory for 10–12 weeks in Summer 2027.\n\nI have followed your group's foundational contributions to certified reduced basis methods, parametric PDEs, and rigorous error bounds for computational mechanics. Your emphasis on mathematical certification and provable error estimators in model order reduction provides an essential standard for reliable computational engineering.\n\nIn my numerical analysis research at IIT Delhi, I independently audited and reproduced the Krasowski et al. residual-based error estimation framework for differential equations, extending the defect solvers to soft boundary constraints. I verified pointwise error bounds without analytical solutions, and I am eager to apply this rigorous mindset to your certified surrogate modeling pipelines.\n\nI would be delighted to contribute to your computational mechanics projects during Summer 2027. My research CV and interests statement are attached for your consideration, and I welcome any opportunity to discuss research alignment over a brief call.\n\nSincerely,\nHarshith N\nUndergraduate, Department of Chemical Engineering\nIndian Institute of Technology Delhi (IIT Delhi)\nch1251635@iitd.ac.in",
+    "grounding_evidence": {
+      "cv_project_id": "pinn-error-estimation",
+      "cv_project_name": "PINN Residual Defect Solvers & Error Estimation",
+      "faculty_evidence_url": "https://meche.mit.edu/people/faculty/patera@mit.edu",
+      "research_overlap": "Direct alignment in scientific machine learning, reduced basis methods for PDEs, and certified surrogate models.",
+      "potential_contribution": "Implementing scalable neural operator frameworks, accelerating numerical PDE solvers with GPU kernels, and benchmarking SciML surrogate fidelity."
+    }
+  },
+  {
+    "professor_id": "prof_0209dcbdc769304f",
+    "recipient_email": "b.young@auckland.ac.nz",
+    "professor_name": "Brent Young",
+    "university_name": "The University of Auckland",
+    "time_block_id": "BLOCK_01",
+    "subject": "Summer 2027 Research Internship — Process Systems Engineering & Digital Twins | IIT Delhi",
+    "body_text": "Dear Professor Young,\n\nMy name is Harshith N, an undergraduate in Chemical Engineering at the Indian Institute of Technology Delhi (IIT Delhi). I am writing to express my strong interest in joining your group at the Industrial Information and Control Centre for a Summer 2027 visiting research internship.\n\nI have closely followed your research in process systems engineering, dynamic process simulation, and digital twins for industrial operations. Your group's work advancing computational modeling and real-time optimization for complex chemical and energy processing systems aligns closely with my technical priorities.\n\nIn my project, Neural Process Twin, I developed physics-aware surrogate simulators in PyTorch for heat conduction, achieving real-time inference speedups while enforcing physical governing constraints. Combining this with my C++17 thermodynamic modeling tools, I am eager to assist in building high-fidelity dynamic models and simulation tooling for your ongoing industrial initiatives.\n\nI would welcome the opportunity to contribute to your process simulation research for 10–12 weeks in Summer 2027. My CV is attached, and I would be grateful for the chance to discuss potential alignment over a brief discussion.\n\nSincerely,\nHarshith N\nUndergraduate, Department of Chemical Engineering\nIndian Institute of Technology Delhi (IIT Delhi)\nch1251635@iitd.ac.in",
+    "grounding_evidence": {
+      "cv_project_id": "neural-process-twin",
+      "cv_project_name": "Neural Process Twin",
+      "faculty_evidence_url": "https://profiles.auckland.ac.nz/b-young",
+      "research_overlap": "Synergy in process systems engineering, dynamic process simulation, digital twins, and chemical engineering optimization.",
+      "potential_contribution": "Developing dynamic simulation modules, physics-aware surrogate simulators, and Python/PyTorch-based process simulation tooling."
+    }
+  },
+  {
+    "professor_id": "prof_bd23b994185450fd",
+    "recipient_email": "rus@csail.mit.edu",
+    "professor_name": "Daniela Rus",
+    "university_name": "Massachusetts Institute of Technology (MIT)",
+    "time_block_id": "BLOCK_10",
+    "subject": "Summer 2027 Research Internship — Autonomous Robotic Systems & Embodied AI | IIT Delhi",
+    "body_text": "Dear Professor Rus,\n\nMy name is Harshith N, an undergraduate at the Indian Institute of Technology Delhi (IIT Delhi). I am writing to express my earnest interest in a visiting undergraduate research internship with the Distributed Robotics Laboratory at MIT CSAIL for Summer 2027.\n\nI have followed your lab's pioneering contributions across autonomous robotic systems, liquid neural networks, and robust robot perception. Your unified approach to continuous-time decision-making, adaptive navigation, and embodied intelligence under physical uncertainties represents an inspiring direction in autonomous robotics.\n\nAs part of the SuRGE fellowship at IIT Delhi under Prof. Amartansh Dubey, I investigated 3D environment mapping, trajectory tracking, and state estimation for autonomous microdrones. In parallel, I designed multi-DOF servo-actuated mechanisms with low-latency control loops, and I am excited to contribute to your simulation-to-real robotic pipelines.\n\nI would be thrilled to contribute to your lab's robotic autonomy initiatives for 10–12 weeks in Summer 2027. My CV and research statement are attached for your consideration, and I welcome any opportunity to speak briefly about potential collaboration.\n\nSincerely,\nHarshith N\nUndergraduate, Department of Chemical Engineering\nIndian Institute of Technology Delhi (IIT Delhi)\nch1251635@iitd.ac.in",
+    "grounding_evidence": {
+      "cv_project_id": "surge-microdrone-autonomy",
+      "cv_project_name": "SuRGE Microdrone Autonomy & Multi-DOF Kinematics",
+      "faculty_evidence_url": "https://www.eecs.mit.edu/people/daniela-rus/",
+      "research_overlap": "Robotics, mobile autonomous systems, liquid neural networks, trajectory tracking, and real-time control.",
+      "potential_contribution": "Building simulation-to-real pipeline tooling, optimizing RL policy training throughput, and developing perception-action evaluation harnesses."
+    }
+  },
+  {
+    "professor_id": "prof_58e0b0265e162dde",
+    "recipient_email": "cel@mit.edu",
+    "professor_name": "Charles E. Leiserson",
+    "university_name": "Massachusetts Institute of Technology (MIT)",
+    "time_block_id": "BLOCK_10",
+    "subject": "Summer 2027 Research Internship — High-Performance Parallel Computing & Systems | IIT Delhi",
+    "body_text": "Dear Professor Leiserson,\n\nMy name is Harshith N, an undergraduate at the Indian Institute of Technology Delhi (IIT Delhi). I am writing to express my strong interest in a visiting undergraduate research internship with your Supertech research group at MIT CSAIL for Summer 2027.\n\nI have studied your group's foundational work in parallel computing, software performance engineering, and hardware-software co-design. Your rigorous methodology for diagnosing cache locality, multithreaded scalability, and algorithmic work-span bounds sets the benchmark for high-performance systems engineering.\n\nIn my project, the LLM Inference Intelligence Engine, I built empirical benchmarking tools evaluating hardware ceilings across CPU and GPU architectures. I instrumented prefill TTFT latency and decode throughput, implementing Roofline model diagnostics to isolate compute versus memory-bandwidth saturation. I am eager to apply this empirical profiling rigor to your parallel systems projects.\n\nI would welcome the opportunity to contribute to Supertech's performance engineering research for 10–12 weeks in Summer 2027. My CV and research interests are attached, and I would be grateful for the chance to discuss potential alignment over a brief call.\n\nSincerely,\nHarshith N\nUndergraduate, Department of Chemical Engineering\nIndian Institute of Technology Delhi (IIT Delhi)\nch1251635@iitd.ac.in",
+    "grounding_evidence": {
+      "cv_project_id": "llm-inference-engine",
+      "cv_project_name": "LLM Inference Intelligence Engine",
+      "faculty_evidence_url": "https://www.eecs.mit.edu/people/charles-leiserson/",
+      "research_overlap": "Parallel computing, multicore performance engineering, hardware-software co-design, and systems latency profiling.",
+      "potential_contribution": "Engineering custom GPU/CUDA compute kernels, optimizing distributed communication primitives, and profiling latency/memory bottlenecks."
+    }
+  }
+]

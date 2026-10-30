@@ -22,14 +22,22 @@ from src.security.permissions import SecurityRole
 from src.security.audit_logger import audit_logger
 
 
-# Authoritative 6 Reply-Received / Prior Engagement Addresses
+# Authoritative 6 Confirmed Reply-Received Contacts (Must not receive new initial outreach)
 REPLY_RECEIVED_EXCLUSIONS: List[Tuple[str, str, str, str]] = [
+    ("supp_han_fan_tum", "han.fan@tum.de", "REPLY_RECEIVED", "Han Fan (TUM) confirmed reply received; excluded from initial outreach"),
+    ("supp_hojin_lee_tum", "hojin.lee@tum.de", "REPLY_RECEIVED", "Hojin Lee (TUM) confirmed reply received; excluded from initial outreach"),
+    ("supp_lukas_oehler_tum", "lukas.oehler@tum.de", "REPLY_RECEIVED", "Lukas Oehler (TUM) confirmed reply received; excluded from initial outreach"),
+    ("supp_tjtkoski_kth", "tjtkoski@kth.se", "REPLY_RECEIVED", "Timo Koski (KTH) confirmed reply received; excluded from initial outreach"),
+    ("supp_fontina_petrakopoulou_tub", "fontina.petrakopoulou@tu-berlin.de", "REPLY_RECEIVED", "Fontina Petrakopoulou (TU Berlin) confirmed reply received; excluded from initial outreach"),
+    ("supp_info_sitegeist", "info@sitegeist-robotics.com", "REPLY_RECEIVED", "Sitegeist Robotics confirmed reply received; excluded from initial outreach"),
+]
+
+# Prior external contacts
+PRIOR_CONTACT_EXCLUSIONS: List[Tuple[str, str, str, str]] = [
     ("supp_kaikit_wong_ucl", "k.wong@ucl.ac.uk", "PREVIOUSLY_CONTACTED", "Prof. Kai-Kit Wong (UCL) already contacted; excluded from fresh outreach"),
     ("supp_kaikit_wong_alt", "kai-kit.wong@ucl.ac.uk", "PREVIOUSLY_CONTACTED", "Prof. Kai-Kit Wong (UCL) alternative email alias"),
     ("supp_chenshu_wu_hku", "cwu@cs.hku.hk", "PREVIOUSLY_CONTACTED", "Prof. Chenshu Wu (HKU) already contacted; excluded from fresh outreach"),
     ("supp_chenshu_wu_rutgers", "chenshu.wu@rutgers.edu", "PREVIOUSLY_CONTACTED", "Prof. Chenshu Wu (Rutgers) alternative institutional email"),
-    ("supp_abigail_bodner_mit", "bodner@mit.edu", "REPLY_RECEIVED", "Prof. Abigail Bodner (MIT) prior engagement / reply received; excluded from fresh outreach"),
-    ("supp_percy_liang_stanford", "pliang@cs.stanford.edu", "REPLY_RECEIVED", "Prof. Percy Liang (Stanford) prior engagement / reply received; excluded from fresh outreach"),
 ]
 
 # 13 Regional IST Time Blocks with 90-Minute Dispatch Windows
@@ -153,10 +161,22 @@ class AutonomousQueueRunner:
 
     def seed_reply_received_suppressions(self, repo: OutreachRepository) -> int:
         """
-        Seed the 6 authoritative reply-received / prior engagement addresses into suppression list.
+        Seed the 6 authoritative reply-received contacts and prior contacts into suppression list.
+        Removes any unsupported classifications (e.g. Bodner / Liang).
         """
+        # Clean up unsupported classifications
+        repo.conn.execute("DELETE FROM suppression_list WHERE email IN ('bodner@mit.edu', 'pliang@cs.stanford.edu');")
+        repo.conn.execute("""
+            UPDATE professors 
+            SET outreach_status = 'NEW',
+                notes = REPLACE(REPLACE(notes, ' | REPLY_RECEIVED: Prof. Abigail Bodner (MIT) prior engagement / reply received; excluded from fresh outreach', ''),
+                                ' | REPLY_RECEIVED: Prof. Percy Liang (Stanford) prior engagement / reply received; excluded from fresh outreach', '')
+            WHERE email IN ('bodner@mit.edu', 'pliang@cs.stanford.edu') AND outreach_status = 'SUPPRESSED';
+        """)
+
         seeded = 0
-        for supp_id, email, reason, notes in REPLY_RECEIVED_EXCLUSIONS:
+        all_exclusions = REPLY_RECEIVED_EXCLUSIONS + PRIOR_CONTACT_EXCLUSIONS
+        for supp_id, email, reason, notes in all_exclusions:
             repo.conn.execute("""
                 INSERT INTO suppression_list (suppression_id, email, domain, reason, notes, created_at)
                 VALUES (?, ?, NULL, ?, ?, datetime('now'))
@@ -170,13 +190,14 @@ class AutonomousQueueRunner:
 
     def is_suppressed_or_excluded(self, repo: OutreachRepository, email: str) -> Tuple[bool, Optional[str]]:
         """
-        Check if an email is suppressed in repository or matches the 6 prior contacts.
+        Check if an email is suppressed in repository or matches the 6 confirmed replied contacts / prior contacts.
         """
         if not email or not email.strip():
             return True, "BLANK_EMAIL: Missing email address"
 
         norm_email = email.strip().lower()
-        for _, ex_email, reason, notes in REPLY_RECEIVED_EXCLUSIONS:
+        all_exclusions = REPLY_RECEIVED_EXCLUSIONS + PRIOR_CONTACT_EXCLUSIONS
+        for _, ex_email, reason, notes in all_exclusions:
             if norm_email == ex_email.lower():
                 return True, f"{reason}: {notes}"
 

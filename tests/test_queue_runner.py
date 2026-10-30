@@ -35,33 +35,39 @@ def queue_test_env():
 
 
 def test_reply_received_suppressions_enforced(queue_test_env):
-    """Verify that all 6 reply-received / prior engagement contacts are strictly excluded."""
+    """Verify that all 6 confirmed reply-received contacts are strictly excluded."""
     repo, runner, _ = queue_test_env
 
     # Seed the suppressions
     runner.seed_reply_received_suppressions(repo)
 
-    expected_emails = [
-        "k.wong@ucl.ac.uk",
-        "kai-kit.wong@ucl.ac.uk",
-        "cwu@cs.hku.hk",
-        "chenshu.wu@rutgers.edu",
-        "bodner@mit.edu",
-        "pliang@cs.stanford.edu"
+    confirmed_reply_emails = [
+        "han.fan@tum.de",
+        "hojin.lee@tum.de",
+        "lukas.oehler@tum.de",
+        "tjtkoski@kth.se",
+        "fontina.petrakopoulou@tu-berlin.de",
+        "info@sitegeist-robotics.com"
     ]
 
-    for email in expected_emails:
+    for email in confirmed_reply_emails:
         is_supp, reason = runner.is_suppressed_or_excluded(repo, email)
         assert is_supp is True, f"Expected {email} to be suppressed!"
         assert reason is not None
-        assert any(k in reason for k in ["PREVIOUSLY_CONTACTED", "REPLY_RECEIVED"])
+        assert "REPLY_RECEIVED" in reason
+
+    # Verify that Abigail Bodner and Percy Liang are NOT suppressed
+    is_bodner_supp, _ = runner.is_suppressed_or_excluded(repo, "bodner@mit.edu")
+    is_liang_supp, _ = runner.is_suppressed_or_excluded(repo, "pliang@cs.stanford.edu")
+    assert is_bodner_supp is False, "Abigail Bodner must not be classified as replied/suppressed"
+    assert is_liang_supp is False, "Percy Liang must not be classified as replied/suppressed"
 
 
 def test_queue_persistence_and_sequence_ordering(queue_test_env):
-    """Verify that unsuppressed professors are enqueued with exact subjects and preserved order."""
+    """Verify that unsuppressed professors (including Bodner) are enqueued with exact subjects and preserved order."""
     repo, runner, _ = queue_test_env
 
-    # Insert 3 professors (2 normal, 1 reply-received)
+    # Insert 3 professors (2 normal NZ, 1 normal MIT Bodner, 1 replied TUM Han Fan)
     repo.upsert_professor(Professor(
         professor_id="prof_nz_01",
         university_name="The University of Auckland",
@@ -83,22 +89,35 @@ def test_queue_persistence_and_sequence_ordering(queue_test_env):
         time_block_order=2
     ))
     repo.upsert_professor(Professor(
-        professor_id="prof_supp_bodner",
+        professor_id="prof_mit_bodner",
         university_name="MIT",
         country="United States",
         full_name="Abigail Bodner",
         email="bodner@mit.edu",
-        research_areas="Climate modeling",
+        research_areas="Climate dynamics & SciML",
         time_block="BLOCK_10",
         time_block_order=920
     ))
+    repo.upsert_professor(Professor(
+        professor_id="prof_supp_tum_fan",
+        university_name="Technical University of Munich",
+        country="Germany",
+        full_name="Han Fan",
+        email="han.fan@tum.de",
+        research_areas="Robotics",
+        time_block="BLOCK_07",
+        time_block_order=500
+    ))
 
     build_res = runner.build_queue_from_professors(repo)
-    assert build_res["enqueued_count"] == 2
-    assert build_res["suppressed_count"] == 1  # Bodner is suppressed
+    assert build_res["enqueued_count"] == 3  # Brent Young, Richard Clarke, Abigail Bodner
+    
+    # Han Fan is already marked SUPPRESSED in professors table
+    han_prof = repo.get_professor("prof_supp_tum_fan")
+    assert han_prof["outreach_status"] == "SUPPRESSED"
 
     items = repo.list_queue_items()
-    assert len(items) == 2
+    assert len(items) == 3
     assert items[0]["professor_name"] == "Brent Young"
     assert items[0]["sequence_order"] == 1
     assert items[0]["draft_subject"].startswith("Summer 2027 Research Internship — ")
@@ -106,6 +125,9 @@ def test_queue_persistence_and_sequence_ordering(queue_test_env):
 
     assert items[1]["professor_name"] == "Richard Clarke"
     assert items[1]["sequence_order"] == 2
+
+    assert items[2]["professor_name"] == "Abigail Bodner"
+    assert items[2]["recipient_email"] == "bodner@mit.edu"
 
 
 def test_window_evaluation_90_minutes(queue_test_env):

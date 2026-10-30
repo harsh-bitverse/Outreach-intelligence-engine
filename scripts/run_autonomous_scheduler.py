@@ -81,18 +81,26 @@ def main():
             print(f"  Database already holds {prof_count} professors from authoritative sheet.")
 
         # 3. Seed and Verify 6 Reply-Received Suppressions
-        section("3. Suppression Audit: 6 Reply-Received / Prior Engagement Contacts")
+        section("3. Suppression Audit: 6 Confirmed Reply-Received Contacts")
         runner = autonomous_queue_runner
         seeded = runner.seed_reply_received_suppressions(repo)
-        print(f"  Verified {seeded} reply-received suppression entries:")
+        print(f"  Verified {seeded} exclusion entries in database:")
 
         for _, email, reason, notes in REPLY_RECEIVED_EXCLUSIONS:
             is_supp, supp_reason = runner.is_suppressed_or_excluded(repo, email)
-            print(f"    - {email:<28} | Suppressed={is_supp} | Reason: {supp_reason}")
+            print(f"    - [REPLY RECEIVED] {email:<35} | Suppressed={is_supp}")
 
         # Check IIT Delhi domain exclusion
         is_iitd, iitd_reason = repo.is_suppressed("prof@iitd.ac.in")
-        print(f"    - {'prof@iitd.ac.in':<28} | Suppressed={is_iitd} | Reason: {iitd_reason}")
+        print(f"    - [SELF DOMAIN]    {'prof@iitd.ac.in':<35} | Suppressed={is_iitd}")
+
+        # Verify Abigail Bodner and Percy Liang are NOT suppressed
+        is_bodner_supp, _ = runner.is_suppressed_or_excluded(repo, "bodner@mit.edu")
+        is_liang_supp, _ = runner.is_suppressed_or_excluded(repo, "pliang@cs.stanford.edu")
+        print(f"    - [CANDIDATE CHECK] Abigail Bodner (MIT)               | Suppressed={is_bodner_supp} (Correctly Unsuppressed)")
+        print(f"    - [CANDIDATE CHECK] Percy Liang (Stanford)            | Suppressed={is_liang_supp} (Correctly Unsuppressed)")
+        assert not is_bodner_supp, "Bodner must not be classified as replied/suppressed"
+        assert not is_liang_supp, "Liang must not be classified as replied/suppressed"
 
         # 4. Durable Queue Build
         section("4. Building / Syncing Durable Outreach Queue")

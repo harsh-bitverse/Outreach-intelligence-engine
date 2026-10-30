@@ -262,7 +262,8 @@ def initialize_database(db_path: Path = None) -> None:
 
 def seed_mandatory_suppressions(conn: sqlite3.Connection) -> None:
     """
-    Ensure IIT Delhi and previously contacted professors are firmly suppressed.
+    Ensure IIT Delhi, previously contacted external professors, and confirmed reply-received contacts
+    are firmly suppressed from initial outreach.
     """
     initial_suppressions = [
         # 1. Institutional exclusion: IIT Delhi (self-institution)
@@ -275,9 +276,20 @@ def seed_mandatory_suppressions(conn: sqlite3.Connection) -> None:
         ("supp_kaikit_wong_alt", "kai-kit.wong@ucl.ac.uk", None, "PREVIOUSLY_CONTACTED", "Prof. Kai-Kit Wong (UCL) alternative email alias"),
 
         # 3. Previously contacted: Chenshu Wu (HKU / Rutgers)
-        ("supp_chenshu_wu_hku", "cwu@cs.hku.hk", None, "PREVIOUSLY_CONTACTED", "Prof. Chenshu Wu already contacted; suppressed from fresh outreach"),
-        ("supp_chenshu_wu_rutgers", "chenshu.wu@rutgers.edu", None, "PREVIOUSLY_CONTACTED", "Prof. Chenshu Wu alternative institutional email")
+        ("supp_chenshu_wu_hku", "cwu@cs.hku.hk", None, "PREVIOUSLY_CONTACTED", "Prof. Chenshu Wu (HKU) already contacted; suppressed from fresh outreach"),
+        ("supp_chenshu_wu_rutgers", "chenshu.wu@rutgers.edu", None, "PREVIOUSLY_CONTACTED", "Prof. Chenshu Wu (Rutgers) alternative institutional email"),
+
+        # 4. Confirmed Reply-Received Contacts (Exclude from fresh initial outreach)
+        ("supp_han_fan_tum", "han.fan@tum.de", None, "REPLY_RECEIVED", "Han Fan (TUM) confirmed reply received; excluded from initial outreach"),
+        ("supp_hojin_lee_tum", "hojin.lee@tum.de", None, "REPLY_RECEIVED", "Hojin Lee (TUM) confirmed reply received; excluded from initial outreach"),
+        ("supp_lukas_oehler_tum", "lukas.oehler@tum.de", None, "REPLY_RECEIVED", "Lukas Oehler (TUM) confirmed reply received; excluded from initial outreach"),
+        ("supp_tjtkoski_kth", "tjtkoski@kth.se", None, "REPLY_RECEIVED", "Timo Koski (KTH) confirmed reply received; excluded from initial outreach"),
+        ("supp_fontina_petrakopoulou_tub", "fontina.petrakopoulou@tu-berlin.de", None, "REPLY_RECEIVED", "Fontina Petrakopoulou (TU Berlin) confirmed reply received; excluded from initial outreach"),
+        ("supp_info_sitegeist", "info@sitegeist-robotics.com", None, "REPLY_RECEIVED", "Sitegeist Robotics confirmed reply received; excluded from initial outreach"),
     ]
+
+    # Clean up any legacy unsupported classifications
+    conn.execute("DELETE FROM suppression_list WHERE email IN ('bodner@mit.edu', 'pliang@cs.stanford.edu');")
 
     for supp_id, email, domain, reason, notes in initial_suppressions:
         conn.execute("""

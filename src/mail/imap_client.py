@@ -39,8 +39,19 @@ class IITDImapClient:
             result["tls_established"] = True
 
             if user and pwd:
-                client.login(user, pwd)
+                auth_user = user
+                try:
+                    client.login(auth_user, pwd)
+                except imaplib.IMAP4.error as err:
+                    alt_user = auth_user.split("@")[0] if "@" in auth_user else f"{auth_user}@iitd.ac.in"
+                    try:
+                        client.login(alt_user, pwd)
+                        auth_user = alt_user
+                    except Exception:
+                        raise err
+
                 result["authenticated"] = True
+                result["authenticated_username"] = auth_user
                 status, mailbox_list = client.list()
                 if status == "OK" and mailbox_list:
                     result["mailboxes"] = [m.decode("utf-8", errors="ignore") for m in mailbox_list[:10]]
@@ -67,8 +78,8 @@ class IITDImapClient:
             client = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=self.ssl_context)
             client.login(user, pwd)
 
-            # EXAMINE opens mailbox in strictly READ-ONLY mode
-            status, _ = client.examine("INBOX")
+            # select with readonly=True sends RFC 3501 EXAMINE (strictly READ-ONLY mode)
+            status, _ = client.select("INBOX", readonly=True)
             if status != "OK":
                 client.logout()
                 return []
@@ -115,7 +126,7 @@ class IITDImapClient:
             sent_boxes = ["Sent", "Sent Items", "INBOX.Sent"]
             opened_box = None
             for box in sent_boxes:
-                status, _ = client.examine(box)
+                status, _ = client.select(box, readonly=True)
                 if status == "OK":
                     opened_box = box
                     break
@@ -173,16 +184,27 @@ class IITDImapClient:
 
         try:
             client = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=self.ssl_context)
-            client.login(user, pwd)
+            auth_user = user
+            try:
+                client.login(auth_user, pwd)
+            except imaplib.IMAP4.error as err:
+                alt_user = auth_user.split("@")[0] if "@" in auth_user else f"{auth_user}@iitd.ac.in"
+                try:
+                    client.login(alt_user, pwd)
+                    auth_user = alt_user
+                except Exception:
+                    raise err
+
             diag["authenticated"] = True
+            diag["authenticated_username"] = auth_user
 
             # List mailboxes
             st, boxes = client.list()
             if st == "OK" and boxes:
                 diag["mailbox_list"] = [b.decode("utf-8", errors="ignore") for b in boxes]
 
-            # EXAMINE opens in strictly read-only mode
-            st, count_data = client.examine(mailbox_name)
+            # select with readonly=True sends RFC 3501 EXAMINE (strictly read-only mode)
+            st, count_data = client.select(mailbox_name, readonly=True)
             if st == "OK" and count_data:
                 try:
                     diag["message_count"] = int(count_data[0].decode())

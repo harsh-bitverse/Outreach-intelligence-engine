@@ -21,6 +21,7 @@ dependencies = [
     "requests>=2.31.0",
     "python-multipart>=0.0.9",
     "tzdata>=2024.1",
+    "keyring>=25.0.0",
 ]
 
 [project.optional-dependencies]
@@ -36,7 +37,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 python_classes = ["Test*"]
-addopts = "-v --strict-markers"
+addopts = "-v --strict-markers -p no:anyio"
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

@@ -79,6 +79,52 @@
         "Robotics", "Mechatronics", "Embedded Systems", "Control Systems", "Autonomous Systems",
         "Biomechatronics", "Humanoid Robotics"
       ]
+    },
+    {
+      "id": "surge-microdrone-autonomy",
+      "title": "SuRGE Microdrone Autonomy & 3D Environment Mapping",
+      "tagline": "Selected Undergraduate Research Excellence in Mathematical Methods, Microelectronics & Autonomous Systems",
+      "domains": ["Robotics", "Autonomous Navigation", "State Estimation", "Control Systems"],
+      "verified_outcomes": [
+        "Selected for competitive SuRGE programme under Prof. Amartansh Dubey (Electrical Engineering, IIT Delhi).",
+        "Explored microdrone autonomy problem centred on 3D environment mapping and trajectory path following.",
+        "Synthesized core perception, state estimation, planning, and control interactions under limited sensing and uncertainty."
+      ],
+      "technologies": ["Python", "C++", "Optimization", "Linear Algebra", "Drone Simulation"],
+      "suitable_for_professors_in": [
+        "Robotics", "Autonomous Systems", "Aerial Robotics", "UAVs", "Control Theory",
+        "Perception", "SLAM", "State Estimation"
+      ]
+    },
+    {
+      "id": "sovereign-agentic-workbench",
+      "title": "Sovereign On-Premise Agentic AI Workbench",
+      "tagline": "On-Premise Agentic AI Workbench for Confidential Industrial Work (MRPL, SIH 2026)",
+      "domains": ["AI Systems", "Agentic Systems", "System Architecture", "Security & Orchestration"],
+      "verified_outcomes": [
+        "Completed 6-person team project designing on-premise agentic AI workbench for confidential industrial workflows using open-weight multimodal LLMs.",
+        "Led system architecture across model engineering, multimodal processing, retrieval, tool sandboxing, security, and UI workstreams.",
+        "Contributed to orchestration and authentication/security design with attention to component interfaces, controlled tool access, and confidential deployment boundaries."
+      ],
+      "technologies": ["Python", "FastAPI", "React", "Docker", "Multimodal LLMs", "Tool Sandboxing"],
+      "suitable_for_professors_in": [
+        "AI Systems", "Agentic Systems", "Security in AI", "Software Systems", "Industrial AI"
+      ]
+    },
+    {
+      "id": "opvi-opportunity-platform",
+      "title": "OPVI Opportunity Intelligence Platform",
+      "tagline": "Deployed Full-Stack MVP for Opportunity Discovery and Personalized Workflow Tracking",
+      "domains": ["Full-Stack Systems", "Workflow Automation", "Information Systems"],
+      "verified_outcomes": [
+        "Designed and independently built full-stack deployed MVP for discovering and acting on research opportunities, internships, and competitions.",
+        "Engineered opportunity discovery, personalized filtering, and deadline-aware follow-up workflows.",
+        "Linked backend data pipelines to usable web interface, making scattered research opportunities actionable."
+      ],
+      "technologies": ["FastAPI", "React", "SQLite", "REST API", "Git/GitHub"],
+      "suitable_for_professors_in": [
+        "Information Systems", "Software Engineering", "Full-Stack Development"
+      ]
     }
   ]
 }

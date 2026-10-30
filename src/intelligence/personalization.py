@@ -96,10 +96,10 @@ class PersonalizationEngine:
         last_name = full_name.split()[-1] if full_name else "Professor"
         title = professor.get("title", "Professor")
 
-        if "prof" in title.lower():
-            salutation = f"Dear {title} {last_name},"
+        if "dr." in title.lower() or title.lower().startswith("dr "):
+            salutation = f"Dear Dr. {last_name},"
         else:
-            salutation = f"Dear Prof. {last_name},"
+            salutation = f"Dear Professor {last_name},"
 
         research_areas = professor.get("research_areas", "").strip()
         research_overlap = professor.get("research_overlap", "").strip()

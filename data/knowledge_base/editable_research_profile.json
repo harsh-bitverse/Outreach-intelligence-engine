@@ -16,9 +16,16 @@
   "source_documents_audit": {
     "approved_cv_pdf": {
       "path": "data/private/approved_cv.pdf",
-      "status": "MISSING_FROM_DISK",
+      "status": "VERIFIED_PRESENT",
       "mandatory_before_dispatch": true,
-      "remediation": "Student must upload or place their finalized approved CV PDF at 'data/private/approved_cv.pdf'. Outgoing email attachments will be blocked until verified."
+      "sha256": "472280d440adbb14a7872655325ff4020a5991444bf19cfba99b247f08ca65a8",
+      "description": "Authoritative 2-page research CV for Harshith N. (IIT Delhi, CGPA 8.7/10, Summer 2027 Research)."
+    },
+    "research_interests_pdf": {
+      "path": "data/knowledge_base/research_interests.pdf",
+      "status": "VERIFIED_PRESENT",
+      "sha256": "86bc5790be6c2b18608d8102462e742111dfdb059eb7779d7ce7e6c46a6f671b",
+      "description": "Authoritative Research Interests Statement for Harshith N. covering 4 core technical pillars."
     },
     "final_research_report_pdf": {
       "path": "reports/final_research_report.pdf",
@@ -91,6 +98,37 @@
         "Implemented sensor telemetry and positional feedback algorithms for closed-loop physical coordination."
       ],
       "suitable_domains": ["Robotics", "Embedded Systems", "Control Systems", "Mechatronics"]
+    },
+    {
+      "id": "surge-microdrone-autonomy",
+      "name": "Students-Undergraduate Research Graduate Excellence (SuRGE) — Microdrone Autonomy",
+      "category": "Robotics / Autonomous Systems",
+      "substantiated_facts": [
+        "Selected for IIT Delhi SuRGE programme under Prof. Amartansh Dubey (Electrical Engineering).",
+        "Investigated 3D environment mapping, trajectory tracking, and autonomous path following for microdrones.",
+        "Studied state estimation, navigation, and control under limited sensing and uncertainty."
+      ],
+      "suitable_domains": ["Robotics", "Microdrones", "Autonomous Navigation", "State Estimation", "Control Systems"]
+    },
+    {
+      "id": "opvi-platform",
+      "name": "OPVI Opportunity Intelligence Platform",
+      "category": "Full-Stack AI Engineering / Product Systems",
+      "substantiated_facts": [
+        "Designed and independently built a full-stack MVP for discovering and tracking research internships and competitions.",
+        "Engineered deadline-aware follow-up workflows, personalized filtering, and persistent state management."
+      ],
+      "suitable_domains": ["Full-Stack Engineering", "Web Systems", "Workflow Automation"]
+    },
+    {
+      "id": "sovereign-agentic-workbench",
+      "name": "Sovereign On-Premise Agentic AI Workbench (MRPL, SIH 2026)",
+      "category": "AI Systems / Agentic Workflows",
+      "substantiated_facts": [
+        "Led system architecture across 6-person team for confidential industrial AI workflows using open-weight multimodal LLMs.",
+        "Designed orchestration, authentication/security boundaries, tool sandboxing, and sensitive data access controls."
+      ],
+      "suitable_domains": ["Agentic AI", "AI Systems", "Security & Orchestration", "Multimodal Systems"]
     }
   ],
   "writing_preferences": {

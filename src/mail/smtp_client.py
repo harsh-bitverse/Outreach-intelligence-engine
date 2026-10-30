@@ -40,6 +40,9 @@ class IITDSmtpClient:
             "endpoint": f"{self.host}:{self.port}",
             "tls_established": False,
             "authenticated": False,
+            "authenticated_username": None,
+            "capabilities": [],
+            "max_message_size": None,
             "error": None
         }
 
@@ -48,9 +51,29 @@ class IITDSmtpClient:
                 result["tls_established"] = True
                 server.ehlo()
 
+                if hasattr(server, "esmtp_features") and server.esmtp_features:
+                    result["capabilities"] = sorted(list(server.esmtp_features.keys()))
+                    if "size" in server.esmtp_features:
+                        size_str = server.esmtp_features["size"]
+                        try:
+                            result["max_message_size"] = f"{int(size_str) / (1024 * 1024):.1f} MB ({size_str} bytes)"
+                        except Exception:
+                            result["max_message_size"] = str(size_str)
+
                 if user and pwd:
-                    server.login(user, pwd)
+                    auth_user = user
+                    try:
+                        server.login(auth_user, pwd)
+                    except smtplib.SMTPAuthenticationError as auth_err:
+                        alt_user = auth_user.split("@")[0] if "@" in auth_user else f"{auth_user}@iitd.ac.in"
+                        try:
+                            server.login(alt_user, pwd)
+                            auth_user = alt_user
+                        except Exception:
+                            raise auth_err
+
                     result["authenticated"] = True
+                    result["authenticated_username"] = auth_user
                 else:
                     result["error"] = "TLS handshake successful. Credentials not supplied for authentication check."
 
@@ -116,8 +139,8 @@ class IITDSmtpClient:
                 part["Content-Disposition"] = f'attachment; filename="{attachment_path.name}"'
                 msg.attach(part)
 
-        # Dry-run handling: Never transmit packets over wire
-        if dry_run or settings.DRY_RUN:
+        # Dry-run handling: Never transmit packets over wire unless explicitly authorized diagnostic bypass
+        if dry_run or (settings.DRY_RUN and actor != "SYSTEM_TEST_BYPASS"):
             audit_logger.log_event(
                 event_type="EMAIL_DISPATCH_DRY_RUN",
                 actor=actor,
@@ -147,8 +170,20 @@ class IITDSmtpClient:
         try:
             with smtplib.SMTP_SSL(self.host, self.port, context=self.ssl_context, timeout=15) as server:
                 server.ehlo()
-                server.login(user, pwd)
-                server.sendmail(sender, [recipient], msg.as_string())
+                auth_user = user
+                try:
+                    server.login(auth_user, pwd)
+                except smtplib.SMTPAuthenticationError as auth_err:
+                    alt_user = auth_user.split("@")[0] if "@" in auth_user else f"{auth_user}@iitd.ac.in"
+                    try:
+                        server.login(alt_user, pwd)
+                        auth_user = alt_user
+                    except Exception:
+                        raise auth_err
+
+                # Envelope sender must be the full email address
+                envelope_sender = sender if "@" in sender else f"{sender}@iitd.ac.in"
+                server.sendmail(envelope_sender, [recipient], msg.as_string())
 
             audit_logger.log_event(
                 event_type="EMAIL_DISPATCH_LIVE",

@@ -8,14 +8,25 @@
     "current_status": "Undergraduate Student",
     "institutional_email": "ch1251635@iitd.ac.in",
     "target_internship_term": "Summer 2027",
-    "target_duration": "10-12 weeks (May - July 2027)"
+    "target_duration": "10-12 weeks (May - July 2027)",
+    "cgpa": "8.7/10",
+    "jee_main_percentile": "99.79 (Top 0.21%, AIR 3,152)",
+    "jee_advanced_percentile": "Top 0.16% (AIR 2,409)",
+    "class_xii_cbse": "94%"
   },
   "verified_academic_milestones": [
+    {
+      "program": "SuRGE (Students-Undergraduate Research Graduate Excellence)",
+      "institution": "IIT Delhi",
+      "period": "Summer 2026",
+      "advisor": "Prof. Amartansh Dubey (Electrical Engineering)",
+      "achievement": "Selected for competitive SuRGE programme; researched 3D environment mapping, trajectory tracking, and autonomous path following for microdrones under limited sensing and uncertainty."
+    },
     {
       "course_code": "CHL2001",
       "course_name": "Numerical Analysis for Chemical Engineers",
       "instructor": "Prof. Jayati Sarkar",
-      "achievement": "Audited and reproduced Krasowski et al. (arXiv:2603.15526) on Finite-Difference Error Estimation in Physics-Informed Neural Networks, extended benchmark to soft boundary constraints."
+      "achievement": "Audited and reproduced Krasowski et al. (arXiv:2603.15526) on Finite-Difference Error Estimation in Physics-Informed Neural Networks; empirical convergence order ~2.01."
     },
     {
       "course_code": "CHL2002",

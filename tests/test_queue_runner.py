@@ -153,11 +153,11 @@ def test_window_evaluation_90_minutes(queue_test_env):
 
 
 def test_cadence_batching_and_cooling_break(queue_test_env):
-    """Verify 5-message cadence batching and cooling breaks."""
+    """Verify 10-message cadence batching and cooling breaks across batches."""
     repo, runner, _ = queue_test_env
 
-    # Seed 7 professors in BLOCK_01
-    for i in range(1, 8):
+    # Seed 12 professors in BLOCK_01
+    for i in range(1, 13):
         repo.upsert_professor(Professor(
             professor_id=f"prof_nz_{i:02d}",
             university_name="The University of Auckland",
@@ -171,26 +171,26 @@ def test_cadence_batching_and_cooling_break(queue_test_env):
 
     runner.build_queue_from_professors(repo)
     items = repo.list_queue_items()
-    assert len(items) == 7
+    assert len(items) == 12
 
-    # Verify batch numbering: items 1..5 in batch 1, items 6..7 in batch 2
+    # Verify batch numbering: items 1..10 in batch 1, items 11..12 in batch 2
     assert items[0]["batch_number"] == 1
-    assert items[4]["batch_number"] == 1
-    assert items[5]["batch_number"] == 2
-    assert items[6]["batch_number"] == 2
+    assert items[9]["batch_number"] == 1
+    assert items[10]["batch_number"] == 2
+    assert items[11]["batch_number"] == 2
 
     # Dispatch batch in dry run with allow_templates=True
     dispatch_res = runner.dispatch_queue(
         repo=repo,
         time_block="BLOCK_01",
-        max_messages=7,
+        max_messages=12,
         dry_run=True,
         force_window=True,
         simulated_cooling=True,
         allow_templates=True
     )
 
-    assert dispatch_res["dispatched_count"] == 7
+    assert dispatch_res["dispatched_count"] == 12
     assert dispatch_res["dry_run"] is True
 
 

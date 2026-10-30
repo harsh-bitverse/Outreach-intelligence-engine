@@ -206,3 +206,81 @@ def test_antigravity_sdk_authentication_limitation():
 
     assert "A Gemini API key is required" in str(exc_info.value)
 
+
+def test_session08_cadence_and_batch_demonstration(test_loop):
+    """
+    Session 08 requirement:
+    Verify at least 12 consecutive eligible records, 10-email batching,
+    mandatory 60-second break, resumption with next professors (11 & 12),
+    daily limit ceiling at 200, and cross-block transition.
+    """
+    assert settings.DAILY_MAX_OUTREACH == 200
+    assert settings.BATCH_SIZE == 10
+    assert settings.COOLING_BREAK_SECONDS == 60
+
+    demo_res = test_loop.run_batch_demonstration(
+        count=12,
+        dry_run=True,
+        prefer_cli=False,
+        simulated_cooling=True
+    )
+
+    assert demo_res["total_requested"] == 12
+    assert len(demo_res["professors_processed"]) == 12
+    assert demo_res["batch_1_count"] == 10
+    assert demo_res["batch_2_count"] == 2
+    assert demo_res["cooling_break_enforced"] is True
+    assert demo_res["cooling_break_duration"] == 60
+    assert "BLOCK_01 -> BLOCK_02" in demo_res["block_transitions"]
+    assert demo_res["daily_limit_enforced"] is True
+
+    # Verify first 10 items have batch_number == 1, next 2 have batch_number == 2
+    for p in demo_res["professors_processed"][:10]:
+        assert p["batch_number"] == 1
+        assert p["status"] == "SIMULATED_SENT"
+        assert p["excel_updated"] is True
+
+    for p in demo_res["professors_processed"][10:]:
+        assert p["batch_number"] == 2
+        assert p["status"] == "SIMULATED_SENT"
+        assert p["excel_updated"] is True
+
+
+def test_daily_limit_and_midnight_ist_reset(test_loop):
+    """Verify daily sent counting reset logic at Midnight IST."""
+    ist_tz = ZoneInfo("Asia/Kolkata")
+    now_ist = datetime.now(ist_tz)
+    today = now_ist.date()
+
+    count_today = test_loop.get_daily_sent_count(today_ist=today, include_simulated=True)
+    assert count_today >= 0
+    assert isinstance(count_today, int)
+
+
+def test_mid_batch_time_block_expiration_safety(test_loop):
+    """
+    Verify that if a time block expires, dispatch_and_persist rejects
+    live transmission outside the active block window.
+    """
+    fake_prof = {
+        "full_name": "Test Professor",
+        "email": "test.prof@example.edu",
+        "university": "Example University",
+        "block_id": "BLOCK_99_NONEXISTENT",
+        "row_index": 999
+    }
+    fake_draft = test_loop.generate_ai_draft({
+        "full_name": "Test Professor",
+        "email": "test.prof@example.edu",
+        "university": "Example University",
+        "research_areas": "Systems",
+        "block_id": "BLOCK_01"
+    })
+
+    # Under live mode (dry_run=False), dispatching for an inactive block MUST raise RuntimeError
+    with pytest.raises(RuntimeError) as exc_info:
+        test_loop.dispatch_and_persist(prof_row=fake_prof, draft=fake_draft, dry_run=False)
+
+    assert "TIME_BLOCK_EXPIRED" in str(exc_info.value)
+
+

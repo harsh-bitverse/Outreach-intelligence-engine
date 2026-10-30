@@ -64,14 +64,14 @@ class Settings(BaseSettings):
     IITD_CSC_APPROVED: bool = False
     EMERGENCY_STOP: bool = False
 
-    # Rate Limiting & 90-Minute Window Cadence
-    MAX_EMAILS_PER_BATCH: int = 5
-    BATCH_SIZE: int = 5
+    # Rate Limiting & Time-Block Cadence
+    MAX_EMAILS_PER_BATCH: int = 10
+    BATCH_SIZE: int = 10
     COOLING_BREAK_SECONDS: int = 60
-    MAX_EMAILS_PER_DAY: int = 25
-    DAILY_MAX_OUTREACH: int = 25
-    MIN_INTERVAL_SECONDS_BETWEEN_EMAILS: int = 30
-    DISPATCH_WINDOW_MINUTES: int = 90
+    MAX_EMAILS_PER_DAY: int = 200
+    DAILY_MAX_OUTREACH: int = 200
+    MIN_INTERVAL_SECONDS_BETWEEN_EMAILS: int = 10
+    DISPATCH_WINDOW_MINUTES: int = 60
 
     # Operator Dashboard
     OPERATOR_TIMEZONE: str = "Asia/Kolkata"  # IST

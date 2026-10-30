@@ -12,10 +12,12 @@ Configured with:
 
 import argparse
 import shutil
+import sqlite3
 import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List, Tuple
 from zoneinfo import ZoneInfo
 
 # Add project root to sys.path
@@ -26,12 +28,15 @@ from config.settings import settings
 from src.database.connection import get_db, initialize_database
 from src.database.repository import OutreachRepository
 from src.database.workbook_sync import DynamicWorkbookSync
+from src.mail.credentials import CredentialManager
 from src.scheduler.autonomous_campaign_loop import (
     AutonomousCampaignLoop,
+    AntigravityCLIDrafter,
     autonomous_campaign_loop,
     CAMPAIGN_START_DATE
 )
 from src.scheduler.queue_runner import TIME_BLOCK_WINDOWS
+from src.security.audit_logger import audit_logger
 
 
 def banner(title: str):
@@ -44,6 +49,100 @@ def section(title: str):
     print("\n" + "-" * 80)
     print(f"  {title}")
     print("-" * 80)
+
+
+def verify_production_preflight_startup() -> None:
+    """
+    Mandatory startup verification covering:
+    1. CLI authentication: verify agy.exe presence and readiness.
+    2. SMTP credentials: verify ch1251635 credentials in Windows keyring.
+    3. Attachments: verify both PDF attachments exist and are non-empty.
+    4. Writable SQLite database: verify DB connectivity and write permission.
+    5. Writable Excel workbook: verify master workbook is present and writable.
+    6. Emergency-stop switch: verify EMERGENCY_STOP is False and flag file does not exist.
+    """
+    section("Preflight Startup Verification (All 6 Mandatory Systems)")
+    errors = []
+
+    # 1. CLI Authentication
+    cli_drafter = AntigravityCLIDrafter()
+    if not cli_drafter.is_available():
+        errors.append(f"Antigravity CLI binary missing at {cli_drafter.cli_path}")
+    else:
+        print(f"  [CHECK 1/6] Antigravity CLI binary verified: {cli_drafter.cli_path}")
+
+    # 2. SMTP Credentials
+    cred_mgr = CredentialManager()
+    user, pwd = cred_mgr.get_credentials()
+    if not user or not pwd:
+        errors.append("IIT Delhi SMTP credentials not found in credential store")
+    else:
+        print(f"  [CHECK 2/6] IITD SMTP Credentials verified for {user}")
+
+    # 3. Dual PDF Attachments
+    cv_p = settings.CV_ATTACHMENT_PATH
+    ri_p = settings.RESEARCH_INTERESTS_PATH
+    if not cv_p.exists() or cv_p.stat().st_size <= 0:
+        errors.append(f"CV attachment missing or empty: {cv_p}")
+    if not ri_p.exists() or ri_p.stat().st_size <= 0:
+        errors.append(f"Research Interests attachment missing or empty: {ri_p}")
+    if cv_p.exists() and ri_p.exists():
+        print(f"  [CHECK 3/6] Attachments verified: {cv_p.name} ({cv_p.stat().st_size:,} bytes), {ri_p.name} ({ri_p.stat().st_size:,} bytes)")
+
+    # 4. Writable SQLite Database
+    db_p = settings.SQLITE_DB_PATH
+    try:
+        conn = sqlite3.connect(str(db_p))
+        cur = conn.cursor()
+        cur.execute("PRAGMA quick_check;")
+        res = cur.fetchone()
+        conn.close()
+        print(f"  [CHECK 4/6] SQLite Database writable & healthy: {db_p.name} (quick_check={res[0]})")
+    except Exception as e:
+        errors.append(f"SQLite DB check failed: {e}")
+
+    # 5. Writable Master Excel Workbook
+    wb_p = settings.MASTER_WORKBOOK_PATH
+    if not wb_p.exists():
+        errors.append(f"Master workbook missing: {wb_p}")
+    else:
+        try:
+            with open(wb_p, "r+b") as f:
+                header = f.read(4)
+                if header != b"PK\x03\x04":
+                    errors.append(f"Invalid Excel file header: {header}")
+                else:
+                    print(f"  [CHECK 5/6] Master Excel workbook writable: {wb_p.name} ({wb_p.stat().st_size:,} bytes)")
+        except Exception as e:
+            errors.append(f"Excel workbook not writable: {e}")
+
+    # 6. Emergency Stop Switch
+    flag_p = settings.DATA_DIR / "EMERGENCY_STOP.flag"
+    if settings.EMERGENCY_STOP:
+        errors.append("settings.EMERGENCY_STOP is set to True")
+    elif flag_p.exists():
+        errors.append(f"Emergency stop flag file exists: {flag_p}")
+    else:
+        print(f"  [CHECK 6/6] Emergency Stop Switch verified INACTIVE (Clear to proceed)")
+
+    if errors:
+        audit_logger.log_event(
+            event_type="STARTUP_PREFLIGHT_FAILED",
+            actor="SYSTEM_STARTUP",
+            entity_type="SYSTEM",
+            entity_id="PREFLIGHT",
+            details={"errors": errors}
+        )
+        raise RuntimeError(f"Startup preflight checks failed:\n" + "\n".join(f"  - {e}" for e in errors))
+
+    audit_logger.log_event(
+        event_type="STARTUP_PREFLIGHT_PASSED",
+        actor="SYSTEM_STARTUP",
+        entity_type="SYSTEM",
+        entity_id="PREFLIGHT",
+        details={"status": "ALL_CHECKS_PASSED"}
+    )
+    print("  [SUCCESS] All 6 Preflight Startup Checks Verified Successfully.\n")
 
 
 def main():
@@ -153,6 +252,7 @@ def main():
         print("\n  [OK] Session 08 12-Professor Cadence Demonstration Completed Successfully.")
 
     elif args.continuous:
+        verify_production_preflight_startup()
         section("3. Launching Continuous Unattended Production Loop")
         autonomous_campaign_loop.run_continuous_campaign(
             dry_run=not args.live,

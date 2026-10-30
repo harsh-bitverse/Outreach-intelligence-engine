@@ -57,11 +57,11 @@ class Settings(BaseSettings):
     IITD_EMAIL_PASSWORD: Optional[str] = None
 
     # Safety, Sending Controls & Permissions
-    # Initial outreach sending is strictly DISABLED by default.
-    GATEWAY_ENABLED: bool = False
-    DRY_RUN: bool = True
-    CAMPAIGN_AUTHORIZED: bool = False
-    IITD_CSC_APPROVED: bool = False
+    # Production live campaign configured per operator authorization & confirmation.
+    GATEWAY_ENABLED: bool = True
+    DRY_RUN: bool = False
+    CAMPAIGN_AUTHORIZED: bool = True
+    IITD_CSC_APPROVED: bool = True
     EMERGENCY_STOP: bool = False
 
     # Rate Limiting & Time-Block Cadence

@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     DAILY_MAX_OUTREACH: int = 200
     MIN_INTERVAL_SECONDS_BETWEEN_EMAILS: int = 25
     DISPATCH_WINDOW_MINUTES: int = 60
+    SMTP_RATE_LIMIT_COOLDOWN_SECONDS: int = 900
+    CLI_QUOTA_COOLDOWN_SECONDS: int = 900
+    MAX_PROFESSOR_RETRY_ATTEMPTS: int = 3
 
     # Operator Dashboard
     OPERATOR_TIMEZONE: str = "Asia/Kolkata"  # IST

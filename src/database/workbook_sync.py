@@ -494,6 +494,7 @@ class DynamicWorkbookSync:
         status: str = "SENT",
         sent_at: Optional[str] = None,
         message_id: Optional[str] = None,
+        notes: Optional[str] = None,
         timeout_seconds: int = 5
     ) -> bool:
         """
@@ -504,6 +505,7 @@ class DynamicWorkbookSync:
           - Column 29 (Outreach Status) -> status
           - Column 30 (Sent Timestamp) -> sent_at (ISO formatted)
           - Column 31 (Message-ID) -> message_id
+          - Column 18 (Notes / Unresolved Issues) -> notes (if provided)
         Also updates the corresponding row in 'Professor Database' if present.
         Non-fatal if Excel is locked: sent history remains preserved in SQLite.
         """
@@ -569,10 +571,17 @@ class DynamicWorkbookSync:
                         ws.cell(r_idx, 25).value = status
                         # Col 29: Outreach Status
                         ws.cell(r_idx, 29).value = status
-                        # Col 30: Sent Timestamp
+                        # Col 30: Sent / Error Timestamp
                         ws.cell(r_idx, 30).value = now_iso
-                        # Col 31: Message-ID
+                        # Col 31: Message-ID / Error Summary
                         ws.cell(r_idx, 31).value = msg_id
+                        # Col 18: Notes / Unresolved Issues (if provided)
+                        if notes:
+                            existing_notes = str(ws.cell(r_idx, 18).value or "").strip()
+                            if existing_notes and existing_notes != "None":
+                                ws.cell(r_idx, 18).value = f"{existing_notes} | {notes}"
+                            else:
+                                ws.cell(r_idx, 18).value = notes
                         updated_tb = True
                         break
 

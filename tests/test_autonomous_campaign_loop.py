@@ -31,7 +31,17 @@ def temp_workbook():
 
 
 @pytest.fixture
-def test_loop(temp_workbook):
+def temp_db(monkeypatch):
+    """Create an isolated copy of the SQLite database so tests never taint production DB."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_db_path = Path(tmpdir) / "test_outreach_engine.db"
+        shutil.copy2(settings.SQLITE_DB_PATH, tmp_db_path)
+        monkeypatch.setattr(settings, "SQLITE_DB_PATH", tmp_db_path)
+        yield tmp_db_path
+
+
+@pytest.fixture
+def test_loop(temp_workbook, temp_db):
     """Instantiate AutonomousCampaignLoop pointing to the test workbook."""
     sync = DynamicWorkbookSync(workbook_path=temp_workbook)
     return AutonomousCampaignLoop(workbook_path=temp_workbook, sync=sync)
@@ -276,7 +286,7 @@ def test_mid_batch_time_block_expiration_safety(test_loop):
         "university": "Example University",
         "research_areas": "Systems",
         "block_id": "BLOCK_01"
-    })
+    }, prefer_cli=False)
 
     # Under live mode (dry_run=False), dispatching for an inactive block MUST raise RuntimeError
     with pytest.raises(RuntimeError) as exc_info:

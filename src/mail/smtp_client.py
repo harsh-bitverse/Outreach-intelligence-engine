@@ -22,6 +22,14 @@ class UnauthorizedDirectInvocationError(Exception):
     pass
 
 
+class SMTPPermanentError(Exception):
+    """Raised for permanent recipient or address rejections (5xx) where transmission definitely failed and retrying is futile."""
+    def __init__(self, message: str, code: Optional[int] = None, details: Optional[Any] = None):
+        super().__init__(message)
+        self.code = code
+        self.details = details
+
+
 class SMTPTransientError(Exception):
     """Raised for transient SMTP errors that can be recovered from via retry or backoff (e.g. 4xx codes)."""
     def __init__(self, message: str, code: Optional[int] = None, details: Optional[Any] = None):
@@ -31,8 +39,17 @@ class SMTPTransientError(Exception):
 
 
 class SMTPRateLimitError(SMTPTransientError):
-    """Raised specifically when SMTP server returns rate-limit or quota rejection (e.g. 450 Sending rate too high)."""
+    """Raised specifically when SMTP server returns rate-limit or quota rejection (e.g. 450 Sending rate too high).
+    Represents an account-wide condition requiring global cooldown rather than candidate-specific retry."""
     pass
+
+
+class SMTPAmbiguousDeliveryError(Exception):
+    """Raised when server connection was lost or timed out during/after DATA transfer.
+    Delivery acceptance is unknown; automatic resending is strictly prohibited to prevent duplicates."""
+    def __init__(self, message: str, details: Optional[Any] = None):
+        super().__init__(message)
+        self.details = details
 
 
 class IITDSmtpClient:
@@ -252,6 +269,7 @@ class IITDSmtpClient:
 
         except smtplib.SMTPRecipientsRefused as err:
             is_rate_limit = False
+            is_permanent = False
             refusal_code = None
             refusal_msg = ""
             for rcpt, (code, msg_bytes) in err.recipients.items():
@@ -261,9 +279,12 @@ class IITDSmtpClient:
                 if code == 450 or any(k in msg_str.lower() for k in ["rate too high", "rate", "try later", "policy rejection"]):
                     is_rate_limit = True
                     break
+                elif 500 <= code < 600:
+                    is_permanent = True
 
+            event_type = "EMAIL_DISPATCH_RATE_LIMITED" if is_rate_limit else ("EMAIL_DISPATCH_PERMANENT_ERROR" if is_permanent else "EMAIL_DISPATCH_RECIPIENT_REFUSED")
             audit_logger.log_event(
-                event_type="EMAIL_DISPATCH_RATE_LIMITED" if is_rate_limit else "EMAIL_DISPATCH_RECIPIENT_REFUSED",
+                event_type=event_type,
                 actor=actor,
                 operator_id=operator_id,
                 entity_type="EMAIL_MESSAGE",
@@ -273,12 +294,19 @@ class IITDSmtpClient:
                     "subject": subject,
                     "code": refusal_code,
                     "message": refusal_msg,
-                    "is_rate_limit": is_rate_limit
+                    "is_rate_limit": is_rate_limit,
+                    "is_permanent": is_permanent
                 }
             )
             if is_rate_limit:
                 raise SMTPRateLimitError(
                     f"SMTP Rate Limit Exceeded (code {refusal_code}): {refusal_msg}",
+                    code=refusal_code,
+                    details=err.recipients
+                ) from err
+            if is_permanent or (refusal_code and 500 <= refusal_code < 600):
+                raise SMTPPermanentError(
+                    f"Permanent Recipient Rejection (code {refusal_code}): {refusal_msg}",
                     code=refusal_code,
                     details=err.recipients
                 ) from err
@@ -294,17 +322,25 @@ class IITDSmtpClient:
             code = resp_err.smtp_code
             msg_str = resp_err.smtp_error.decode("utf-8", errors="replace") if isinstance(resp_err.smtp_error, bytes) else str(resp_err.smtp_error)
             is_rate_limit = (code == 450) or any(k in msg_str.lower() for k in ["rate too high", "rate", "try later", "policy rejection"])
+            is_permanent = (500 <= code < 600)
+            event_type = "EMAIL_DISPATCH_RATE_LIMITED" if is_rate_limit else ("EMAIL_DISPATCH_PERMANENT_ERROR" if is_permanent else "EMAIL_DISPATCH_SMTP_ERROR")
             audit_logger.log_event(
-                event_type="EMAIL_DISPATCH_RATE_LIMITED" if is_rate_limit else "EMAIL_DISPATCH_SMTP_ERROR",
+                event_type=event_type,
                 actor=actor,
                 operator_id=operator_id,
                 entity_type="EMAIL_MESSAGE",
                 entity_id=message_id,
-                details={"recipient": recipient, "subject": subject, "code": code, "error": msg_str}
+                details={"recipient": recipient, "subject": subject, "code": code, "error": msg_str, "is_permanent": is_permanent}
             )
             if is_rate_limit:
                 raise SMTPRateLimitError(
                     f"SMTP Rate Limit Exceeded (code {code}): {msg_str}",
+                    code=code,
+                    details=msg_str
+                ) from resp_err
+            if is_permanent:
+                raise SMTPPermanentError(
+                    f"Permanent SMTP Error (code {code}): {msg_str}",
                     code=code,
                     details=msg_str
                 ) from resp_err
@@ -315,6 +351,31 @@ class IITDSmtpClient:
                     details=msg_str
                 ) from resp_err
             raise
+
+        except (smtplib.SMTPServerDisconnected, smtplib.SMTPDataError, TimeoutError) as drop_err:
+            audit_logger.log_event(
+                event_type="EMAIL_DISPATCH_AMBIGUOUS_DELIVERY",
+                actor=actor,
+                operator_id=operator_id,
+                entity_type="EMAIL_MESSAGE",
+                entity_id=message_id,
+                details={"recipient": recipient, "subject": subject, "error": str(drop_err)}
+            )
+            raise SMTPAmbiguousDeliveryError(
+                f"Ambiguous SMTP Delivery: Connection lost or timed out during transmission: {drop_err}",
+                details={"recipient": recipient, "message_id": message_id, "error": str(drop_err)}
+            ) from drop_err
+
+        except smtplib.SMTPConnectError as conn_err:
+            audit_logger.log_event(
+                event_type="EMAIL_DISPATCH_CONNECT_FAILED",
+                actor=actor,
+                operator_id=operator_id,
+                entity_type="EMAIL_MESSAGE",
+                entity_id=message_id,
+                details={"recipient": recipient, "subject": subject, "error": str(conn_err)}
+            )
+            raise SMTPTransientError(f"SMTP Connection Failed (pre-transmission): {conn_err}", details=str(conn_err)) from conn_err
 
         except Exception as e:
             audit_logger.log_event(

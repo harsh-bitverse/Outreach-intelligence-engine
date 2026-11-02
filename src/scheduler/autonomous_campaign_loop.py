@@ -29,7 +29,14 @@ from src.database.models import OutreachDraft, OutreachQueueItem, Professor
 from src.database.repository import OutreachRepository, compute_durable_professor_id
 from src.database.workbook_sync import DynamicWorkbookSync, WorkbookLockError
 from src.mail.credentials import CredentialManager
-from src.mail.smtp_client import smtp_client, IITDSmtpClient, SMTPRateLimitError, SMTPTransientError
+from src.mail.smtp_client import (
+    smtp_client,
+    IITDSmtpClient,
+    SMTPRateLimitError,
+    SMTPTransientError,
+    SMTPPermanentError,
+    SMTPAmbiguousDeliveryError
+)
 from src.mail.sending_gateway import SendingGateway, sending_gateway
 from src.scheduler.queue_runner import (
     TIME_BLOCK_WINDOWS,
@@ -42,6 +49,21 @@ from src.security.audit_logger import audit_logger
 
 # Authoritative Campaign Start: Monday, November 2, 2026
 CAMPAIGN_START_DATE = date(2026, 11, 2)
+
+
+class CLIQuotaExhaustionError(Exception):
+    """Raised when Antigravity CLI encounters provider-wide quota exhaustion (e.g. 429 / RESOURCE_EXHAUSTED)."""
+    pass
+
+
+class CLIDraftGenerationError(Exception):
+    """Raised when Antigravity CLI fails on a professor draft for retryable reasons (timeout, malformed output)."""
+    pass
+
+
+class DraftValidationError(Exception):
+    """Raised when an AI-generated draft fails academic validation gates."""
+    pass
 
 
 class AntigravityCLIDrafter:
@@ -118,16 +140,23 @@ Output ONLY valid JSON with keys:
             ]
             proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
             if proc.returncode != 0:
+                combined_err = f"{proc.stderr} {proc.stdout}".lower()
                 audit_logger.log_event(
                     event_type="ANTIGRAVITY_CLI_ERROR",
                     actor="ANTIGRAVITY_CLI_DRAFTER",
                     entity_type="CLI_PROCESS",
                     entity_id=full_name,
-                    details={"exit_code": proc.returncode, "stderr": proc.stderr[:300]}
+                    details={"exit_code": proc.returncode, "stderr": proc.stderr[:300], "stdout": proc.stdout[:300]}
                 )
-                return None
+                if any(kw in combined_err for kw in ["resource_exhausted", "429", "quota", "rate limit", "exhausted", "too many requests"]):
+                    raise CLIQuotaExhaustionError(f"Antigravity CLI Quota Exhaustion (code {proc.returncode}): {proc.stderr[:300] or proc.stdout[:300]}")
+                raise CLIDraftGenerationError(f"Antigravity CLI process failed with code {proc.returncode}: {proc.stderr[:300]}")
 
             raw_out = proc.stdout.strip()
+            out_comb = raw_out.lower()
+            if any(kw in out_comb for kw in ["resource_exhausted", "429", "quota exceeded", "rate limit exceeded", "too many requests"]):
+                raise CLIQuotaExhaustionError(f"Antigravity CLI output indicates Quota Exhaustion: {raw_out[:300]}")
+
             json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", raw_out, re.DOTALL)
             if json_match:
                 json_str = json_match.group(1)
@@ -137,9 +166,12 @@ Output ONLY valid JSON with keys:
                 if start != -1 and end != -1:
                     json_str = raw_out[start:end+1]
                 else:
-                    return None
+                    raise CLIDraftGenerationError(f"Antigravity CLI returned malformed non-JSON output: {raw_out[:300]}")
 
-            data = json.loads(json_str)
+            try:
+                data = json.loads(json_str)
+            except Exception as j_err:
+                raise CLIDraftGenerationError(f"Antigravity CLI JSON decoding failed: {j_err}") from j_err
 
             p1 = data.get("p1", "").strip()
             p2 = data.get("p2", "").strip()
@@ -175,6 +207,8 @@ Output ONLY valid JSON with keys:
                 "authoring_engine": "GOOGLE_AI_PRO_ANTIGRAVITY_CLI",
                 "factual_grounding_verified": True
             }
+        except (CLIQuotaExhaustionError, CLIDraftGenerationError):
+            raise
         except Exception as err:
             audit_logger.log_event(
                 event_type="ANTIGRAVITY_CLI_EXCEPTION",
@@ -183,7 +217,7 @@ Output ONLY valid JSON with keys:
                 entity_id=full_name,
                 details={"error": str(err)}
             )
-            return None
+            raise CLIDraftGenerationError(f"Unexpected CLI drafting exception: {err}") from err
 
 
 class AutonomousCampaignLoop:
@@ -316,9 +350,9 @@ class AutonomousCampaignLoop:
                 if r["email"]:
                     suppressed_emails.add(r["email"].strip().lower())
 
-            # Query database sent professors
-            sent_rows = conn.execute("SELECT email FROM professors WHERE outreach_status = 'SENT' AND email IS NOT NULL;").fetchall()
-            for r in sent_rows:
+            # Query database sent, error, and ambiguous professors
+            inactive_rows = conn.execute("SELECT email FROM professors WHERE outreach_status IN ('SENT', 'SIMULATED_SENT', 'ERROR', 'AMBIGUOUS_DELIVERY') AND email IS NOT NULL;").fetchall()
+            for r in inactive_rows:
                 if r["email"]:
                     suppressed_emails.add(r["email"].strip().lower())
 
@@ -374,7 +408,7 @@ class AutonomousCampaignLoop:
             col25 = str(row[24] or "").strip().upper() if len(row) >= 25 else ""
             col29 = str(row[28] or "").strip().upper() if len(row) >= 29 else ""
 
-            if col25 == "SENT" or col29 == "SENT":
+            if col25 in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY") or col29 in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY"):
                 continue
             if col25 == "NOT OUTREACH READY":
                 continue
@@ -416,10 +450,12 @@ class AutonomousCampaignLoop:
         """
         if prefer_cli and self.cli_drafter.is_available():
             cli_draft = self.cli_drafter.generate_draft(prof_row)
-            if cli_draft:
-                is_valid, val_errs = self.validate_draft(cli_draft, prof_row)
-                if is_valid:
-                    return cli_draft
+            if not cli_draft:
+                raise CLIDraftGenerationError(f"Antigravity CLI returned empty draft for {prof_row.get('email')}")
+            is_valid, val_errs = self.validate_draft(cli_draft, prof_row)
+            if not is_valid:
+                raise DraftValidationError(f"Draft validation failed for {prof_row.get('email')}: {val_errs}")
+            return cli_draft
 
         full_name = prof_row["full_name"]
         last_name = full_name.split()[-1] if full_name else "Professor"
@@ -505,7 +541,7 @@ class AutonomousCampaignLoop:
         core_paragraphs = [p1, p2, p3, p4]
         content_word_count = sum(len(p.split()) for p in core_paragraphs)
 
-        return {
+        fallback_draft = {
             "professor_name": full_name,
             "recipient_email": prof_row["email"],
             "subject": subject,
@@ -524,6 +560,10 @@ class AutonomousCampaignLoop:
             ],
             "factual_grounding_verified": True
         }
+        is_valid, val_errs = self.validate_draft(fallback_draft, prof_row)
+        if not is_valid:
+            raise DraftValidationError(f"Fallback draft validation failed for {prof_row.get('email')}: {val_errs}")
+        return fallback_draft
 
     @staticmethod
     def _extract_concise_research_area(research_areas: str, research_overlap: str) -> str:
@@ -710,8 +750,9 @@ class AutonomousCampaignLoop:
             )
             repo.enqueue_outreach(queue_item)
 
-            # Update professor status
-            conn.execute("""
+            # Update professor status (or insert if not present)
+            cur = conn.cursor()
+            cur.execute("""
                 UPDATE professors
                 SET outreach_status = ?,
                     notes = CASE 
@@ -720,16 +761,60 @@ class AutonomousCampaignLoop:
                     END
                 WHERE professor_id = ?;
             """, (status_code, f"{status_code}:{message_id}", f"{status_code}:{message_id}", prof_id))
+            if cur.rowcount == 0:
+                cur.execute("""
+                    INSERT INTO professors (professor_id, university_name, country, full_name, email, outreach_status, notes, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """, (prof_id, prof_row.get("university", ""), prof_row.get("country", ""), prof_row["full_name"], email, status_code, f"{status_code}:{message_id}", now_iso, now_iso))
             conn.commit()
 
-        # 2. Update Excel row in SAME 'Time Blocks & Distribution' sheet
-        excel_updated = self.sync.update_time_blocks_row(
-            email=email,
-            status="SENT",
-            sent_at=now_iso,
-            message_id=message_id,
-            timeout_seconds=5
-        )
+        # 2. Update Excel row in SAME 'Time Blocks & Distribution' sheet with retry policy
+        excel_updated = False
+        excel_attempts = 0
+        max_excel_attempts = 3
+        while excel_attempts < max_excel_attempts and not excel_updated:
+            excel_attempts += 1
+            try:
+                excel_updated = self.sync.update_time_blocks_row(
+                    email=email,
+                    status="SENT",
+                    sent_at=now_iso,
+                    message_id=message_id,
+                    timeout_seconds=5
+                )
+                if excel_updated:
+                    break
+            except Exception as e_err:
+                audit_logger.log_event(
+                    event_type="EXCEL_SYNC_RETRY_ERROR",
+                    actor=actor,
+                    entity_type="WORKBOOK_SYNC",
+                    entity_id=email,
+                    details={"attempt": excel_attempts, "error": str(e_err)}
+                )
+            if not excel_updated and excel_attempts < max_excel_attempts:
+                time.sleep(min(8, 2 ** excel_attempts))
+
+        if not excel_updated:
+            audit_logger.log_event(
+                event_type="EXCEL_SYNC_FAILED_PERSISTED_IN_DB",
+                actor=actor,
+                entity_type="WORKBOOK_SYNC",
+                entity_id=email,
+                details={
+                    "email": email,
+                    "message_id": message_id,
+                    "status": "SENT",
+                    "note": "SMTP delivery succeeded and committed to SQLite, but Excel sync failed after retries. Never retransmit."
+                }
+            )
+            with get_db() as conn:
+                conn.execute("""
+                    UPDATE professors
+                    SET notes = notes || ' | EXCEL_SYNC_PENDING'
+                    WHERE professor_id = ?;
+                """, (prof_id,))
+                conn.commit()
 
         return {
             "success": True,
@@ -744,6 +829,195 @@ class AutonomousCampaignLoop:
             "excel_updated": excel_updated,
             "dry_run": dry_run
         }
+
+    # --------------------------------------------------------------------------
+    # 6.5 Error & Ambiguous Delivery Persistence
+    # --------------------------------------------------------------------------
+    def record_professor_error(
+        self,
+        prof_row: Dict[str, Any],
+        error_category: str,
+        error_message: str,
+        attempts: int = 1
+    ) -> None:
+        """
+        Record a terminal or exhausted failure for a professor.
+        Updates SQLite and the Excel 'Time Blocks & Distribution' worksheet row to ERROR.
+        Logs details for forensic review and allows the scheduler to continue with the next candidate.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        prof_id = compute_durable_professor_id(prof_row["university"], prof_row["full_name"])
+        email = prof_row["email"]
+        note_text = f"ERROR:{error_category}:{error_message} | Attempts:{attempts} | At:{now_iso}"
+
+        # 1. Update SQLite
+        with get_db() as conn:
+            repo = OutreachRepository(conn)
+            cur = conn.cursor()
+            cur.execute("SELECT queue_id FROM outreach_queue WHERE professor_id = ?;", (prof_id,))
+            q_row = cur.fetchone()
+            if q_row:
+                cur.execute("""
+                    UPDATE outreach_queue
+                    SET status = 'ERROR',
+                        attempts = ?,
+                        error_message = ?,
+                        last_attempt_at = ?,
+                        updated_at = ?
+                    WHERE professor_id = ?;
+                """, (attempts, f"{error_category}: {error_message}", now_iso, now_iso, prof_id))
+            else:
+                block_info = TIME_BLOCK_WINDOWS.get(prof_row.get("block_id", "BLOCK_01"), {})
+                q_item = OutreachQueueItem(
+                    queue_id=f"q_{prof_id}",
+                    professor_id=prof_id,
+                    draft_id=f"draft_{prof_id}",
+                    time_block_id=prof_row.get("block_id", "BLOCK_01"),
+                    window_start_ist=block_info.get("start_ist", "01:00"),
+                    window_end_ist=block_info.get("end_ist", "02:00"),
+                    sequence_order=prof_row.get("row_index", 1),
+                    status="ERROR",
+                    attempts=attempts,
+                    last_attempt_at=now_iso,
+                    error_message=f"{error_category}: {error_message}"
+                )
+                repo.enqueue_outreach(q_item)
+
+            cur.execute("""
+                UPDATE professors
+                SET outreach_status = 'ERROR',
+                    notes = CASE
+                        WHEN notes IS NULL OR notes = '' THEN ?
+                        ELSE notes || ' | ' || ?
+                    END,
+                    updated_at = ?
+                WHERE professor_id = ?;
+            """, (note_text, note_text, now_iso, prof_id))
+            if cur.rowcount == 0:
+                cur.execute("""
+                    INSERT INTO professors (professor_id, university_name, country, full_name, email, outreach_status, notes, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 'ERROR', ?, ?, ?);
+                """, (prof_id, prof_row.get("university", ""), prof_row.get("country", ""), prof_row["full_name"], email, note_text, now_iso, now_iso))
+            conn.commit()
+
+        # 2. Update Excel Time Blocks & Distribution row
+        self.sync.update_time_blocks_row(
+            email=email,
+            status="ERROR",
+            sent_at=now_iso,
+            message_id=f"[{error_category}] Attempts:{attempts}",
+            notes=f"[{error_category}] {error_message} (Attempts: {attempts}, Time: {now_iso})",
+            timeout_seconds=5
+        )
+
+        # 3. Log audit event
+        audit_logger.log_event(
+            event_type="PROFESSOR_OUTREACH_ERROR",
+            actor="AUTONOMOUS_SCHEDULER",
+            entity_type="PROFESSOR",
+            entity_id=email,
+            details={
+                "professor_name": prof_row["full_name"],
+                "university": prof_row["university"],
+                "block_id": prof_row.get("block_id"),
+                "category": error_category,
+                "error": error_message,
+                "attempts": attempts,
+                "status": "ERROR"
+            }
+        )
+
+    def record_professor_ambiguous(
+        self,
+        prof_row: Dict[str, Any],
+        error_message: str,
+        attempts: int = 1
+    ) -> None:
+        """
+        Record an ambiguous delivery state for a professor (e.g. connection dropped during DATA transfer).
+        Updates SQLite and Excel to AMBIGUOUS_DELIVERY and strictly prohibits automatic retransmission.
+        """
+        now_iso = datetime.now(timezone.utc).isoformat()
+        prof_id = compute_durable_professor_id(prof_row["university"], prof_row["full_name"])
+        email = prof_row["email"]
+        note_text = f"AMBIGUOUS_DELIVERY:{error_message} | Attempts:{attempts} | At:{now_iso} | MANUAL_RECONCILIATION_REQUIRED"
+
+        # 1. Update SQLite
+        with get_db() as conn:
+            repo = OutreachRepository(conn)
+            cur = conn.cursor()
+            cur.execute("SELECT queue_id FROM outreach_queue WHERE professor_id = ?;", (prof_id,))
+            q_row = cur.fetchone()
+            if q_row:
+                cur.execute("""
+                    UPDATE outreach_queue
+                    SET status = 'AMBIGUOUS_DELIVERY',
+                        attempts = ?,
+                        error_message = ?,
+                        last_attempt_at = ?,
+                        updated_at = ?
+                    WHERE professor_id = ?;
+                """, (attempts, f"AMBIGUOUS_DELIVERY: {error_message}", now_iso, now_iso, prof_id))
+            else:
+                block_info = TIME_BLOCK_WINDOWS.get(prof_row.get("block_id", "BLOCK_01"), {})
+                q_item = OutreachQueueItem(
+                    queue_id=f"q_{prof_id}",
+                    professor_id=prof_id,
+                    draft_id=f"draft_{prof_id}",
+                    time_block_id=prof_row.get("block_id", "BLOCK_01"),
+                    window_start_ist=block_info.get("start_ist", "01:00"),
+                    window_end_ist=block_info.get("end_ist", "02:00"),
+                    sequence_order=prof_row.get("row_index", 1),
+                    status="AMBIGUOUS_DELIVERY",
+                    attempts=attempts,
+                    last_attempt_at=now_iso,
+                    error_message=f"AMBIGUOUS_DELIVERY: {error_message}"
+                )
+                repo.enqueue_outreach(q_item)
+
+            cur.execute("""
+                UPDATE professors
+                SET outreach_status = 'AMBIGUOUS_DELIVERY',
+                    notes = CASE
+                        WHEN notes IS NULL OR notes = '' THEN ?
+                        ELSE notes || ' | ' || ?
+                    END,
+                    updated_at = ?
+                WHERE professor_id = ?;
+            """, (note_text, note_text, now_iso, prof_id))
+            if cur.rowcount == 0:
+                cur.execute("""
+                    INSERT INTO professors (professor_id, university_name, country, full_name, email, outreach_status, notes, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 'AMBIGUOUS_DELIVERY', ?, ?, ?);
+                """, (prof_id, prof_row.get("university", ""), prof_row.get("country", ""), prof_row["full_name"], email, note_text, now_iso, now_iso))
+            conn.commit()
+
+        # 2. Update Excel Time Blocks & Distribution row
+        self.sync.update_time_blocks_row(
+            email=email,
+            status="AMBIGUOUS_DELIVERY",
+            sent_at=now_iso,
+            message_id="[AMBIGUOUS_DELIVERY] RECONCILIATION_REQUIRED",
+            notes=f"[AMBIGUOUS_DELIVERY] {error_message} (Attempts: {attempts}, Time: {now_iso})",
+            timeout_seconds=5
+        )
+
+        # 3. Log audit event
+        audit_logger.log_event(
+            event_type="PROFESSOR_OUTREACH_AMBIGUOUS_DELIVERY",
+            actor="AUTONOMOUS_SCHEDULER",
+            entity_type="PROFESSOR",
+            entity_id=email,
+            details={
+                "professor_name": prof_row["full_name"],
+                "university": prof_row["university"],
+                "block_id": prof_row.get("block_id"),
+                "error": error_message,
+                "attempts": attempts,
+                "status": "AMBIGUOUS_DELIVERY",
+                "action": "AUTOMATIC_RESENDING_PROHIBITED"
+            }
+        )
 
     # --------------------------------------------------------------------------
     # 7. Complete Demonstration Sequence (Deliverable)
@@ -1010,100 +1284,216 @@ class AutonomousCampaignLoop:
                     time.sleep(poll_interval_seconds)
                     continue
 
-                # 5. Generate AI draft
-                print(f"[{now_ist.strftime('%H:%M:%S IST')}] Generating AI draft for {prof['full_name']} ({prof['university']})...")
-                draft = self.generate_ai_draft(prof, prefer_cli=prefer_cli)
-                if not draft:
-                    print(f"  [ERROR] AI draft generation failed for {prof['email']}. Logging and proceeding.")
-                    time.sleep(5)
-                    continue
+                # 5. Process candidate with maximum-three-attempt retry policy
+                prof_attempt = 0
+                max_attempts = settings.MAX_PROFESSOR_RETRY_ATTEMPTS
+                candidate_dispatched = False
+                candidate_completed = False
 
-                # 6. Validate draft
-                is_valid, val_errs = self.validate_draft(draft, prof)
-                if not is_valid:
-                    print(f"  [ERROR] Draft validation rejected for {prof['email']}: {val_errs}. Skipping.")
-                    time.sleep(5)
-                    continue
+                while prof_attempt < max_attempts:
+                    prof_attempt += 1
+                    now_attempt = datetime.now(self.ist_tz)
 
-                # 7. Pre-submission re-check: verify block is STILL active and daily quota not exceeded
-                now_recheck = datetime.now(self.ist_tz)
-                current_active = self.get_active_block(now_recheck)
-                if not current_active or current_active[0] != block_id:
-                    print(f"[{now_recheck.strftime('%H:%M:%S IST')}] Block {block_id} expired midway through batch! Stopping immediately.")
-                    batch_count = 0
-                    current_block_id = None
-                    continue
+                    # Pre-attempt block check: verify active block is STILL active
+                    active_now = self.get_active_block(now_attempt)
+                    if not active_now or active_now[0] != block_id:
+                        print(f"[{now_attempt.strftime('%H:%M:%S IST')}] Block {block_id} window expired during processing! Candidate {prof['email']} preserved as unsent.")
+                        batch_count = 0
+                        current_block_id = None
+                        break
 
-                if self.get_daily_sent_count(today_ist=now_recheck.date(), include_simulated=dry_run) >= settings.DAILY_MAX_OUTREACH:
-                    print(f"[{now_recheck.strftime('%H:%M:%S IST')}] Daily ceiling reached before submission. Stopping for the day.")
-                    break
+                    # Daily limit check: verify daily ceiling not exceeded
+                    daily_sent = self.get_daily_sent_count(today_ist=now_attempt.date(), include_simulated=dry_run)
+                    if daily_sent >= settings.DAILY_MAX_OUTREACH:
+                        print(f"[{now_attempt.strftime('%H:%M:%S IST')}] Daily ceiling of {settings.DAILY_MAX_OUTREACH} reached. Halting outreach for the day.")
+                        break
 
-                # 8. Dispatch & persist with robust rate-limit & error protection
-                try:
-                    res = self.dispatch_and_persist(prof_row=prof, draft=draft, dry_run=dry_run)
-                    batch_count += 1
-                    total_dispatched += 1
-                    print(f"  [+] Dispatched [{batch_count}/{settings.BATCH_SIZE} in batch | {total_dispatched} total] to {res['email']} ({res['status']}) | MsgID: {res['message_id']}")
+                    audit_logger.log_event(
+                        event_type="PROFESSOR_OUTREACH_ATTEMPT_START",
+                        actor="AUTONOMOUS_SCHEDULER",
+                        entity_type="PROFESSOR",
+                        entity_id=prof["email"],
+                        details={
+                            "professor_name": prof["full_name"],
+                            "block_id": block_id,
+                            "attempt": prof_attempt,
+                            "max_attempts": max_attempts
+                        }
+                    )
 
+                    try:
+                        # Step A: AI Draft Generation & Validation
+                        try:
+                            print(f"[{now_attempt.strftime('%H:%M:%S IST')}] [Attempt {prof_attempt}/{max_attempts}] Generating AI draft for {prof['full_name']} ({prof['university']})...")
+                            draft = self.generate_ai_draft(prof, prefer_cli=prefer_cli)
+                        except CLIQuotaExhaustionError as quota_err:
+                            # Quota exhaustion or 429 rate limit
+                            # Account-wide cooldown: pause all sending, do not advance to other recipients, do not burn professor's attempt
+                            prof_attempt -= 1
+                            cooldown_secs = settings.CLI_QUOTA_COOLDOWN_SECONDS
+                            print(f"[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] [CLI QUOTA EXHAUSTED] {quota_err}")
+                            print(f"  Pausing all sending for {cooldown_secs}s ({cooldown_secs // 60}m). Preserving candidate {prof['email']} for resumption.")
+                            audit_logger.log_event(
+                                event_type="CLI_QUOTA_COOLDOWN_ENFORCED",
+                                actor="AUTONOMOUS_SCHEDULER",
+                                entity_type="AI_DRAFTER",
+                                entity_id=prof["email"],
+                                details={"error": str(quota_err), "cooldown_seconds": cooldown_secs}
+                            )
+                            time.sleep(cooldown_secs)
+                            continue
+
+                        except (CLIDraftGenerationError, DraftValidationError) as draft_err:
+                            print(f"  [DRAFT ERROR] Attempt {prof_attempt}/{max_attempts} for {prof['email']} failed: {draft_err}")
+                            audit_logger.log_event(
+                                event_type="PROFESSOR_DRAFT_FAILURE",
+                                actor="AUTONOMOUS_SCHEDULER",
+                                entity_type="AI_DRAFTER",
+                                entity_id=prof["email"],
+                                details={"attempt": prof_attempt, "max_attempts": max_attempts, "error": str(draft_err)}
+                            )
+                            if prof_attempt < max_attempts:
+                                backoff = min(60, (2 ** prof_attempt) * 4)
+                                print(f"  Backing off for {backoff}s before retry {prof_attempt + 1}...")
+                                time.sleep(backoff)
+                                continue
+                            else:
+                                print(f"  [DRAFT EXHAUSTED] All {max_attempts} attempts failed for {prof['email']}. Marking ERROR in SQLite and Excel.")
+                                self.record_professor_error(
+                                    prof_row=prof,
+                                    error_category="AI_DRAFTING_EXHAUSTED",
+                                    error_message=str(draft_err),
+                                    attempts=prof_attempt
+                                )
+                                candidate_completed = True
+                                break
+
+                        # Step B: Pre-submission re-checks right before dispatch
+                        now_pre = datetime.now(self.ist_tz)
+                        active_recheck = self.get_active_block(now_pre)
+                        if not active_recheck or active_recheck[0] != block_id:
+                            print(f"[{now_pre.strftime('%H:%M:%S IST')}] Block {block_id} expired before dispatch! Candidate {prof['email']} held as unsent.")
+                            batch_count = 0
+                            current_block_id = None
+                            break
+
+                        if self.get_daily_sent_count(today_ist=now_pre.date(), include_simulated=dry_run) >= settings.DAILY_MAX_OUTREACH:
+                            print(f"[{now_pre.strftime('%H:%M:%S IST')}] Daily ceiling reached before dispatch.")
+                            break
+
+                        # Step C: Dispatch & Persist
+                        res = self.dispatch_and_persist(prof_row=prof, draft=draft, dry_run=dry_run)
+                        batch_count += 1
+                        total_dispatched += 1
+                        candidate_completed = True
+                        candidate_dispatched = True
+                        print(f"  [+] Dispatched [{batch_count}/{settings.BATCH_SIZE} in batch | {total_dispatched} total] to {res['email']} ({res['status']}) | MsgID: {res['message_id']}")
+                        break
+
+                    except SMTPPermanentError as perm_err:
+                        # Permanent recipient error (invalid address, permanent 5xx rejection): mark ERROR immediately without retries
+                        print(f"  [PERMANENT SMTP ERROR] {perm_err}. Marking ERROR immediately for {prof['email']}.")
+                        self.record_professor_error(
+                            prof_row=prof,
+                            error_category="PERMANENT_SMTP_REJECTION",
+                            error_message=str(perm_err),
+                            attempts=prof_attempt
+                        )
+                        candidate_completed = True
+                        break
+
+                    except SMTPAmbiguousDeliveryError as amb_err:
+                        # Ambiguous delivery (connection dropped / timeout during/after DATA transfer): mark AMBIGUOUS_DELIVERY, never resend
+                        print(f"  [AMBIGUOUS DELIVERY] {amb_err}. Marking AMBIGUOUS_DELIVERY for manual reconciliation. Resending prohibited.")
+                        self.record_professor_ambiguous(
+                            prof_row=prof,
+                            error_message=str(amb_err),
+                            attempts=prof_attempt
+                        )
+                        candidate_completed = True
+                        break
+
+                    except SMTPRateLimitError as rate_err:
+                        # Account-wide rate limit (e.g. 450 4.7.1): pause all sending, do not advance to other recipients, do not burn attempt
+                        prof_attempt -= 1
+                        cooldown_secs = settings.SMTP_RATE_LIMIT_COOLDOWN_SECONDS
+                        print(f"\n[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] [SMTP RATE LIMIT DETECTED] {rate_err}")
+                        print(f"  Account-wide sending paused for {cooldown_secs}s ({cooldown_secs // 60}m). Preserving candidate {prof['email']} as unsent.")
+                        audit_logger.log_event(
+                            event_type="SMTP_RATE_LIMIT_COOLDOWN_ENFORCED",
+                            actor="AUTONOMOUS_SCHEDULER",
+                            entity_type="EMAIL_GATEWAY",
+                            entity_id=prof["block_id"],
+                            details={"recipient": prof["email"], "error": str(rate_err), "cooldown_seconds": cooldown_secs}
+                        )
+                        time.sleep(cooldown_secs)
+                        continue
+
+                    except SMTPTransientError as trans_err:
+                        # Transient SMTP error where transmission definitely did not occur (pre-DATA connection failure, 421/451)
+                        print(f"  [TRANSIENT SMTP ERROR] Attempt {prof_attempt}/{max_attempts} for {prof['email']}: {trans_err}")
+                        audit_logger.log_event(
+                            event_type="SMTP_TRANSIENT_RETRY_ATTEMPT",
+                            actor="AUTONOMOUS_SCHEDULER",
+                            entity_type="EMAIL_GATEWAY",
+                            entity_id=prof["email"],
+                            details={"attempt": prof_attempt, "max_attempts": max_attempts, "error": str(trans_err)}
+                        )
+                        if prof_attempt < max_attempts:
+                            backoff = min(60, (2 ** prof_attempt) * 4)
+                            print(f"  Backing off for {backoff}s before retry {prof_attempt + 1}...")
+                            time.sleep(backoff)
+                            continue
+                        else:
+                            print(f"  [TRANSIENT EXHAUSTED] All {max_attempts} attempts failed for {prof['email']}. Marking ERROR in SQLite and Excel.")
+                            self.record_professor_error(
+                                prof_row=prof,
+                                error_category="TRANSIENT_SMTP_EXHAUSTED",
+                                error_message=str(trans_err),
+                                attempts=prof_attempt
+                            )
+                            candidate_completed = True
+                            break
+
+                    except Exception as unexp_err:
+                        print(f"  [UNEXPECTED ERROR] Attempt {prof_attempt}/{max_attempts} for {prof['email']}: {unexp_err}")
+                        audit_logger.log_event(
+                            event_type="PROFESSOR_UNEXPECTED_ERROR",
+                            actor="AUTONOMOUS_SCHEDULER",
+                            entity_type="EMAIL_GATEWAY",
+                            entity_id=prof["email"],
+                            details={"attempt": prof_attempt, "max_attempts": max_attempts, "error": str(unexp_err)}
+                        )
+                        if prof_attempt < max_attempts:
+                            backoff = min(60, (2 ** prof_attempt) * 4)
+                            time.sleep(backoff)
+                            continue
+                        else:
+                            self.record_professor_error(
+                                prof_row=prof,
+                                error_category="UNEXPECTED_FAILURE_EXHAUSTED",
+                                error_message=str(unexp_err),
+                                attempts=prof_attempt
+                            )
+                            candidate_completed = True
+                            break
+
+                # Post-candidate processing
+                if candidate_dispatched:
                     if max_total and total_dispatched >= max_total:
                         print(f"Reached specified run limit of {max_total}. Stopping.")
                         break
 
-                    # 9. Batch cooling break after 10 messages
+                    # Check batch cooling break (after every BATCH_SIZE messages)
                     if batch_count >= settings.BATCH_SIZE:
                         print(f"[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] Batch of {settings.BATCH_SIZE} complete. Enforcing mandatory {settings.COOLING_BREAK_SECONDS}-second cooling break...")
                         time.sleep(settings.COOLING_BREAK_SECONDS)
                         batch_count = 0
                     else:
                         time.sleep(settings.MIN_INTERVAL_SECONDS_BETWEEN_EMAILS)
-
-                except SMTPRateLimitError as rate_err:
-                    backoff_secs = 900  # 15 minutes backoff for institutional hourly burst quota
-                    print(f"\n[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] [RATE LIMIT DETECTED] {rate_err}")
-                    print(f"  Candidate {prof['email']} preserved as UNSENT. Backing off safely for {backoff_secs // 60} minutes without crashing...")
-                    audit_logger.log_event(
-                        event_type="SMTP_RATE_LIMIT_BACKOFF",
-                        actor="AUTONOMOUS_SCHEDULER",
-                        entity_type="EMAIL_GATEWAY",
-                        entity_id=prof["block_id"],
-                        details={
-                            "recipient": prof["email"],
-                            "error": str(rate_err),
-                            "backoff_seconds": backoff_secs
-                        }
-                    )
-                    time.sleep(backoff_secs)
-                    continue
-
-                except SMTPTransientError as trans_err:
-                    backoff_secs = 120  # 2 minutes for transient network/server glitch
-                    print(f"\n[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] [TRANSIENT SMTP ERROR] {trans_err}")
-                    print(f"  Candidate {prof['email']} preserved as UNSENT. Backing off for {backoff_secs} seconds...")
-                    audit_logger.log_event(
-                        event_type="SMTP_TRANSIENT_BACKOFF",
-                        actor="AUTONOMOUS_SCHEDULER",
-                        entity_type="EMAIL_GATEWAY",
-                        entity_id=prof["block_id"],
-                        details={
-                            "recipient": prof["email"],
-                            "error": str(trans_err),
-                            "backoff_seconds": backoff_secs
-                        }
-                    )
-                    time.sleep(backoff_secs)
-                    continue
-
-                except Exception as dispatch_err:
-                    print(f"\n[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] [DISPATCH ERROR] Unexpected failure for {prof['email']}: {dispatch_err}")
-                    audit_logger.log_event(
-                        event_type="DISPATCH_UNEXPECTED_ERROR",
-                        actor="AUTONOMOUS_SCHEDULER",
-                        entity_type="EMAIL_GATEWAY",
-                        entity_id=prof["block_id"],
-                        details={"recipient": prof["email"], "error": str(dispatch_err)}
-                    )
-                    time.sleep(30)
-                    continue
+                elif candidate_completed:
+                    # Candidate failed (ERROR or AMBIGUOUS_DELIVERY), continue immediately to the next candidate
+                    time.sleep(1)
         finally:
             self.release_scheduler_lock()
 

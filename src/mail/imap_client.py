@@ -7,6 +7,7 @@ Supports read-only mailbox inspection, sent-folder reconciliation, and mock offl
 import email
 import imaplib
 import ssl
+import time
 from typing import Dict, List, Optional, Tuple, Any
 from config.settings import settings
 from src.mail.credentials import CredentialManager
@@ -151,6 +152,37 @@ class IITDImapClient:
             pass
 
         return contacted_recipients
+
+    def append_sent_message(self, raw_message: bytes, mailbox: str = "Sent", internal_date: Optional[float] = None) -> bool:
+        """
+        Append an RFC822 message to the IMAP Sent mailbox.
+        Marks the message as \\Seen so it appears as a standard sent message in Webmail.
+        Does not raise exceptions if IMAP sync fails (non-blocking for SMTP delivery).
+        """
+        user, pwd = CredentialManager.get_credentials()
+        if not user or not pwd:
+            return False
+
+        try:
+            client = imaplib.IMAP4_SSL(self.host, self.port, ssl_context=self.ssl_context, timeout=10)
+            auth_user = user
+            try:
+                client.login(auth_user, pwd)
+            except imaplib.IMAP4.error as err:
+                alt_user = auth_user.split("@")[0] if "@" in auth_user else f"{auth_user}@iitd.ac.in"
+                try:
+                    client.login(alt_user, pwd)
+                    auth_user = alt_user
+                except Exception:
+                    raise err
+
+            date_param = imaplib.Time2Internaldate(internal_date or time.time())
+            target_box = f'"{mailbox}"' if not mailbox.startswith('"') else mailbox
+            status, _ = client.append(target_box, "\\Seen", date_param, raw_message)
+            client.logout()
+            return status == "OK"
+        except Exception:
+            return False
 
     def diagnostic_imap_examine(self, mailbox_name: str = "INBOX") -> Dict[str, Any]:
         """

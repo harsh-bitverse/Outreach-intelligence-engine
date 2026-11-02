@@ -22,6 +22,19 @@ class UnauthorizedDirectInvocationError(Exception):
     pass
 
 
+class SMTPTransientError(Exception):
+    """Raised for transient SMTP errors that can be recovered from via retry or backoff (e.g. 4xx codes)."""
+    def __init__(self, message: str, code: Optional[int] = None, details: Optional[Any] = None):
+        super().__init__(message)
+        self.code = code
+        self.details = details
+
+
+class SMTPRateLimitError(SMTPTransientError):
+    """Raised specifically when SMTP server returns rate-limit or quota rejection (e.g. 450 Sending rate too high)."""
+    pass
+
+
 class IITDSmtpClient:
     """Manages SMTP delivery with IIT Delhi institutional outbound gateway."""
 
@@ -205,13 +218,26 @@ class IITDSmtpClient:
                 envelope_sender = sender if "@" in sender else f"{sender}@iitd.ac.in"
                 server.sendmail(envelope_sender, [recipient], msg.as_string())
 
+            # Mirror to IMAP Sent folder so message is visible in IITD Webmail
+            mirrored_to_imap = False
+            try:
+                from src.mail.imap_client import imap_client
+                mirrored_to_imap = imap_client.append_sent_message(msg.as_bytes())
+            except Exception:
+                pass
+
             audit_logger.log_event(
                 event_type="EMAIL_DISPATCH_LIVE",
                 actor=actor,
                 operator_id=operator_id,
                 entity_type="EMAIL_MESSAGE",
                 entity_id=message_id,
-                details={"recipient": recipient, "subject": subject, "dry_run": False}
+                details={
+                    "recipient": recipient,
+                    "subject": subject,
+                    "dry_run": False,
+                    "mirrored_to_imap": mirrored_to_imap
+                }
             )
 
             return {
@@ -220,8 +246,75 @@ class IITDSmtpClient:
                 "message_id": message_id,
                 "recipient": recipient,
                 "subject": subject,
-                "status": "DELIVERED"
+                "status": "DELIVERED",
+                "mirrored_to_imap": mirrored_to_imap
             }
+
+        except smtplib.SMTPRecipientsRefused as err:
+            is_rate_limit = False
+            refusal_code = None
+            refusal_msg = ""
+            for rcpt, (code, msg_bytes) in err.recipients.items():
+                refusal_code = code
+                msg_str = msg_bytes.decode("utf-8", errors="replace") if isinstance(msg_bytes, bytes) else str(msg_bytes)
+                refusal_msg = msg_str
+                if code == 450 or any(k in msg_str.lower() for k in ["rate too high", "rate", "try later", "policy rejection"]):
+                    is_rate_limit = True
+                    break
+
+            audit_logger.log_event(
+                event_type="EMAIL_DISPATCH_RATE_LIMITED" if is_rate_limit else "EMAIL_DISPATCH_RECIPIENT_REFUSED",
+                actor=actor,
+                operator_id=operator_id,
+                entity_type="EMAIL_MESSAGE",
+                entity_id=message_id,
+                details={
+                    "recipient": recipient,
+                    "subject": subject,
+                    "code": refusal_code,
+                    "message": refusal_msg,
+                    "is_rate_limit": is_rate_limit
+                }
+            )
+            if is_rate_limit:
+                raise SMTPRateLimitError(
+                    f"SMTP Rate Limit Exceeded (code {refusal_code}): {refusal_msg}",
+                    code=refusal_code,
+                    details=err.recipients
+                ) from err
+            if refusal_code and 400 <= refusal_code < 500:
+                raise SMTPTransientError(
+                    f"SMTP Transient Refusal (code {refusal_code}): {refusal_msg}",
+                    code=refusal_code,
+                    details=err.recipients
+                ) from err
+            raise
+
+        except smtplib.SMTPResponseException as resp_err:
+            code = resp_err.smtp_code
+            msg_str = resp_err.smtp_error.decode("utf-8", errors="replace") if isinstance(resp_err.smtp_error, bytes) else str(resp_err.smtp_error)
+            is_rate_limit = (code == 450) or any(k in msg_str.lower() for k in ["rate too high", "rate", "try later", "policy rejection"])
+            audit_logger.log_event(
+                event_type="EMAIL_DISPATCH_RATE_LIMITED" if is_rate_limit else "EMAIL_DISPATCH_SMTP_ERROR",
+                actor=actor,
+                operator_id=operator_id,
+                entity_type="EMAIL_MESSAGE",
+                entity_id=message_id,
+                details={"recipient": recipient, "subject": subject, "code": code, "error": msg_str}
+            )
+            if is_rate_limit:
+                raise SMTPRateLimitError(
+                    f"SMTP Rate Limit Exceeded (code {code}): {msg_str}",
+                    code=code,
+                    details=msg_str
+                ) from resp_err
+            if 400 <= code < 500:
+                raise SMTPTransientError(
+                    f"SMTP Transient Error (code {code}): {msg_str}",
+                    code=code,
+                    details=msg_str
+                ) from resp_err
+            raise
 
         except Exception as e:
             audit_logger.log_event(

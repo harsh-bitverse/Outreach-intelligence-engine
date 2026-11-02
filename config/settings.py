@@ -57,9 +57,9 @@ class Settings(BaseSettings):
     IITD_EMAIL_PASSWORD: Optional[str] = None
 
     # Safety, Sending Controls & Permissions
-    # Production live campaign configured per operator authorization & confirmation.
-    GATEWAY_ENABLED: bool = True
-    DRY_RUN: bool = False
+    # Production live campaign paused during incident diagnosis.
+    GATEWAY_ENABLED: bool = False
+    DRY_RUN: bool = True
     CAMPAIGN_AUTHORIZED: bool = True
     IITD_CSC_APPROVED: bool = True
     EMERGENCY_STOP: bool = False
@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     COOLING_BREAK_SECONDS: int = 60
     MAX_EMAILS_PER_DAY: int = 200
     DAILY_MAX_OUTREACH: int = 200
-    MIN_INTERVAL_SECONDS_BETWEEN_EMAILS: int = 10
+    MIN_INTERVAL_SECONDS_BETWEEN_EMAILS: int = 25
     DISPATCH_WINDOW_MINUTES: int = 60
 
     # Operator Dashboard

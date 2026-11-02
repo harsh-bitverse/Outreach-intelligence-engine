@@ -11,10 +11,12 @@ Configured with:
 """
 
 import argparse
+import os
 import shutil
 import sqlite3
 import sys
 import tempfile
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Tuple
@@ -37,6 +39,47 @@ from src.scheduler.autonomous_campaign_loop import (
 )
 from src.scheduler.queue_runner import TIME_BLOCK_WINDOWS
 from src.security.audit_logger import audit_logger
+
+
+class PersistentTee:
+    """Tees output to both console stream and persistent local log file."""
+    def __init__(self, log_path: Path, stream):
+        self.stream = stream
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        self.file = open(log_path, "a", encoding="utf-8", buffering=1)
+
+    def write(self, message):
+        self.stream.write(message)
+        self.stream.flush()
+        self.file.write(message)
+        self.file.flush()
+
+    def flush(self):
+        self.stream.flush()
+        self.file.flush()
+
+
+def setup_persistent_logging(log_filename: str = "campaign_execution.log") -> Path:
+    """Configures unbuffered persistent dual-stream logging and fatal crash reporting."""
+    log_path = settings.LOGS_DIR / log_filename
+    sys.stdout = PersistentTee(log_path, sys.stdout)
+    sys.stderr = PersistentTee(log_path, sys.stderr)
+
+    def excepthook(exc_type, exc_value, exc_traceback):
+        print("\n" + "!" * 80)
+        print(f"FATAL UNCAUGHT EXCEPTION TERMINATING PROCESS [PID {os.getpid()}]:")
+        traceback.print_exception(exc_type, exc_value, exc_traceback)
+        print("!" * 80 + "\n")
+        audit_logger.log_event(
+            event_type="PROCESS_FATAL_EXCEPTION",
+            actor="SYSTEM_RUNTIME",
+            entity_type="PROCESS",
+            entity_id=str(os.getpid()),
+            details={"type": str(exc_type), "error": str(exc_value)}
+        )
+
+    sys.excepthook = excepthook
+    return log_path
 
 
 def banner(title: str):
@@ -146,6 +189,8 @@ def verify_production_preflight_startup() -> None:
 
 
 def main():
+    log_path = setup_persistent_logging("campaign_execution.log")
+
     parser = argparse.ArgumentParser(description="Session 08 Autonomous Outreach Campaign Runner")
     parser.add_argument("--demo", action="store_true", default=False, help="Run 12-professor batch & cadence validation demonstration")
     parser.add_argument("--continuous", action="store_true", default=False, help="Run continuous 24/7 background campaign loop")
@@ -158,6 +203,11 @@ def main():
     run_demo = args.demo or not args.continuous
 
     banner("SESSION 08: AUTONOMOUS PROFESSOR OUTREACH LAUNCH READINESS")
+    print(f"  Process ID (PID): {os.getpid()} | User: {os.environ.get('USERNAME', 'unknown')}")
+    print(f"  Working Directory: {os.getcwd()}")
+    print(f"  Python Executable: {sys.executable}")
+    print(f"  Invocation Arguments: {' '.join(sys.argv)}")
+    print(f"  Persistent Execution Log: {log_path}")
     print(f"  Applicant: Harshith N (ch1251635@iitd.ac.in) | IIT Delhi")
     print(f"  Target: Summer 2027 Visiting Research Internship")
     print(f"  Campaign Start: {CAMPAIGN_START_DATE.strftime('%A, %B %d, %Y')}")

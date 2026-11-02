@@ -29,7 +29,7 @@ from src.database.models import OutreachDraft, OutreachQueueItem, Professor
 from src.database.repository import OutreachRepository, compute_durable_professor_id
 from src.database.workbook_sync import DynamicWorkbookSync, WorkbookLockError
 from src.mail.credentials import CredentialManager
-from src.mail.smtp_client import smtp_client, IITDSmtpClient
+from src.mail.smtp_client import smtp_client, IITDSmtpClient, SMTPRateLimitError, SMTPTransientError
 from src.mail.sending_gateway import SendingGateway, sending_gateway
 from src.scheduler.queue_runner import (
     TIME_BLOCK_WINDOWS,
@@ -116,7 +116,7 @@ Output ONLY valid JSON with keys:
                 "--disable-slash-commands",
                 "--print", prompt
             ]
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
             if proc.returncode != 0:
                 audit_logger.log_event(
                     event_type="ANTIGRAVITY_CLI_ERROR",
@@ -583,7 +583,8 @@ class AutonomousCampaignLoop:
 
         # 5. Subject Line Check
         subj = draft["subject"]
-        if not subj.startswith("Summer 2027 Research Internship — ") or not subj.endswith(" | IIT Delhi"):
+        subj_pattern = r"^Summer 2027 Research Internship\s*[\u2014\u2013\-—–]\s*.+\s*\|\s*IIT Delhi$"
+        if not re.match(subj_pattern, subj):
             errors.append(f"SUBJECT_FORMAT_INVALID: Subject '{subj}' violates required structure")
 
         return len(errors) == 0, errors
@@ -1037,23 +1038,72 @@ class AutonomousCampaignLoop:
                     print(f"[{now_recheck.strftime('%H:%M:%S IST')}] Daily ceiling reached before submission. Stopping for the day.")
                     break
 
-                # 8. Dispatch & persist
-                res = self.dispatch_and_persist(prof_row=prof, draft=draft, dry_run=dry_run)
-                batch_count += 1
-                total_dispatched += 1
-                print(f"  [+] Dispatched [{batch_count}/{settings.BATCH_SIZE} in batch | {total_dispatched} total] to {res['email']} ({res['status']}) | MsgID: {res['message_id']}")
+                # 8. Dispatch & persist with robust rate-limit & error protection
+                try:
+                    res = self.dispatch_and_persist(prof_row=prof, draft=draft, dry_run=dry_run)
+                    batch_count += 1
+                    total_dispatched += 1
+                    print(f"  [+] Dispatched [{batch_count}/{settings.BATCH_SIZE} in batch | {total_dispatched} total] to {res['email']} ({res['status']}) | MsgID: {res['message_id']}")
 
-                if max_total and total_dispatched >= max_total:
-                    print(f"Reached specified run limit of {max_total}. Stopping.")
-                    break
+                    if max_total and total_dispatched >= max_total:
+                        print(f"Reached specified run limit of {max_total}. Stopping.")
+                        break
 
-                # 9. Batch cooling break after 10 messages
-                if batch_count >= settings.BATCH_SIZE:
-                    print(f"[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] Batch of {settings.BATCH_SIZE} complete. Enforcing mandatory {settings.COOLING_BREAK_SECONDS}-second cooling break...")
-                    time.sleep(settings.COOLING_BREAK_SECONDS)
-                    batch_count = 0
-                else:
-                    time.sleep(settings.MIN_INTERVAL_SECONDS_BETWEEN_EMAILS)
+                    # 9. Batch cooling break after 10 messages
+                    if batch_count >= settings.BATCH_SIZE:
+                        print(f"[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] Batch of {settings.BATCH_SIZE} complete. Enforcing mandatory {settings.COOLING_BREAK_SECONDS}-second cooling break...")
+                        time.sleep(settings.COOLING_BREAK_SECONDS)
+                        batch_count = 0
+                    else:
+                        time.sleep(settings.MIN_INTERVAL_SECONDS_BETWEEN_EMAILS)
+
+                except SMTPRateLimitError as rate_err:
+                    backoff_secs = 900  # 15 minutes backoff for institutional hourly burst quota
+                    print(f"\n[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] [RATE LIMIT DETECTED] {rate_err}")
+                    print(f"  Candidate {prof['email']} preserved as UNSENT. Backing off safely for {backoff_secs // 60} minutes without crashing...")
+                    audit_logger.log_event(
+                        event_type="SMTP_RATE_LIMIT_BACKOFF",
+                        actor="AUTONOMOUS_SCHEDULER",
+                        entity_type="EMAIL_GATEWAY",
+                        entity_id=prof["block_id"],
+                        details={
+                            "recipient": prof["email"],
+                            "error": str(rate_err),
+                            "backoff_seconds": backoff_secs
+                        }
+                    )
+                    time.sleep(backoff_secs)
+                    continue
+
+                except SMTPTransientError as trans_err:
+                    backoff_secs = 120  # 2 minutes for transient network/server glitch
+                    print(f"\n[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] [TRANSIENT SMTP ERROR] {trans_err}")
+                    print(f"  Candidate {prof['email']} preserved as UNSENT. Backing off for {backoff_secs} seconds...")
+                    audit_logger.log_event(
+                        event_type="SMTP_TRANSIENT_BACKOFF",
+                        actor="AUTONOMOUS_SCHEDULER",
+                        entity_type="EMAIL_GATEWAY",
+                        entity_id=prof["block_id"],
+                        details={
+                            "recipient": prof["email"],
+                            "error": str(trans_err),
+                            "backoff_seconds": backoff_secs
+                        }
+                    )
+                    time.sleep(backoff_secs)
+                    continue
+
+                except Exception as dispatch_err:
+                    print(f"\n[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] [DISPATCH ERROR] Unexpected failure for {prof['email']}: {dispatch_err}")
+                    audit_logger.log_event(
+                        event_type="DISPATCH_UNEXPECTED_ERROR",
+                        actor="AUTONOMOUS_SCHEDULER",
+                        entity_type="EMAIL_GATEWAY",
+                        entity_id=prof["block_id"],
+                        details={"recipient": prof["email"], "error": str(dispatch_err)}
+                    )
+                    time.sleep(30)
+                    continue
         finally:
             self.release_scheduler_lock()
 

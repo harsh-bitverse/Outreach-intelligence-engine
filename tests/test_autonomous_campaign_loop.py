@@ -68,14 +68,15 @@ def test_is_local_working_day(test_loop):
 
 def test_find_eligible_professors_in_block(test_loop):
     """Verify direct traversal of Time Blocks & Distribution sheet finds candidates in order."""
-    candidates = test_loop.find_eligible_professors_in_block(block_id="BLOCK_01", limit=7)
+    # Verify candidates can be discovered in an uncontacted block (BLOCK_03)
+    candidates = test_loop.find_eligible_professors_in_block(block_id="BLOCK_03", limit=7)
     assert len(candidates) >= 3
 
     # Check first candidate in sequence
     c1 = candidates[0]
-    assert c1["full_name"] in ["Brent Young", "Richard Clarke"]
-    assert c1["university"] == "The University of Auckland"
-    assert c1["block_id"] == "BLOCK_01"
+    assert c1["full_name"] == "George Zhao"
+    assert c1["university"] == "The University of Queensland"
+    assert c1["block_id"] == "BLOCK_03"
     assert len(c1["research_areas"]) > 0
 
 
@@ -152,18 +153,18 @@ def test_update_time_blocks_row(temp_workbook):
 def test_demonstration_sequence(test_loop):
     """
     Verify complete simulated sequence:
-    1. Processes at least 3 professors in BLOCK_01.
+    1. Processes at least 3 professors in BLOCK_03.
     2. Updates Excel status and SQLite.
-    3. Demonstrates automatic resumption after block transition to BLOCK_02.
+    3. Demonstrates automatic resumption after block transition to BLOCK_06.
     """
     res = test_loop.run_simulation_sequence(
-        block_id="BLOCK_01",
-        next_block_id="BLOCK_02",
+        block_id="BLOCK_03",
+        next_block_id="BLOCK_06",
         count=3,
         dry_run=True
     )
 
-    assert res["initial_block"] == "BLOCK_01"
+    assert res["initial_block"] == "BLOCK_03"
     assert len(res["professors_processed"]) >= 3
 
     for p in res["professors_processed"]:
@@ -173,9 +174,9 @@ def test_demonstration_sequence(test_loop):
 
     # Block transition resumption verified
     assert res["block_transition_demonstrated"] is True
-    assert res["resumed_block"] == "BLOCK_02"
+    assert res["resumed_block"] == "BLOCK_06"
     assert res["resumed_professor"] is not None
-    assert res["resumed_professor"]["block_id"] == "BLOCK_02"
+    assert res["resumed_professor"]["block_id"] == "BLOCK_06"
     assert res["resumed_professor"]["excel_updated"] is True
 
 

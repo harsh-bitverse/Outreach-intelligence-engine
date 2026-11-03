@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     IITD_EMAIL_PASSWORD: Optional[str] = None
 
     # Safety, Sending Controls & Permissions
-    # Production live campaign paused during incident diagnosis.
+    # Production live campaign paused during Session 11 bounce reconciliation.
     GATEWAY_ENABLED: bool = False
     DRY_RUN: bool = True
     CAMPAIGN_AUTHORIZED: bool = True
@@ -67,7 +67,7 @@ class Settings(BaseSettings):
     # Rate Limiting & Time-Block Cadence
     MAX_EMAILS_PER_BATCH: int = 10
     BATCH_SIZE: int = 10
-    COOLING_BREAK_SECONDS: int = 60
+    COOLING_BREAK_SECONDS: int = 300
     MAX_EMAILS_PER_DAY: int = 200
     DAILY_MAX_OUTREACH: int = 200
     MIN_INTERVAL_SECONDS_BETWEEN_EMAILS: int = 25

@@ -27,6 +27,28 @@ def temp_workbook():
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir) / "test_prof_db.xlsx"
         shutil.copy2(settings.MASTER_WORKBOOK_PATH, tmp_path)
+        
+        # Reset statuses in test workbook copy so tests have clean uncontacted candidates
+        wb = openpyxl.load_workbook(str(tmp_path))
+        for sname in wb.sheetnames:
+            ws = wb[sname]
+            if "time blocks" in sname.lower():
+                for r in range(1, ws.max_row + 1):
+                    val = str(ws.cell(r, 8).value or "").strip().lower()
+                    if len(val) > 3 and "@" in val and r <= 150:
+                        ws.cell(r, 9).value = "VERIFIED"
+                        ws.cell(r, 25).value = "READY"
+                        ws.cell(r, 29).value = ""
+                        ws.cell(r, 30).value = ""
+                        ws.cell(r, 31).value = ""
+            elif "professor" in sname.lower():
+                for r in range(2, ws.max_row + 1):
+                    val = str(ws.cell(r, 8).value or "").strip().lower()
+                    if len(val) > 3 and "@" in val and r <= 150:
+                        ws.cell(r, 9).value = "VERIFIED"
+                        ws.cell(r, 19).value = ""
+        wb.save(str(tmp_path))
+        wb.close()
         yield tmp_path
 
 
@@ -36,15 +58,25 @@ def temp_db(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_db_path = Path(tmpdir) / "test_outreach_engine.db"
         shutil.copy2(settings.SQLITE_DB_PATH, tmp_db_path)
+        
+        # Reset test candidates in temporary test DB
+        import sqlite3
+        conn = sqlite3.connect(tmp_db_path)
+        conn.execute("UPDATE professors SET outreach_status = 'AWAITING_DRAFT', email_verification_status = 'VERIFIED';")
+        conn.execute("DELETE FROM outreach_queue;")
+        conn.commit()
+        conn.close()
+
         monkeypatch.setattr(settings, "SQLITE_DB_PATH", tmp_db_path)
         yield tmp_db_path
 
 
 @pytest.fixture
-def test_loop(temp_workbook, temp_db):
+def test_loop(temp_workbook, temp_db, tmp_path):
     """Instantiate AutonomousCampaignLoop pointing to the test workbook."""
     sync = DynamicWorkbookSync(workbook_path=temp_workbook)
-    return AutonomousCampaignLoop(workbook_path=temp_workbook, sync=sync)
+    lock_file = tmp_path / "test_scheduler.lock"
+    return AutonomousCampaignLoop(workbook_path=temp_workbook, sync=sync, lock_path=lock_file)
 
 
 def test_campaign_start_date():
@@ -227,7 +259,7 @@ def test_session08_cadence_and_batch_demonstration(test_loop):
     """
     assert settings.DAILY_MAX_OUTREACH == 200
     assert settings.BATCH_SIZE == 10
-    assert settings.COOLING_BREAK_SECONDS == 60
+    assert settings.COOLING_BREAK_SECONDS == 300
 
     demo_res = test_loop.run_batch_demonstration(
         count=12,
@@ -241,7 +273,7 @@ def test_session08_cadence_and_batch_demonstration(test_loop):
     assert demo_res["batch_1_count"] == 10
     assert demo_res["batch_2_count"] == 2
     assert demo_res["cooling_break_enforced"] is True
-    assert demo_res["cooling_break_duration"] == 60
+    assert demo_res["cooling_break_duration"] == 300
     assert "BLOCK_01 -> BLOCK_02" in demo_res["block_transitions"]
     assert demo_res["daily_limit_enforced"] is True
 

@@ -540,28 +540,30 @@ def test_failed_professor_does_not_block_subsequent_candidates(isolated_loop):
 
 
 # ------------------------------------------------------------------------------
-# Test 9: Complete suppression of 37 previously sent professors
+# Test 9: Complete suppression of previously sent professors
 # ------------------------------------------------------------------------------
-def test_suppression_of_37_previously_sent_professors(isolated_loop):
+def test_suppression_of_previously_sent_professors(isolated_loop):
     """
-    Verify that all 37 professors successfully contacted on Monday, November 2, 2026
+    Verify that all professors successfully contacted (status = 'SENT')
     are suppressed by find_eligible_professors_in_block across BLOCK_01 and BLOCK_02,
     preventing any duplicate transmissions.
     """
     with get_db() as conn:
         sent_emails = {r[0].lower().strip() for r in conn.execute("SELECT email FROM professors WHERE outreach_status = 'SENT';").fetchall() if r[0]}
 
-    assert len(sent_emails) == 37, f"Expected exactly 37 sent records, found {len(sent_emails)}"
+    assert len(sent_emails) >= 37, f"Expected at least 37 sent records, found {len(sent_emails)}"
 
     # BLOCK_01 candidates: all were sent, so 0 eligible candidates should be returned
     b1_candidates = isolated_loop.find_eligible_professors_in_block(block_id="BLOCK_01", limit=100)
     for c in b1_candidates:
         assert c["email"].lower() not in sent_emails, f"Candidate {c['email']} was already sent but returned by find_eligible_professors_in_block"
 
-    # BLOCK_02 candidates: verified sent are suppressed; first eligible is Hanna Kurniawati (Row 48)
+    # BLOCK_02 candidates: verified sent are suppressed; unsent candidates returned
     b2_candidates = isolated_loop.find_eligible_professors_in_block(block_id="BLOCK_02", limit=10)
     assert len(b2_candidates) > 0
-    assert b2_candidates[0]["full_name"] == "Hanna Kurniawati"
+    # Hanna Kurniawati was sent during Monday launch, so must be suppressed
+    b2_names = [c["full_name"] for c in b2_candidates]
+    assert "Hanna Kurniawati" not in b2_names
     for c in b2_candidates:
         assert c["email"].lower() not in sent_emails, f"Candidate {c['email']} was already sent but returned by find_eligible_professors_in_block"
 

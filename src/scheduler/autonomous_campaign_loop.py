@@ -232,7 +232,8 @@ class AutonomousCampaignLoop:
         gateway: Optional[SendingGateway] = None,
         smtp: Optional[IITDSmtpClient] = None,
         cli_drafter: Optional[AntigravityCLIDrafter] = None,
-        ist_tz: Optional[ZoneInfo] = None
+        ist_tz: Optional[ZoneInfo] = None,
+        lock_path: Optional[Path] = None
     ):
         self.workbook_path = Path(workbook_path or settings.MASTER_WORKBOOK_PATH)
         self.sync = sync or DynamicWorkbookSync(self.workbook_path)
@@ -240,7 +241,10 @@ class AutonomousCampaignLoop:
         self.smtp = smtp or smtp_client
         self.cli_drafter = cli_drafter or AntigravityCLIDrafter()
         self.ist_tz = ist_tz or ZoneInfo("Asia/Kolkata")
-        self.lock_path = SCHEDULER_LOCK_PATH
+        self.lock_path = lock_path or SCHEDULER_LOCK_PATH
+        self.last_bounce_check: float = 0.0
+        from src.mail.bounce_monitor import IMAPBounceMonitor
+        self.bounce_monitor = IMAPBounceMonitor(workbook_path=self.workbook_path)
 
     # --------------------------------------------------------------------------
     # 1. Lock Management & Single-Instance Safety
@@ -350,8 +354,14 @@ class AutonomousCampaignLoop:
                 if r["email"]:
                     suppressed_emails.add(r["email"].strip().lower())
 
-            # Query database sent, error, and ambiguous professors
-            inactive_rows = conn.execute("SELECT email FROM professors WHERE outreach_status IN ('SENT', 'SIMULATED_SENT', 'ERROR', 'AMBIGUOUS_DELIVERY') AND email IS NOT NULL;").fetchall()
+            # Query database sent, error, ambiguous, and bounced professors or invalid email verification
+            inactive_rows = conn.execute("""
+                SELECT email FROM professors 
+                WHERE (
+                    outreach_status IN ('SENT', 'SIMULATED_SENT', 'ERROR', 'AMBIGUOUS_DELIVERY', 'BOUNCED_INVALID_ADDRESS', 'BOUNCED_PERMANENT_OTHER')
+                    OR email_verification_status = 'INVALID'
+                ) AND email IS NOT NULL;
+            """).fetchall()
             for r in inactive_rows:
                 if r["email"]:
                     suppressed_emails.add(r["email"].strip().lower())
@@ -404,11 +414,14 @@ class AutonomousCampaignLoop:
             if norm_email in excluded_set or norm_email in suppressed_emails or norm_email.endswith("@iitd.ac.in"):
                 continue
 
-            # Check eligibility in column 25 and status in column 29
+            # Check eligibility in column 25, status in column 29, and email verification in column 9
+            col9 = str(row[8] or "").strip().upper() if len(row) >= 9 else ""
             col25 = str(row[24] or "").strip().upper() if len(row) >= 25 else ""
             col29 = str(row[28] or "").strip().upper() if len(row) >= 29 else ""
 
-            if col25 in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY") or col29 in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY"):
+            if col9 == "INVALID":
+                continue
+            if any(s in col25 for s in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY", "BOUNCED", "INVALID")) or any(s in col29 for s in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY", "BOUNCED", "INVALID")):
                 continue
             if col25 == "NOT OUTREACH READY":
                 continue
@@ -1094,13 +1107,13 @@ class AutonomousCampaignLoop:
         dry_run: bool = True,
         prefer_cli: bool = False,
         simulated_cooling: bool = True,
-        cooling_seconds: int = 60
+        cooling_seconds: int = 300
     ) -> Dict[str, Any]:
         """
-        Session 08 Comprehensive Validation Demonstration:
+        Session 08/11 Comprehensive Validation Demonstration:
         1. Traverses at least 12 consecutive eligible records across blocks (BLOCK_01 -> BLOCK_02).
         2. Correct 10-email batch handling (Batch 1: 10 emails).
-        3. Enforces the mandatory 60-second break between batches.
+        3. Enforces the mandatory 300-second (5-minute) break between batches.
         4. Resumes with subsequent professors (Batch 2: remaining 2 emails).
         5. Demonstrates daily-limit enforcement at exactly 200.
         6. Verifies active-window transition and mid-batch block termination handling.
@@ -1237,6 +1250,17 @@ class AutonomousCampaignLoop:
 
             while True:
                 now_ist = datetime.now(self.ist_tz)
+
+                # 0. Periodic lightweight bounce check (every 1800s / 30m in live mode, idempotent, durable checkpoint)
+                now_ts = time.time()
+                if not dry_run and (now_ts - self.last_bounce_check) >= 1800:
+                    self.last_bounce_check = now_ts
+                    try:
+                        bounce_check = self.bounce_monitor.check_for_new_bounces()
+                        if bounce_check.get("new_dsns", 0) > 0:
+                            print(f"[{now_ist.strftime('%H:%M:%S IST')}] IMAP Bounce Monitor reconciled {bounce_check['new_dsns']} delivery failure notification(s).")
+                    except Exception as bm_err:
+                        logger.debug(f"Non-fatal bounce monitor check error: {bm_err}")
 
                 # 1. Daily sending limit check (Resets at Midnight IST)
                 daily_sent = self.get_daily_sent_count(today_ist=now_ist.date(), include_simulated=dry_run)

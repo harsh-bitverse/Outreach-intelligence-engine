@@ -65,8 +65,10 @@ CREATE TABLE IF NOT EXISTS opportunities (
     application_deadline TEXT,
     qualification_score REAL DEFAULT 0.0,
     score_breakdown TEXT, -- JSON dict of category scores
+    priority_tier TEXT DEFAULT 'NEEDS_VERIFICATION',
     discovery_status TEXT DEFAULT 'DISCOVERED',
     application_status TEXT DEFAULT 'NOT_APPLIED',
+    is_confirmed_opening INTEGER DEFAULT 1,
     next_action TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -122,6 +124,16 @@ def apply_opportunity_migrations(conn: sqlite3.Connection) -> Dict[str, Any]:
         WHERE type='table' AND name IN ('organizations', 'opportunities', 'discovery_checkpoints', 'discovery_runs');
     """)
     tables = [row[0] for row in cursor.fetchall()]
+
+    # Ensure backward-compatible column migration
+    if "opportunities" in tables:
+        cursor.execute("PRAGMA table_info(opportunities);")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "priority_tier" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN priority_tier TEXT DEFAULT 'NEEDS_VERIFICATION';")
+        if "is_confirmed_opening" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN is_confirmed_opening INTEGER DEFAULT 1;")
+        conn.commit()
 
     logger.info(f"Opportunity schema migration applied successfully. Tables verified: {tables}")
     return {

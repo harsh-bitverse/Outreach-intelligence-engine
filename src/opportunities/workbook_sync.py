@@ -47,7 +47,8 @@ class OpportunityWorkbookSync:
         "Companies & Industrial R&D",
         "Institutional & National Labs",
         "Unified Outreach Queue",
-        "Application Tracker"
+        "Application Tracker",
+        "Unified Outreach Schedule"
     ]
 
     HEADER_FILL = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")  # Navy
@@ -161,6 +162,17 @@ class OpportunityWorkbookSync:
                 self._format_header_row(ws, headers)
                 created_sheets.append("Application Tracker")
 
+            # 6. Unified Outreach Schedule Sheet
+            if "Unified Outreach Schedule" not in wb.sheetnames:
+                ws = wb.create_sheet(title="Unified Outreach Schedule")
+                headers = [
+                    "Schedule ID", "Priority Tier", "Category", "Organization", "Role Title",
+                    "Channel", "Assigned Block", "Region", "IST Dispatch Window",
+                    "Score", "Recipient / Portal", "Deadline", "Status", "Next Action"
+                ]
+                self._format_header_row(ws, headers)
+                created_sheets.append("Unified Outreach Schedule")
+
             # Save atomically
             temp_path = self.workbook_path.with_suffix(f".tmp_sync_{os.getpid()}.xlsx")
             wb.save(str(temp_path))
@@ -239,6 +251,60 @@ class OpportunityWorkbookSync:
             shutil.move(str(temp_path), str(self.workbook_path))
 
             return counts
+        finally:
+            self.release_lock()
+
+    def sync_unified_schedule(self, schedule_records: List[Dict[str, Any]]) -> int:
+        """
+        Synchronizes records to the development Unified Outreach Schedule sheet.
+        """
+        self.acquire_lock()
+        try:
+            self.create_backup()
+            wb = openpyxl.load_workbook(str(self.workbook_path))
+            if "Unified Outreach Schedule" not in wb.sheetnames:
+                ws = wb.create_sheet(title="Unified Outreach Schedule")
+                headers = [
+                    "Schedule ID", "Priority Tier", "Category", "Organization", "Role Title",
+                    "Channel", "Assigned Block", "Region", "IST Dispatch Window",
+                    "Score", "Recipient / Portal", "Deadline", "Status", "Next Action"
+                ]
+                self._format_header_row(ws, headers)
+            else:
+                ws = wb["Unified Outreach Schedule"]
+
+            # Clear existing data rows (keep header row 1)
+            if ws.max_row > 1:
+                ws.delete_rows(2, ws.max_row - 1)
+
+            count = 0
+            for rec in schedule_records:
+                row_idx = ws.max_row + 1
+                values = [
+                    rec.get("schedule_id", f"sched_{count+1}"),
+                    rec.get("priority_tier", "PROMISING"),
+                    rec.get("category", "STARTUP"),
+                    rec.get("organization_name", ""),
+                    rec.get("role_title", ""),
+                    rec.get("channel", "EMAIL_DISPATCH"),
+                    rec.get("assigned_block_id", "BLOCK_DOMESTIC_IN"),
+                    rec.get("region_name", "India Domestic"),
+                    rec.get("ist_window", "08:00 - 09:30 IST"),
+                    rec.get("qualification_score", 0.0),
+                    rec.get("contact_recipient", ""),
+                    rec.get("deadline", "Rolling"),
+                    rec.get("status", "QUEUED_FOR_REVIEW"),
+                    rec.get("next_action", "")
+                ]
+                self._write_row(ws, row_idx, values)
+                count += 1
+
+            # Save atomically
+            temp_path = self.workbook_path.with_suffix(f".tmp_sync_{os.getpid()}.xlsx")
+            wb.save(str(temp_path))
+            wb.close()
+            shutil.move(str(temp_path), str(self.workbook_path))
+            return count
         finally:
             self.release_lock()
 

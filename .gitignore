@@ -35,6 +35,7 @@ data/backups/
 
 # Private User Documents & CVs
 data/private/
+data/development/
 *.pdf
 !docs/*.pdf
 

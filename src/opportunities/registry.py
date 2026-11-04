@@ -291,7 +291,7 @@ class SourceRegistry:
     TRUSTED_TLDS: Tuple[str, ...] = (
         ".edu", ".ac.uk", ".gov", ".mil", ".org", ".int",
         ".io", ".ai", ".tech", ".dev", ".systems", ".app",
-        ".com", ".co", ".in", ".co.in", ".net",
+        ".com", ".co", ".in", ".co.in", ".net", ".space", ".company", ".xyz",
         ".ch", ".de", ".fr", ".jp", ".ca", ".nl", ".se", ".no", ".dk", ".sg", ".au", ".uk", ".google", ".cern"
     )
 

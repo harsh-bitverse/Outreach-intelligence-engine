@@ -37,6 +37,7 @@ from src.opportunities.models import (
 )
 from src.opportunities.repository import OpportunityRepository
 from src.opportunities.workbook_sync import OpportunityWorkbookSync
+from src.opportunities.scheduling import OpportunityScheduler
 from src.security.audit_logger import audit_logger
 
 logger = logging.getLogger(__name__)
@@ -147,6 +148,11 @@ class OpportunityDiscoveryWorker:
                 sync_stats = self.workbook_sync.sync_opportunities(qualified_opps, orgs_by_id)
                 results["workbook_sync"] = sync_stats
 
+                # Also generate and synchronize the Unified Outreach Schedule
+                schedule_records = OpportunityScheduler.generate_unified_schedule(qualified_opps, orgs_by_id)
+                sched_count = self.workbook_sync.sync_unified_schedule(schedule_records)
+                results["unified_schedule_count"] = sched_count
+
             sweep_end = datetime.now(timezone.utc)
             results["completed_at"] = sweep_end.isoformat()
             results["duration_seconds"] = round((sweep_end - sweep_start).total_seconds(), 2)
@@ -164,6 +170,54 @@ class OpportunityDiscoveryWorker:
             )
             return results
 
+        finally:
+            self.release_lock()
+
+    def run_adapter_sweep(self, adapter_name: str, limit: int = 150) -> Dict[str, Any]:
+        """
+        Execute discovery for a specific adapter (e.g. StartupAdapter).
+        """
+        self.acquire_lock()
+        sweep_start = datetime.now(timezone.utc)
+        target_adapter = next((a for a in self.adapters if a.adapter_name == adapter_name), None)
+        if not target_adapter:
+            self.release_lock()
+            raise ValueError(f"Adapter '{adapter_name}' not registered in discovery worker")
+
+        results: Dict[str, Any] = {
+            "adapter_name": adapter_name,
+            "started_at": sweep_start.isoformat(),
+            "opportunities_found": 0,
+            "opportunities_qualified": 0
+        }
+
+        try:
+            run = target_adapter.run_discovery_cycle(self.repo, limit=limit)
+            results["run"] = run.to_dict()
+            results["opportunities_found"] = run.opportunities_found
+            results["opportunities_qualified"] = run.opportunities_qualified
+
+            # Sync with Workbook
+            qualified_opps = self.repo.list_opportunities(min_score=50.0, limit=200)
+            orgs_by_id: Dict[str, Organization] = {}
+            for opp in qualified_opps:
+                if opp.organization_id not in orgs_by_id:
+                    org = self.repo.get_organization(opp.organization_id)
+                    if org:
+                        orgs_by_id[opp.organization_id] = org
+
+            if self.workbook_sync:
+                self.workbook_sync.initialize_opportunity_sheets()
+                sync_stats = self.workbook_sync.sync_opportunities(qualified_opps, orgs_by_id)
+                results["workbook_sync"] = sync_stats
+                schedule_records = OpportunityScheduler.generate_unified_schedule(qualified_opps, orgs_by_id)
+                sched_count = self.workbook_sync.sync_unified_schedule(schedule_records)
+                results["unified_schedule_count"] = sched_count
+
+            sweep_end = datetime.now(timezone.utc)
+            results["completed_at"] = sweep_end.isoformat()
+            results["duration_seconds"] = round((sweep_end - sweep_start).total_seconds(), 2)
+            return results
         finally:
             self.release_lock()
 

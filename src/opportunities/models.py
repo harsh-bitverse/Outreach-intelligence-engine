@@ -45,6 +45,14 @@ class DiscoveryStatus(str, Enum):
     DISQUALIFIED = "DISQUALIFIED"
 
 
+class PriorityTier(str, Enum):
+    HIGH_PRIORITY = "HIGH_PRIORITY"
+    PROMISING = "PROMISING"
+    NEEDS_VERIFICATION = "NEEDS_VERIFICATION"
+    INELIGIBLE = "INELIGIBLE"
+    REJECTED = "REJECTED"
+
+
 class ApplicationStatus(str, Enum):
     NOT_APPLIED = "NOT_APPLIED"
     DRAFTING = "DRAFTING"
@@ -130,8 +138,10 @@ class Opportunity:
     application_deadline: Optional[str] = None
     qualification_score: float = 0.0
     score_breakdown: Optional[QualificationBreakdown] = None
+    priority_tier: Optional[str] = PriorityTier.NEEDS_VERIFICATION.value
     discovery_status: str = DiscoveryStatus.DISCOVERED.value
     application_status: str = ApplicationStatus.NOT_APPLIED.value
+    is_confirmed_opening: bool = True
     next_action: Optional[str] = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())

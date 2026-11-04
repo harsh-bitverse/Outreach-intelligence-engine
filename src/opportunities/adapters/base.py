@@ -136,6 +136,13 @@ class BaseOpportunityAdapter(ABC):
 
             # Update checkpoint
             checkpoint.items_discovered_count += run.opportunities_qualified
+            current_cursor = 0
+            if checkpoint.cursor_or_token:
+                try:
+                    current_cursor = int(checkpoint.cursor_or_token)
+                except ValueError:
+                    current_cursor = 0
+            checkpoint.cursor_or_token = str(current_cursor + len(raw_items))
             checkpoint.status = "SUCCESS"
             checkpoint.last_queried_at = datetime.now(timezone.utc).isoformat()
             repo.save_checkpoint(checkpoint)

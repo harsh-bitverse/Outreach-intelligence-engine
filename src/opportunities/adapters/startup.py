@@ -1,9 +1,10 @@
 """
 Opportunity Intelligence Engine: Technical Startups Adapter.
 Category 2: Indian and International funded, technically ambitious startups.
-Focuses on AI/ML infrastructure, inference systems, robotics, autonomy, and energy/aerospace.
+Focuses on AI/ML infrastructure, inference systems, robotics, autonomy, energy, and aerospace.
 """
 
+import logging
 from typing import Dict, Any, List, Optional, Tuple
 from src.opportunities.adapters.base import BaseOpportunityAdapter
 from src.opportunities.models import (
@@ -13,19 +14,25 @@ from src.opportunities.models import (
     CompensationType,
     ContactChannel,
     VerificationStatus,
-    DiscoveryCheckpoint
+    DiscoveryCheckpoint,
+    PriorityTier
 )
 from src.opportunities.registry import (
     canonicalize_url,
     compute_organization_id,
     compute_opportunity_id
 )
+from src.opportunities.data.startup_catalog import STARTUP_CATALOG
+
+logger = logging.getLogger(__name__)
 
 
 class StartupAdapter(BaseOpportunityAdapter):
     """
     Discovers high-growth, technically ambitious startups offering hands-on engineering ownership.
-    Routing: Tailored engineering contribution pitch to Founders / Heads of AI & Engineering.
+    Routing:
+    - If contact_channel is EMAIL: High-agency personal pitch to Founder / Head of AI & Eng.
+    - If contact_channel is APPLICATION_PORTAL: Tailored submission through official careers portal.
     """
 
     def __init__(self):
@@ -34,86 +41,51 @@ class StartupAdapter(BaseOpportunityAdapter):
     def fetch_raw_opportunities(
         self,
         checkpoint: Optional[DiscoveryCheckpoint] = None,
-        limit: int = 50
+        limit: int = 150
     ) -> List[Dict[str, Any]]:
         """
-        Retrieves curated frontier startup engineering opportunities.
-        Grounded in official company postings, YC directories, and verified hiring contacts.
+        Retrieves real frontier startup engineering opportunities.
+        Supports resume/pagination using checkpoint cursor.
         """
-        seed_startups = [
-            {
-                "company_name": "Modal Labs",
-                "website": "https://modal.com",
-                "country": "United States",
-                "city": "New York / San Francisco",
-                "timezone": "America/New_York",
-                "funding_stage": "SERIES_A",
-                "title": "Summer 2027 Systems & AI Infrastructure Engineering Intern",
-                "domains": ["HPC", "Cloud Infrastructure", "GPU Systems", "Inference Optimization"],
-                "relevance": "Direct match with LLM Inference Intelligence Engine and Roofline performance diagnostics.",
-                "potential_contribution": "Optimizing cold-start container initialization and GPU memory bandwidth scheduling for serverless ML workloads.",
-                "duration_weeks": 12,
-                "compensation_type": CompensationType.PAID.value,
-                "compensation_details": "$9,000–$11,000/month + housing stipend.",
-                "eligibility": "Undergraduate/masters students with strong Linux systems, Python, and C++/Rust experience. Open to international candidates.",
-                "evidence_url": "https://modal.com/careers",
-                "contact_channel": ContactChannel.EMAIL.value,
-                "contact_name": "Erik Bernhardsson (Founder/CEO)",
-                "contact_email": "erik@modal.com",
-                "application_url": "https://modal.com/careers/systems-intern",
-                "deadline": "ROLLING"
-            },
-            {
-                "company_name": "Sarvam AI",
-                "website": "https://www.sarvam.ai",
-                "country": "India",
-                "city": "Bengaluru",
-                "timezone": "Asia/Kolkata",
-                "funding_stage": "SERIES_A",
-                "title": "Summer 2027 Research Engineering Intern — Indic LLMs & Inference Optimization",
-                "domains": ["LLMs", "Inference Optimization", "Quantization", "Model Serving"],
-                "relevance": "Direct technical overlap with LLM Inference Intelligence Engine and Roofline model benchmarks.",
-                "potential_contribution": "Designing vLLM/Triton inference kernels optimized for low-latency multi-lingual inference on Indian languages.",
-                "duration_weeks": 10,
-                "compensation_type": CompensationType.PAID.value,
-                "compensation_details": "₹1,20,000–₹1,50,000/month + Bengaluru relocation allowance.",
-                "eligibility": "Top Indian engineering undergraduates (IIT/NIT/IIIT) with demonstrated PyTorch systems or high-performance computing projects.",
-                "evidence_url": "https://www.sarvam.ai/careers",
-                "contact_channel": ContactChannel.EMAIL.value,
-                "contact_name": "Vivek Raghavan / Pratyush Kumar (Co-Founders)",
-                "contact_email": "careers@sarvam.ai",
-                "application_url": "https://www.sarvam.ai/careers",
-                "deadline": "2027-03-01"
-            },
-            {
-                "company_name": "Skydio",
-                "website": "https://www.skydio.com",
-                "country": "United States",
-                "city": "San Mateo, CA",
-                "timezone": "America/Los_Angeles",
-                "funding_stage": "SERIES_E",
-                "title": "Summer 2027 Autonomous Flight Systems Intern",
-                "domains": ["Drones", "Robotics", "Computer Vision", "Autonomy"],
-                "relevance": "Strong overlap with SuRGE Microdrone Autonomy & 3D Environment Mapping project.",
-                "potential_contribution": "Implementing real-time obstacle avoidance telemetry and C++ trajectory generation.",
-                "duration_weeks": 12,
-                "compensation_type": CompensationType.PAID.value,
-                "compensation_details": "$45–$55/hour + corporate housing.",
-                "eligibility": "Undergraduate in Robotics / Aero / CS / Chemical / Electrical. US J-1 visa sponsorship provided for top international talent.",
-                "evidence_url": "https://www.skydio.com/careers",
-                "contact_channel": ContactChannel.APPLICATION_PORTAL.value,
-                "contact_name": "Autonomy Hiring Team",
-                "contact_email": "recruiting@skydio.com",
-                "application_url": "https://www.skydio.com/careers/internships",
-                "deadline": "2027-01-15"
-            }
-        ]
-        return seed_startups[:limit]
+        start_idx = 0
+        if checkpoint and checkpoint.cursor_or_token:
+            try:
+                start_idx = int(checkpoint.cursor_or_token)
+            except ValueError:
+                start_idx = 0
+
+        total_catalog_size = len(STARTUP_CATALOG)
+        if start_idx >= total_catalog_size:
+            start_idx = 0  # Wrap around for recurring sweeps
+
+        end_idx = min(start_idx + limit, total_catalog_size)
+        items = STARTUP_CATALOG[start_idx:end_idx]
+
+        # If requesting more than remainder, wrap around to fill up to limit
+        if len(items) < limit and start_idx > 0:
+            remaining = limit - len(items)
+            items.extend(STARTUP_CATALOG[:remaining])
+
+        logger.info(
+            f"StartupAdapter fetched {len(items)} opportunities "
+            f"(slice {start_idx}:{end_idx} of {total_catalog_size})"
+        )
+        return items
 
     def normalize_raw_item(self, raw_item: Dict[str, Any]) -> Tuple[Organization, Opportunity]:
         company_name = raw_item["company_name"]
         web_url = canonicalize_url(raw_item.get("website", ""))
         org_id = compute_organization_id(company_name, web_url)
+
+        funding_stage = raw_item.get("funding_stage", "SERIES_A")
+        tier = "TIER_1" if funding_stage in ("SERIES_A", "SERIES_B", "SERIES_C", "GROWTH") else "STANDARD"
+
+        desc_parts = [
+            f"Technically ambitious startup in {', '.join(raw_item.get('domains', ['Tech'])[:2])}.",
+            f"Funding: {raw_item.get('disclosed_funding', 'Venture backed')}."
+        ]
+        if raw_item.get("founders"):
+            desc_parts.append(f"Leadership: {raw_item['founders']}.")
 
         org = Organization(
             organization_id=org_id,
@@ -123,9 +95,9 @@ class StartupAdapter(BaseOpportunityAdapter):
             country=raw_item.get("country"),
             city=raw_item.get("city"),
             iana_timezone=raw_item.get("timezone", "UTC"),
-            description=f"Technically ambitious startup in {raw_item.get('domains', ['Tech'])[0]}",
-            funding_stage=raw_item.get("funding_stage", "GROWTH"),
-            tier="TIER_1"
+            description=" ".join(desc_parts),
+            funding_stage=funding_stage,
+            tier=tier
         )
 
         title = raw_item["title"]
@@ -133,7 +105,16 @@ class StartupAdapter(BaseOpportunityAdapter):
 
         evidence_urls = [canonicalize_url(raw_item.get("evidence_url", ""))]
         if raw_item.get("application_url"):
-            evidence_urls.append(canonicalize_url(raw_item["application_url"]))
+            app_clean = canonicalize_url(raw_item["application_url"])
+            if app_clean not in evidence_urls:
+                evidence_urls.append(app_clean)
+
+        channel = raw_item.get("contact_channel", ContactChannel.EMAIL.value)
+        next_act = (
+            "TAILOR_STARTUP_ENGINEERING_PITCH"
+            if channel == ContactChannel.EMAIL.value
+            else "PREPARE_STARTUP_PORTAL_APPLICATION"
+        )
 
         opp = Opportunity(
             opportunity_id=opp_id,
@@ -146,19 +127,24 @@ class StartupAdapter(BaseOpportunityAdapter):
             technical_domains=raw_item.get("domains", []),
             technical_relevance_summary=raw_item.get("relevance"),
             potential_contribution=raw_item.get("potential_contribution"),
-            eligibility_criteria=raw_item.get("eligibility"),
+            eligibility_criteria=raw_item.get("eligibility", "Undergraduate engineering students"),
             internship_duration_weeks=raw_item.get("duration_weeks", 12),
             target_term="Summer 2027",
             compensation_type=raw_item.get("compensation_type", CompensationType.PAID.value),
             compensation_details=raw_item.get("compensation_details"),
             official_evidence_urls=[u for u in evidence_urls if u],
-            hiring_contact_channel=raw_item.get("contact_channel", ContactChannel.EMAIL.value),
+            hiring_contact_channel=channel,
             contact_email=raw_item.get("contact_email"),
             contact_name=raw_item.get("contact_name"),
-            contact_verification_status=VerificationStatus.VERIFIED.value if raw_item.get("contact_email") else VerificationStatus.UNVERIFIED.value,
+            contact_verification_status=(
+                VerificationStatus.VERIFIED.value
+                if raw_item.get("contact_email")
+                else VerificationStatus.UNVERIFIED.value
+            ),
             application_url=canonicalize_url(raw_item.get("application_url", "")),
-            application_deadline=raw_item.get("deadline"),
-            next_action="TAILOR_STARTUP_ENGINEERING_PITCH"
+            application_deadline=raw_item.get("deadline", "Rolling"),
+            is_confirmed_opening=raw_item.get("is_confirmed_opening", True),
+            next_action=next_act
         )
 
         return org, opp

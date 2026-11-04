@@ -10,6 +10,7 @@ from src.opportunities.models import (
     ContactChannel,
     VerificationStatus,
     DiscoveryStatus,
+    PriorityTier,
     ApplicationStatus,
     QualificationBreakdown,
     DiscoveryCheckpoint,
@@ -27,6 +28,9 @@ from src.opportunities.registry import (
 from src.opportunities.ranking import OpportunityRanker
 from src.opportunities.workbook_sync import OpportunityWorkbookSync
 from src.opportunities.discovery_worker import OpportunityDiscoveryWorker
+from src.opportunities.scheduling import OpportunityScheduler
+from src.opportunities.personalization import DomainAdaptivePersonalizer
+from src.opportunities.budget_and_tracking import GlobalBudgetManager, UnifiedDeliveryBridge
 
 __all__ = [
     "Organization",
@@ -36,6 +40,7 @@ __all__ = [
     "ContactChannel",
     "VerificationStatus",
     "DiscoveryStatus",
+    "PriorityTier",
     "ApplicationStatus",
     "QualificationBreakdown",
     "DiscoveryCheckpoint",
@@ -49,5 +54,9 @@ __all__ = [
     "compute_opportunity_id",
     "OpportunityRanker",
     "OpportunityWorkbookSync",
-    "OpportunityDiscoveryWorker"
+    "OpportunityDiscoveryWorker",
+    "OpportunityScheduler",
+    "DomainAdaptivePersonalizer",
+    "GlobalBudgetManager",
+    "UnifiedDeliveryBridge"
 ]

@@ -17,7 +17,8 @@ from src.opportunities.models import (
     Opportunity,
     QualificationBreakdown,
     CompensationType,
-    DiscoveryStatus
+    DiscoveryStatus,
+    PriorityTier
 )
 
 
@@ -32,7 +33,7 @@ class OpportunityRanker:
             "project_id": "Neural Process Twin",
             "keywords": [
                 "scientific ml", "sciml", "surrogate model", "surrogate", "physics-informed",
-                "finite difference", "heat conduction", "pde", "computational simulation",
+                "heat conduction", "pde", "computational simulation",
                 "pytorch simulation", "neural operator", "fno", "pinns"
             ],
             "weight": 12.0
@@ -47,6 +48,14 @@ class OpportunityRanker:
             "weight": 12.0
         },
         {
+            "project_id": "Finite-Difference PINN Error Estimation",
+            "keywords": [
+                "finite difference", "pinn error", "numerical error", "error estimation",
+                "loss weighting", "pde residual", "gradient pathology", "discretization"
+            ],
+            "weight": 10.0
+        },
+        {
             "project_id": "Sovereign On-Premise Agentic AI Workbench",
             "keywords": [
                 "agentic", "ai agents", "tool sandboxing", "autonomous agent", "multimodal llm",
@@ -58,7 +67,8 @@ class OpportunityRanker:
             "project_id": "Humanoid Robotics & SuRGE Microdrone",
             "keywords": [
                 "robotics", "drone", "uav", "microdrone", "kinematics", "embodied intelligence",
-                "control systems", "servo", "embedded c", "autonomous flight", "slam", "ros", "ros2"
+                "control systems", "servo", "embedded c", "autonomous flight", "slam", "ros", "ros2",
+                "bipedal", "humanoid", "actuator", "locomotion"
             ],
             "weight": 9.0
         },
@@ -66,11 +76,25 @@ class OpportunityRanker:
             "project_id": "Peng-Robinson Real-Gas Cubic Equation of State Solver",
             "keywords": [
                 "c++17", "thermodynamics", "chemical engineering", "materials", "equation of state",
-                "computational fluid dynamics", "cfd", "process simulation"
+                "computational fluid dynamics", "cfd", "process simulation", "cryogenic", "phase equilibria"
             ],
-            "weight": 7.0
+            "weight": 8.0
         }
     ]
+
+    @classmethod
+    def compute_priority_tier(cls, total_score: float, is_strictly_ineligible: bool = False) -> str:
+        """Assign standardized priority tier."""
+        if is_strictly_ineligible:
+            return PriorityTier.INELIGIBLE.value
+        if total_score >= 80.0:
+            return PriorityTier.HIGH_PRIORITY.value
+        elif total_score >= 65.0:
+            return PriorityTier.PROMISING.value
+        elif total_score >= 50.0:
+            return PriorityTier.NEEDS_VERIFICATION.value
+        else:
+            return PriorityTier.REJECTED.value
 
     @classmethod
     def evaluate_opportunity(cls, opp: Opportunity) -> Tuple[float, QualificationBreakdown, str, Optional[str]]:
@@ -118,6 +142,9 @@ class OpportunityRanker:
         else:
             discovery_status = DiscoveryStatus.DISQUALIFIED.value
 
+        tier = cls.compute_priority_tier(total, is_strictly_ineligible)
+        opp.priority_tier = tier
+
         return total, breakdown, discovery_status, matched_project
 
     @classmethod
@@ -129,27 +156,27 @@ class OpportunityRanker:
             " ".join(opp.technical_domains or [])
         ]).lower()
 
-        best_score = 0.0
-        best_project = None
-        total_tech_score = 0.0
-
+        project_matches = []
         for item in cls.TECH_MATCH_MATRIX:
             matched_keywords = [kw for kw in item["keywords"] if kw in combined_text]
             if matched_keywords:
-                # Award points based on keyword matches up to project weight
-                score = min(item["weight"], len(matched_keywords) * 4.0)
-                total_tech_score += score
-                if score > best_score:
-                    best_score = score
-                    best_project = item["project_id"]
+                score = min(25.0, len(matched_keywords) * 5.0)
+                project_matches.append((score, item["project_id"]))
 
-        # If no specific keyword matched, check generic AI/engineering keywords
-        if total_tech_score == 0.0:
+        if not project_matches:
             if any(w in combined_text for w in ["ai", "machine learning", "engineering", "software", "computational"]):
-                total_tech_score = 10.0
-                best_project = "Neural Process Twin"
+                return 10.0, "Neural Process Twin"
+            return 0.0, None
 
-        return round(min(35.0, total_tech_score), 1), best_project
+        # Sort matches by score descending
+        project_matches.sort(key=lambda x: x[0], reverse=True)
+        best_score, best_project = project_matches[0]
+
+        # Primary project contributes up to 25.0; secondary matches contribute up to 10.0
+        secondary_score = sum(min(5.0, m[0] * 0.25) for m in project_matches[1:])
+        total_tech_score = min(35.0, best_score + secondary_score)
+
+        return round(total_tech_score, 1), best_project
 
     @classmethod
     def _score_compensation(cls, opp: Opportunity) -> float:
@@ -229,22 +256,26 @@ class OpportunityRanker:
 
     @classmethod
     def _score_team_quality(cls, opp: Opportunity) -> float:
-        # Check tier, funding stage, and reputation signals
         text = " ".join([
-            opp.organization_id or "",
+            opp.title or "",
             opp.technical_relevance_summary or "",
+            opp.potential_contribution or "",
+            opp.eligibility_criteria or "",
             opp.source or ""
         ]).lower()
 
         # Top research institutions & Tier-1 companies
-        if any(top in text for top in ["stanford", "mit", "oxford", "ethz", "cern", "max planck", "anthropic", "openai", "deepmind", "nvidia"]):
+        if any(top in text for top in ["stanford", "mit", "oxford", "ethz", "cern", "max planck", "anthropic", "openai", "deepmind", "nvidia", "google", "meta"]):
             return 10.0
 
-        # Known startup tier or high-reputation sources
-        if "yc" in text or "series a" in text or "series b" in text or "inria" in text:
+        # High-caliber venture-backed frontier startups
+        if opp.opportunity_type == "STARTUP":
             return 8.0
 
-        return 6.0
+        if any(k in text for k in ["yc", "series a", "series b", "inria", "tum", "epfl"]):
+            return 8.0
+
+        return 7.0
 
     @classmethod
     def _score_source_grounding(cls, opp: Opportunity) -> float:

@@ -97,9 +97,9 @@ class OpportunityRepository:
                 compensation_details, official_evidence_urls, freshness_timestamp,
                 hiring_contact_channel, contact_email, contact_name,
                 contact_verification_status, application_url, application_deadline,
-                qualification_score, score_breakdown, discovery_status,
-                application_status, next_action, created_at, updated_at, last_checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                qualification_score, score_breakdown, priority_tier, discovery_status,
+                application_status, is_confirmed_opening, next_action, created_at, updated_at, last_checked_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(opportunity_id) DO UPDATE SET
                 title = excluded.title,
                 location = excluded.location,
@@ -122,8 +122,10 @@ class OpportunityRepository:
                 application_deadline = excluded.application_deadline,
                 qualification_score = excluded.qualification_score,
                 score_breakdown = excluded.score_breakdown,
+                priority_tier = excluded.priority_tier,
                 discovery_status = excluded.discovery_status,
                 application_status = excluded.application_status,
+                is_confirmed_opening = excluded.is_confirmed_opening,
                 next_action = excluded.next_action,
                 updated_at = excluded.updated_at,
                 last_checked_at = excluded.last_checked_at;
@@ -135,8 +137,8 @@ class OpportunityRepository:
             opp.compensation_details, evidence_urls_json, opp.freshness_timestamp,
             opp.hiring_contact_channel, clean_email_address(opp.contact_email), opp.contact_name,
             opp.contact_verification_status, opp.application_url, opp.application_deadline,
-            opp.qualification_score, score_breakdown_json, opp.discovery_status,
-            opp.application_status, opp.next_action, opp.created_at or now_iso, now_iso, now_iso
+            opp.qualification_score, score_breakdown_json, opp.priority_tier, opp.discovery_status,
+            opp.application_status, 1 if opp.is_confirmed_opening else 0, opp.next_action, opp.created_at or now_iso, now_iso, now_iso
         ))
         self.conn.commit()
 
@@ -309,6 +311,9 @@ class OpportunityRepository:
             except Exception:
                 pass
 
+        priority_tier = row["priority_tier"] if "priority_tier" in row.keys() else "NEEDS_VERIFICATION"
+        is_confirmed = bool(row["is_confirmed_opening"]) if "is_confirmed_opening" in row.keys() else True
+
         return Opportunity(
             opportunity_id=row["opportunity_id"],
             organization_id=row["organization_id"],
@@ -336,8 +341,10 @@ class OpportunityRepository:
             application_deadline=row["application_deadline"],
             qualification_score=row["qualification_score"] or 0.0,
             score_breakdown=breakdown,
+            priority_tier=priority_tier,
             discovery_status=row["discovery_status"] or "DISCOVERED",
             application_status=row["application_status"] or "NOT_APPLIED",
+            is_confirmed_opening=is_confirmed,
             next_action=row["next_action"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],

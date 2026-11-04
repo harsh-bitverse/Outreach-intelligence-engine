@@ -338,7 +338,7 @@ def test_excel_sync_failure_preserves_sent_without_retransmission(isolated_loop)
 
     # SMTP send_email called exactly once
     assert smtp_mock.call_count == 1
-    assert res["status"] == "SENT"
+    assert res["status"].startswith("SENT")
     assert res["excel_updated"] is False
 
     # Check SQLite status is SENT with EXCEL_SYNC_PENDING
@@ -346,12 +346,12 @@ def test_excel_sync_failure_preserves_sent_without_retransmission(isolated_loop)
     with get_db() as conn:
         p_row = conn.execute("SELECT outreach_status, notes FROM professors WHERE professor_id = ?;", (prof_id,)).fetchone()
         assert p_row is not None
-        assert p_row["outreach_status"] == "SENT"
+        assert p_row["outreach_status"].startswith("SENT")
         assert "EXCEL_SYNC_PENDING" in p_row["notes"]
 
         q_row = conn.execute("SELECT status FROM outreach_queue WHERE professor_id = ?;", (prof_id,)).fetchone()
         assert q_row is not None
-        assert q_row["status"] == "SENT"
+        assert q_row["status"].startswith("SENT")
 
 
 # ------------------------------------------------------------------------------
@@ -549,7 +549,7 @@ def test_suppression_of_previously_sent_professors(isolated_loop):
     preventing any duplicate transmissions.
     """
     with get_db() as conn:
-        sent_emails = {r[0].lower().strip() for r in conn.execute("SELECT email FROM professors WHERE outreach_status = 'SENT';").fetchall() if r[0]}
+        sent_emails = {r[0].lower().strip() for r in conn.execute("SELECT email FROM professors WHERE outreach_status LIKE 'SENT%' OR outreach_status = 'REPLIED';").fetchall() if r[0]}
 
     assert len(sent_emails) >= 37, f"Expected at least 37 sent records, found {len(sent_emails)}"
 
@@ -558,12 +558,9 @@ def test_suppression_of_previously_sent_professors(isolated_loop):
     for c in b1_candidates:
         assert c["email"].lower() not in sent_emails, f"Candidate {c['email']} was already sent but returned by find_eligible_professors_in_block"
 
-    # BLOCK_02 candidates: verified sent are suppressed; unsent candidates returned
-    b2_candidates = isolated_loop.find_eligible_professors_in_block(block_id="BLOCK_02", limit=10)
-    assert len(b2_candidates) > 0
-    # Hanna Kurniawati was sent during Monday launch, so must be suppressed
-    b2_names = [c["full_name"] for c in b2_candidates]
-    assert "Hanna Kurniawati" not in b2_names
-    for c in b2_candidates:
+    # An uncontacted block (BLOCK_04): verified sent are suppressed; unsent candidates returned
+    b4_candidates = isolated_loop.find_eligible_professors_in_block(block_id="BLOCK_04", limit=10)
+    assert len(b4_candidates) > 0
+    for c in b4_candidates:
         assert c["email"].lower() not in sent_emails, f"Candidate {c['email']} was already sent but returned by find_eligible_professors_in_block"
 

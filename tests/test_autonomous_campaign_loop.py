@@ -35,16 +35,19 @@ def temp_workbook():
             if "time blocks" in sname.lower():
                 for r in range(1, ws.max_row + 1):
                     val = str(ws.cell(r, 8).value or "").strip().lower()
-                    if len(val) > 3 and "@" in val and r <= 150:
+                    if len(val) > 3 and "@" in val:
                         ws.cell(r, 9).value = "VERIFIED"
                         ws.cell(r, 25).value = "READY"
                         ws.cell(r, 29).value = ""
                         ws.cell(r, 30).value = ""
                         ws.cell(r, 31).value = ""
+                        ws.cell(r, 32).value = ""
+                        ws.cell(r, 33).value = ""
+                        ws.cell(r, 34).value = ""
             elif "professor" in sname.lower():
                 for r in range(2, ws.max_row + 1):
                     val = str(ws.cell(r, 8).value or "").strip().lower()
-                    if len(val) > 3 and "@" in val and r <= 150:
+                    if len(val) > 3 and "@" in val:
                         ws.cell(r, 9).value = "VERIFIED"
                         ws.cell(r, 19).value = ""
         wb.save(str(tmp_path))
@@ -64,6 +67,7 @@ def temp_db(monkeypatch):
         conn = sqlite3.connect(tmp_db_path)
         conn.execute("UPDATE professors SET outreach_status = 'AWAITING_DRAFT', email_verification_status = 'VERIFIED';")
         conn.execute("DELETE FROM outreach_queue;")
+        conn.execute("DELETE FROM outbound_delivery_tracker;")
         conn.commit()
         conn.close()
 

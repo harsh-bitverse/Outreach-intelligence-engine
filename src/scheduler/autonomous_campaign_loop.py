@@ -243,8 +243,11 @@ class AutonomousCampaignLoop:
         self.ist_tz = ist_tz or ZoneInfo("Asia/Kolkata")
         self.lock_path = lock_path or SCHEDULER_LOCK_PATH
         self.last_bounce_check: float = 0.0
+        self.last_fast_watch_check: float = 0.0
         from src.mail.bounce_monitor import IMAPBounceMonitor
         self.bounce_monitor = IMAPBounceMonitor(workbook_path=self.workbook_path)
+        from src.mail.delivery_tracker import OutboundDeliveryTracker
+        self.delivery_tracker = OutboundDeliveryTracker()
 
     # --------------------------------------------------------------------------
     # 1. Lock Management & Single-Instance Safety
@@ -354,17 +357,26 @@ class AutonomousCampaignLoop:
                 if r["email"]:
                     suppressed_emails.add(r["email"].strip().lower())
 
-            # Query database sent, error, ambiguous, and bounced professors or invalid email verification
+            # Query database sent, error, ambiguous, replied, and bounced professors or invalid email verification
             inactive_rows = conn.execute("""
                 SELECT email FROM professors 
                 WHERE (
-                    outreach_status IN ('SENT', 'SIMULATED_SENT', 'ERROR', 'AMBIGUOUS_DELIVERY', 'BOUNCED_INVALID_ADDRESS', 'BOUNCED_PERMANENT_OTHER')
+                    outreach_status NOT IN ('AWAITING_DRAFT')
                     OR email_verification_status = 'INVALID'
                 ) AND email IS NOT NULL;
             """).fetchall()
             for r in inactive_rows:
                 if r["email"]:
                     suppressed_emails.add(r["email"].strip().lower())
+
+            # Query outbound_delivery_tracker for any recipients with active/completed watches
+            try:
+                tracked_rows = conn.execute("SELECT recipient_email FROM outbound_delivery_tracker WHERE recipient_email IS NOT NULL;").fetchall()
+                for r in tracked_rows:
+                    if r["recipient_email"]:
+                        suppressed_emails.add(r["recipient_email"].strip().lower())
+            except Exception:
+                pass
 
         candidates = []
         wb = openpyxl.load_workbook(str(self.workbook_path), read_only=True)
@@ -421,7 +433,8 @@ class AutonomousCampaignLoop:
 
             if col9 == "INVALID":
                 continue
-            if any(s in col25 for s in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY", "BOUNCED", "INVALID")) or any(s in col29 for s in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY", "BOUNCED", "INVALID")):
+            if any(s in col25 for s in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY", "BOUNCED", "INVALID", "REPLIED", "UNCONFIRMED", "UNSENT")) or \
+               any(s in col29 for s in ("SENT", "ERROR", "AMBIGUOUS_DELIVERY", "BOUNCED", "INVALID", "REPLIED", "UNCONFIRMED", "UNSENT")):
                 continue
             if col25 == "NOT OUTREACH READY":
                 continue
@@ -726,7 +739,19 @@ class AutonomousCampaignLoop:
         )
 
         message_id = dispatch_result.get("message_id") or f"<simulated_{hashlib.md5(email.encode()).hexdigest()[:12]}@iitd.ac.in>"
-        status_code = "SIMULATED_SENT" if dry_run else "SENT"
+        status_code = "SIMULATED_SENT" if dry_run else "SENT — DELIVERY UNCONFIRMED"
+
+        # Enroll in 10-minute active delivery tracker if live
+        if not dry_run:
+            self.delivery_tracker.track_outbound_email(
+                professor_id=prof_id,
+                university_name=prof_row.get("university", ""),
+                workbook_row_index=prof_row.get("row_index", 0),
+                recipient_email=email,
+                message_id=message_id,
+                smtp_accepted_at=now_iso,
+                watch_duration_minutes=10,
+            )
 
         # 1. Transactionally persist in SQLite
         with get_db() as conn:
@@ -782,6 +807,11 @@ class AutonomousCampaignLoop:
             conn.commit()
 
         # 2. Update Excel row in SAME 'Time Blocks & Distribution' sheet with retry policy
+        excel_status = "SIMULATED_SENT" if dry_run else "SENT — DELIVERY UNCONFIRMED"
+        excel_deliv = "SIMULATED" if dry_run else "UNCONFIRMED"
+        excel_diag = "Simulated Outreach" if dry_run else "SMTP_ACCEPTED | Active 10-Min Watch"
+        excel_watch = None if dry_run else "ACTIVE_WATCH"
+
         excel_updated = False
         excel_attempts = 0
         max_excel_attempts = 3
@@ -790,9 +820,12 @@ class AutonomousCampaignLoop:
             try:
                 excel_updated = self.sync.update_time_blocks_row(
                     email=email,
-                    status="SENT",
+                    status=excel_status,
                     sent_at=now_iso,
                     message_id=message_id,
+                    delivery_status=excel_deliv,
+                    delivery_diagnostic=excel_diag,
+                    watch_state=excel_watch,
                     timeout_seconds=5
                 )
                 if excel_updated:
@@ -1251,8 +1284,26 @@ class AutonomousCampaignLoop:
             while True:
                 now_ist = datetime.now(self.ist_tz)
 
-                # 0. Periodic lightweight bounce check (every 1800s / 30m in live mode, idempotent, durable checkpoint)
+                # 0a. Concurrent Fast 60s Delivery Watch Evaluation
                 now_ts = time.time()
+                if (now_ts - self.last_fast_watch_check) >= 60:
+                    self.last_fast_watch_check = now_ts
+                    try:
+                        active_count = self.delivery_tracker.get_active_watch_count()
+                        if active_count > 0:
+                            if not dry_run:
+                                bm_res = self.bounce_monitor.check_for_new_bounces()
+                                watch_eval = self.delivery_tracker.check_active_watches(new_dsns=bm_res.get("new_dsn_records", []))
+                            else:
+                                watch_eval = self.delivery_tracker.check_active_watches()
+                            if watch_eval.get("watch_completed", 0) > 0 or watch_eval.get("resolved_bounces", 0) > 0:
+                                print(f"[{now_ist.strftime('%H:%M:%S IST')}] Delivery Watch: {watch_eval.get('watch_completed')} watch(es) completed (unconfirmed), {watch_eval.get('resolved_bounces')} bounce(s) resolved.")
+                        else:
+                            self.delivery_tracker.check_active_watches()
+                    except Exception as dt_err:
+                        logger.debug(f"Fast delivery watch check non-fatal error: {dt_err}")
+
+                # 0b. Periodic lightweight bounce check (every 1800s / 30m in live mode, idempotent, durable checkpoint)
                 if not dry_run and (now_ts - self.last_bounce_check) >= 1800:
                     self.last_bounce_check = now_ts
                     try:

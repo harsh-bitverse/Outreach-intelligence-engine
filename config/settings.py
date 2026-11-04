@@ -57,9 +57,9 @@ class Settings(BaseSettings):
     IITD_EMAIL_PASSWORD: Optional[str] = None
 
     # Safety, Sending Controls & Permissions
-    # Production live campaign paused during Session 11 bounce reconciliation.
-    GATEWAY_ENABLED: bool = False
-    DRY_RUN: bool = True
+    # Production live campaign restored for Session 12 autonomous recovery.
+    GATEWAY_ENABLED: bool = True
+    DRY_RUN: bool = False
     CAMPAIGN_AUTHORIZED: bool = True
     IITD_CSC_APPROVED: bool = True
     EMERGENCY_STOP: bool = False

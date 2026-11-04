@@ -56,3 +56,7 @@ node_modules/
 dist/
 build/
 scratch/
+
+# Runtime locks
+*.lock
+data/*.lock

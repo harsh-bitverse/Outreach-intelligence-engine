@@ -495,6 +495,9 @@ class DynamicWorkbookSync:
         sent_at: Optional[str] = None,
         message_id: Optional[str] = None,
         notes: Optional[str] = None,
+        delivery_status: Optional[str] = None,
+        delivery_diagnostic: Optional[str] = None,
+        watch_state: Optional[str] = None,
         timeout_seconds: int = 5
     ) -> bool:
         """
@@ -505,6 +508,9 @@ class DynamicWorkbookSync:
           - Column 29 (Outreach Status) -> status
           - Column 30 (Sent Timestamp) -> sent_at (ISO formatted)
           - Column 31 (Message-ID) -> message_id
+          - Column 32 (Delivery Status) -> delivery_status (Session 12)
+          - Column 33 (Delivery Diagnostic) -> delivery_diagnostic (Session 12)
+          - Column 34 (Delivery Watch State) -> watch_state (Session 12)
           - Column 18 (Notes / Unresolved Issues) -> notes (if provided)
         Also updates the corresponding row in 'Professor Database' if present.
         Non-fatal if Excel is locked: sent history remains preserved in SQLite.
@@ -552,7 +558,7 @@ class DynamicWorkbookSync:
                             if norm in ("officialinstitutionalemail", "email", "emailaddress"):
                                 email_col_idx = c_idx
 
-                        # Ensure columns 29, 30, 31 have headers in this block's header row
+                        # Ensure columns 29-34 have headers in this block's header row
                         if not ws.cell(r_idx, 29).value:
                             ws.cell(r_idx, 29).value = "Outreach Status"
                             ws.cell(r_idx, 29).font = Font(name="Calibri", size=10, bold=True)
@@ -562,6 +568,15 @@ class DynamicWorkbookSync:
                         if not ws.cell(r_idx, 31).value:
                             ws.cell(r_idx, 31).value = "Message-ID"
                             ws.cell(r_idx, 31).font = Font(name="Calibri", size=10, bold=True)
+                        if not ws.cell(r_idx, 32).value:
+                            ws.cell(r_idx, 32).value = "Delivery Status"
+                            ws.cell(r_idx, 32).font = Font(name="Calibri", size=10, bold=True)
+                        if not ws.cell(r_idx, 33).value:
+                            ws.cell(r_idx, 33).value = "Delivery Diagnostic"
+                            ws.cell(r_idx, 33).font = Font(name="Calibri", size=10, bold=True)
+                        if not ws.cell(r_idx, 34).value:
+                            ws.cell(r_idx, 34).value = "Delivery Watch State"
+                            ws.cell(r_idx, 34).font = Font(name="Calibri", size=10, bold=True)
                         continue
 
                     # Check if row matches target email
@@ -572,9 +587,23 @@ class DynamicWorkbookSync:
                         # Col 29: Outreach Status
                         ws.cell(r_idx, 29).value = status
                         # Col 30: Sent / Error Timestamp
-                        ws.cell(r_idx, 30).value = now_iso
+                        if sent_at:
+                            ws.cell(r_idx, 30).value = sent_at
                         # Col 31: Message-ID / Error Summary
-                        ws.cell(r_idx, 31).value = msg_id
+                        if msg_id:
+                            ws.cell(r_idx, 31).value = msg_id
+                        # Col 32: Delivery Status
+                        if delivery_status:
+                            ws.cell(r_idx, 32).value = delivery_status
+                        # Col 33: Delivery Diagnostic
+                        if delivery_diagnostic:
+                            ws.cell(r_idx, 33).value = delivery_diagnostic
+                        # Col 34: Delivery Watch State
+                        if watch_state:
+                            ws.cell(r_idx, 34).value = watch_state
+                        # Col 9: Email Verification Status
+                        if "INVALID" in status.upper():
+                            ws.cell(r_idx, 9).value = "INVALID"
                         # Col 18: Notes / Unresolved Issues (if provided)
                         if notes:
                             existing_notes = str(ws.cell(r_idx, 18).value or "").strip()
@@ -604,10 +633,23 @@ class DynamicWorkbookSync:
                     ws_p.cell(1, p_status_col).value = "Outreach Status"
                     ws_p.cell(1, p_status_col).font = Font(bold=True)
 
+                if not ws_p.cell(1, 20).value:
+                    ws_p.cell(1, 20).value = "Delivery Status"
+                    ws_p.cell(1, 20).font = Font(bold=True)
+                if not ws_p.cell(1, 21).value:
+                    ws_p.cell(1, 21).value = "Delivery Diagnostic"
+                    ws_p.cell(1, 21).font = Font(bold=True)
+
                 for r_idx in range(2, ws_p.max_row + 1):
                     val = ws_p.cell(r_idx, p_email_col).value
                     if val and str(val).strip().lower() == target_email:
                         ws_p.cell(r_idx, p_status_col).value = status
+                        if delivery_status:
+                            ws_p.cell(r_idx, 20).value = delivery_status
+                        if delivery_diagnostic:
+                            ws_p.cell(r_idx, 21).value = delivery_diagnostic
+                        if "INVALID" in status.upper():
+                            ws_p.cell(r_idx, 9).value = "INVALID"
                         break
 
             # 3. Save atomically via temp file

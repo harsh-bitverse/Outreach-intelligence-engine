@@ -53,6 +53,35 @@ class PriorityTier(str, Enum):
     REJECTED = "REJECTED"
 
 
+class OpportunityClassification(str, Enum):
+    CONFIRMED_OPENING = "CONFIRMED_OPENING"
+    PROSPECTIVE_OUTREACH_TARGET = "PROSPECTIVE_OUTREACH_TARGET"
+    FUTURE_OPENING_MONITOR = "FUTURE_OPENING_MONITOR"
+    NEEDS_VERIFICATION = "NEEDS_VERIFICATION"
+    INELIGIBLE = "INELIGIBLE"
+    CLOSED = "CLOSED"
+
+
+class RoleTitleType(str, Enum):
+    EXACT = "EXACT"
+    INFERRED = "INFERRED"
+    PROPOSED_OUTREACH_FOCUS = "PROPOSED_OUTREACH_FOCUS"
+
+
+class WorkplaceType(str, Enum):
+    ONSITE = "ONSITE"
+    HYBRID = "HYBRID"
+    REMOTE = "REMOTE"
+    UNKNOWN = "UNKNOWN"
+
+
+class InternationalEligibility(str, Enum):
+    ELIGIBLE_DOMESTIC = "ELIGIBLE_DOMESTIC"
+    SPONSORED_OR_J1_REQUIRED = "SPONSORED_OR_J1_REQUIRED"
+    RESTRICTED_DOMESTIC_ONLY = "RESTRICTED_DOMESTIC_ONLY"
+    NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION"
+
+
 class ApplicationStatus(str, Enum):
     NOT_APPLIED = "NOT_APPLIED"
     DRAFTING = "DRAFTING"
@@ -139,6 +168,14 @@ class Opportunity:
     qualification_score: float = 0.0
     score_breakdown: Optional[QualificationBreakdown] = None
     priority_tier: Optional[str] = PriorityTier.NEEDS_VERIFICATION.value
+    audit_classification: str = OpportunityClassification.NEEDS_VERIFICATION.value
+    role_title_type: str = RoleTitleType.PROPOSED_OUTREACH_FOCUS.value
+    workplace_type: str = WorkplaceType.UNKNOWN.value
+    international_eligibility: str = InternationalEligibility.NEEDS_CONFIRMATION.value
+    compensation_evidence: Optional[str] = "UNPUBLISHED_BY_EMPLOYER"
+    operational_status: str = "OPERATIONAL"
+    verification_notes: Optional[str] = None
+    last_verified_at: Optional[str] = None
     discovery_status: str = DiscoveryStatus.DISCOVERED.value
     application_status: str = ApplicationStatus.NOT_APPLIED.value
     is_confirmed_opening: bool = True

@@ -57,12 +57,7 @@ class OpportunityRepository:
         ))
         self.conn.commit()
 
-    def get_organization(self, org_id: str) -> Optional[Organization]:
-        cur = self.conn.cursor()
-        cur.execute("SELECT * FROM organizations WHERE organization_id = ?;", (org_id,))
-        row = cur.fetchone()
-        if not row:
-            return None
+    def _row_to_organization(self, row: sqlite3.Row) -> Organization:
         return Organization(
             organization_id=row["organization_id"],
             name=row["name"],
@@ -77,6 +72,14 @@ class OpportunityRepository:
             created_at=row["created_at"],
             updated_at=row["updated_at"]
         )
+
+    def get_organization(self, org_id: str) -> Optional[Organization]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM organizations WHERE organization_id = ?;", (org_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return self._row_to_organization(row)
 
     # --------------------------------------------------------------------------
     # Opportunities
@@ -97,9 +100,13 @@ class OpportunityRepository:
                 compensation_details, official_evidence_urls, freshness_timestamp,
                 hiring_contact_channel, contact_email, contact_name,
                 contact_verification_status, application_url, application_deadline,
-                qualification_score, score_breakdown, priority_tier, discovery_status,
-                application_status, is_confirmed_opening, next_action, created_at, updated_at, last_checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                qualification_score, score_breakdown, priority_tier,
+                audit_classification, role_title_type, workplace_type,
+                international_eligibility, compensation_evidence, operational_status,
+                verification_notes, last_verified_at,
+                discovery_status, application_status, is_confirmed_opening, next_action,
+                created_at, updated_at, last_checked_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(opportunity_id) DO UPDATE SET
                 title = excluded.title,
                 location = excluded.location,
@@ -123,6 +130,14 @@ class OpportunityRepository:
                 qualification_score = excluded.qualification_score,
                 score_breakdown = excluded.score_breakdown,
                 priority_tier = excluded.priority_tier,
+                audit_classification = excluded.audit_classification,
+                role_title_type = excluded.role_title_type,
+                workplace_type = excluded.workplace_type,
+                international_eligibility = excluded.international_eligibility,
+                compensation_evidence = excluded.compensation_evidence,
+                operational_status = excluded.operational_status,
+                verification_notes = excluded.verification_notes,
+                last_verified_at = excluded.last_verified_at,
                 discovery_status = excluded.discovery_status,
                 application_status = excluded.application_status,
                 is_confirmed_opening = excluded.is_confirmed_opening,
@@ -137,8 +152,12 @@ class OpportunityRepository:
             opp.compensation_details, evidence_urls_json, opp.freshness_timestamp,
             opp.hiring_contact_channel, clean_email_address(opp.contact_email), opp.contact_name,
             opp.contact_verification_status, opp.application_url, opp.application_deadline,
-            opp.qualification_score, score_breakdown_json, opp.priority_tier, opp.discovery_status,
-            opp.application_status, 1 if opp.is_confirmed_opening else 0, opp.next_action, opp.created_at or now_iso, now_iso, now_iso
+            opp.qualification_score, score_breakdown_json, opp.priority_tier,
+            opp.audit_classification, opp.role_title_type, opp.workplace_type,
+            opp.international_eligibility, opp.compensation_evidence, opp.operational_status,
+            opp.verification_notes, opp.last_verified_at,
+            opp.discovery_status, opp.application_status, 1 if opp.is_confirmed_opening else 0,
+            opp.next_action, opp.created_at or now_iso, now_iso, now_iso
         ))
         self.conn.commit()
 
@@ -313,6 +332,14 @@ class OpportunityRepository:
 
         priority_tier = row["priority_tier"] if "priority_tier" in row.keys() else "NEEDS_VERIFICATION"
         is_confirmed = bool(row["is_confirmed_opening"]) if "is_confirmed_opening" in row.keys() else True
+        audit_classification = row["audit_classification"] if "audit_classification" in row.keys() else "NEEDS_VERIFICATION"
+        role_title_type = row["role_title_type"] if "role_title_type" in row.keys() else "PROPOSED_OUTREACH_FOCUS"
+        workplace_type = row["workplace_type"] if "workplace_type" in row.keys() else "UNKNOWN"
+        international_eligibility = row["international_eligibility"] if "international_eligibility" in row.keys() else "NEEDS_CONFIRMATION"
+        compensation_evidence = row["compensation_evidence"] if "compensation_evidence" in row.keys() else "UNPUBLISHED_BY_EMPLOYER"
+        operational_status = row["operational_status"] if "operational_status" in row.keys() else "OPERATIONAL"
+        verification_notes = row["verification_notes"] if "verification_notes" in row.keys() else None
+        last_verified_at = row["last_verified_at"] if "last_verified_at" in row.keys() else None
 
         return Opportunity(
             opportunity_id=row["opportunity_id"],
@@ -342,6 +369,14 @@ class OpportunityRepository:
             qualification_score=row["qualification_score"] or 0.0,
             score_breakdown=breakdown,
             priority_tier=priority_tier,
+            audit_classification=audit_classification,
+            role_title_type=role_title_type,
+            workplace_type=workplace_type,
+            international_eligibility=international_eligibility,
+            compensation_evidence=compensation_evidence,
+            operational_status=operational_status,
+            verification_notes=verification_notes,
+            last_verified_at=last_verified_at,
             discovery_status=row["discovery_status"] or "DISCOVERED",
             application_status=row["application_status"] or "NOT_APPLIED",
             is_confirmed_opening=is_confirmed,

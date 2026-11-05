@@ -66,6 +66,14 @@ CREATE TABLE IF NOT EXISTS opportunities (
     qualification_score REAL DEFAULT 0.0,
     score_breakdown TEXT, -- JSON dict of category scores
     priority_tier TEXT DEFAULT 'NEEDS_VERIFICATION',
+    audit_classification TEXT DEFAULT 'NEEDS_VERIFICATION',
+    role_title_type TEXT DEFAULT 'PROPOSED_OUTREACH_FOCUS',
+    workplace_type TEXT DEFAULT 'UNKNOWN',
+    international_eligibility TEXT DEFAULT 'NEEDS_CONFIRMATION',
+    compensation_evidence TEXT DEFAULT 'UNPUBLISHED_BY_EMPLOYER',
+    operational_status TEXT DEFAULT 'OPERATIONAL',
+    verification_notes TEXT,
+    last_verified_at TEXT,
     discovery_status TEXT DEFAULT 'DISCOVERED',
     application_status TEXT DEFAULT 'NOT_APPLIED',
     is_confirmed_opening INTEGER DEFAULT 1,
@@ -133,6 +141,22 @@ def apply_opportunity_migrations(conn: sqlite3.Connection) -> Dict[str, Any]:
             cursor.execute("ALTER TABLE opportunities ADD COLUMN priority_tier TEXT DEFAULT 'NEEDS_VERIFICATION';")
         if "is_confirmed_opening" not in columns:
             cursor.execute("ALTER TABLE opportunities ADD COLUMN is_confirmed_opening INTEGER DEFAULT 1;")
+        if "audit_classification" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN audit_classification TEXT DEFAULT 'NEEDS_VERIFICATION';")
+        if "role_title_type" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN role_title_type TEXT DEFAULT 'PROPOSED_OUTREACH_FOCUS';")
+        if "workplace_type" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN workplace_type TEXT DEFAULT 'UNKNOWN';")
+        if "international_eligibility" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN international_eligibility TEXT DEFAULT 'NEEDS_CONFIRMATION';")
+        if "compensation_evidence" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN compensation_evidence TEXT DEFAULT 'UNPUBLISHED_BY_EMPLOYER';")
+        if "operational_status" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN operational_status TEXT DEFAULT 'OPERATIONAL';")
+        if "verification_notes" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN verification_notes TEXT;")
+        if "last_verified_at" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN last_verified_at TEXT;")
         conn.commit()
 
     logger.info(f"Opportunity schema migration applied successfully. Tables verified: {tables}")

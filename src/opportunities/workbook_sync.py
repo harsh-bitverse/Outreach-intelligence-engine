@@ -84,7 +84,9 @@ class OpportunityWorkbookSync:
         except OSError:
             pass
 
-    def create_backup(self) -> Path:
+    def create_backup(self) -> Optional[Path]:
+        if not self.workbook_path.exists():
+            return None
         backup_dir = settings.DATA_DIR / "backups"
         backup_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -94,13 +96,18 @@ class OpportunityWorkbookSync:
 
     def initialize_opportunity_sheets(self) -> Dict[str, Any]:
         """
-        Idempotently create and format the 5 dedicated opportunity sheets in the workbook.
+        Idempotently create and format the dedicated opportunity sheets in the workbook.
         Guarantees existing sheets are untouched.
         """
         self.acquire_lock()
         try:
             self.create_backup()
-            wb = openpyxl.load_workbook(str(self.workbook_path))
+            if self.workbook_path.exists():
+                wb = openpyxl.load_workbook(str(self.workbook_path))
+            else:
+                wb = openpyxl.Workbook()
+                if "Sheet" in wb.sheetnames:
+                    wb.remove(wb["Sheet"])
 
             created_sheets = []
 
@@ -201,7 +208,10 @@ class OpportunityWorkbookSync:
         self.acquire_lock()
         try:
             self.create_backup()
-            wb = openpyxl.load_workbook(str(self.workbook_path))
+            if self.workbook_path.exists():
+                wb = openpyxl.load_workbook(str(self.workbook_path))
+            else:
+                wb = openpyxl.Workbook()
 
             counts = {name: 0 for name in self.NEW_SHEET_NAMES}
 
@@ -261,7 +271,10 @@ class OpportunityWorkbookSync:
         self.acquire_lock()
         try:
             self.create_backup()
-            wb = openpyxl.load_workbook(str(self.workbook_path))
+            if self.workbook_path.exists():
+                wb = openpyxl.load_workbook(str(self.workbook_path))
+            else:
+                wb = openpyxl.Workbook()
             if "Unified Outreach Schedule" not in wb.sheetnames:
                 ws = wb.create_sheet(title="Unified Outreach Schedule")
                 headers = [

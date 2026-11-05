@@ -83,6 +83,17 @@ class OpportunityRanker:
     ]
 
     @classmethod
+    def score_opportunity(cls, opp: Opportunity, org: Optional[Any] = None) -> Opportunity:
+        """Convenience method to score, update, and return an opportunity."""
+        total, breakdown, discovery_status, matched_proj = cls.evaluate_opportunity(opp)
+        opp.qualification_score = total
+        opp.score_breakdown = breakdown
+        opp.discovery_status = discovery_status
+        if matched_proj:
+            opp.matched_project_id = matched_proj
+        return opp
+
+    @classmethod
     def compute_priority_tier(cls, total_score: float, is_strictly_ineligible: bool = False) -> str:
         """Assign standardized priority tier."""
         if is_strictly_ineligible:

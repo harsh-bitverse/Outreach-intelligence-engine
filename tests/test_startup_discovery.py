@@ -174,7 +174,7 @@ def test_domain_adaptive_personalization():
 
     pitch = DomainAdaptivePersonalizer.generate_startup_pitch(opp, org)
     assert pitch["tone"] == "CONCISE_FOUNDER_ENGINEERING_PITCH"
-    assert "Harsh Vardhan" in pitch["pitch_body"]
+    assert "Harshith N" in pitch["pitch_body"]
     assert "IIT Delhi" in pitch["pitch_body"]
     assert len(pitch["pitch_subject"]) > 10
 

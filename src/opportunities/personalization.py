@@ -10,7 +10,7 @@ different relevant evidence and contribution narrative for each opportunity cate
 4. Institutional Programs: Program eligibility, competencies, formal documentation, fellowship dossier.
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from src.opportunities.models import Opportunity, Organization, OpportunityType
 
 
@@ -20,38 +20,40 @@ class DomainAdaptivePersonalizer:
     """
 
     APPLICANT_PROFILE = {
+        "full_name": "Harshith N",
         "institution": "Indian Institute of Technology Delhi (IIT Delhi)",
         "major": "Chemical Engineering",
+        "portfolio_url": "github.com/harsh-bitverse",
         "verified_projects": {
             "Neural Process Twin": {
                 "headline": "Physics-Informed Neural Operator & SciML Surrogate Modeling",
-                "stack": "PyTorch, SciML, PINNs, Finite-Difference Numerical Solvers",
-                "metrics": "Trained neural operators for 2D steady-state heat conduction with finite-difference error estimation."
+                "stack": "Python, PyTorch, SciML, PINNs, Finite-Difference Numerical Solvers",
+                "metrics": "Trained neural operator surrogates for 2D steady-state transport equations; benchmarked convergence and surrogate fidelity against finite-difference numerical baselines."
             },
             "LLM Inference Intelligence Engine": {
                 "headline": "Roofline Hardware Diagnostics & Low-Latency ONNX Runtime Serving",
-                "stack": "Roofline Model, ONNX Runtime, CUDA, Triton, Python, C++",
-                "metrics": "Modeled compute bounds vs memory-bandwidth saturation; optimized token latency across heterogeneous hardware."
+                "stack": "Roofline Model, ONNX Runtime, Python, C++, Linux",
+                "metrics": "Formulated Roofline operational intensity bounds vs memory-bandwidth saturation; benchmarked token latency trade-offs across CPU and GPU hardware."
             },
-            "Finite-Difference PINN Error Estimation": {
+            "PINN Error Estimation term paper": {
                 "headline": "Numerical PDE Residual & Gradient Pathology Mitigation",
-                "stack": "Finite Difference Methods, PyTorch, Numerical Analysis",
-                "metrics": "Quantified PDE discretization error bounds versus neural network optimization errors."
+                "stack": "Finite Difference Methods, PyTorch, Numerical Analysis, LaTeX",
+                "metrics": "Authored term paper analyzing PDE residual discretization error bounds versus neural network optimization errors, studying gradient pathology in physics-constrained loss functions."
             },
-            "Peng-Robinson Real-Gas Cubic Equation of State Solver": {
-                "headline": "Modern C++17 Numerical Thermodynamic Solver",
-                "stack": "C++17, Numerical Root Finding, Chemical Thermodynamics",
-                "metrics": "Implemented robust cubic equation of state solver for high-pressure non-ideal gas mixtures."
+            "C++ Peng–Robinson EOS solver": {
+                "headline": "Modern C++17 Numerical Thermodynamic Real-Gas Solver",
+                "stack": "C++17, Numerical Root Finding, Chemical Thermodynamics, CMake",
+                "metrics": "Engineered robust C++17 cubic equation of state solver for high-pressure non-ideal gas/fluid mixtures with Cardano root solving and thermodynamic property routines."
             },
-            "Humanoid Robotics & SuRGE Microdrone": {
+            "SuRGE microdrone work": {
                 "headline": "Autonomous Microdrone Flight & Embedded Kinematic Control",
-                "stack": "C++, Embedded Systems, ROS2, Visual Odometry, Kinematics",
-                "metrics": "Engineered real-time obstacle avoidance telemetry and multi-axis kinematic control loops."
+                "stack": "C++, Embedded Systems, ROS2, Visual Odometry, Telemetry",
+                "metrics": "Implemented telemetry processing, visual odometry interfaces, and multi-axis kinematic control loops for autonomous microdrone obstacle navigation."
             },
-            "Sovereign On-Premise Agentic AI Workbench": {
+            "Agentic Industrial AI Workbench": {
                 "headline": "Deterministic Multi-Step Autonomous Agent Orchestration",
-                "stack": "Python, Tool Sandboxing, Graph Execution, Failure-Recovery Circuits",
-                "metrics": "Built autonomous coding agent workbench with deterministic state checkpoints and tool sandboxing."
+                "stack": "Python, Asyncio, Tool Sandboxing, Graph Execution, Failure-Recovery Circuits",
+                "metrics": "Designed autonomous coding agent workbench featuring deterministic state checkpoints, bounded exponential backoff, and tool sandboxing."
             }
         }
     }
@@ -87,25 +89,28 @@ class DomainAdaptivePersonalizer:
 
         # Paragraph 2: Verified engineering credentials & concrete proposed contribution
         p2 = (
-            f"Recently, I independently developed `{matched_proj_id}`—{proj_info['headline']} ({proj_info['stack']}). "
+            f"In my independent technical work at IIT Delhi, I developed `{matched_proj_id}`—{proj_info['headline']} ({proj_info['stack']}). "
             f"{proj_info['metrics']} "
-            f"For {company_name}, I could immediately help with {opp.potential_contribution or 'optimizing core engine latency and building deterministic telemetry pipelines'}. "
-            f"I care about shipping production code, profiling memory bounds, and taking complete ownership of core technical bottlenecks rather than peripheral tasks."
+            f"During an 8–12 week Summer 2027 internship, I propose to contribute directly to {company_name} by {opp.potential_contribution or 'benchmarking memory bounds and implementing deterministic testing harnesses for core services'}. "
+            f"I focus on writing clean, reproducible systems code, understanding hardware bottlenecks, and taking rigorous ownership of technical tasks."
         )
 
         # Paragraph 3: Availability & call to action
         p3 = (
-            f"I am available for full-time work between May and August 2027. "
-            f"I would welcome 15 minutes to share my project codebases and discuss where my systems background can be most useful to your team this summer.\n\n"
-            f"Best regards,\n"
-            f"Harsh Vardhan\n"
-            f"Undergraduate, Indian Institute of Technology Delhi\n"
-            f"Portfolio: github.com/harsh-bitverse"
+            f"I am fully available for 8–12 weeks full-time between May and August 2027 (in-person or remote as preferred). "
+            f"My complete independent project codebases and technical documentation are available at {cls.APPLICANT_PROFILE['portfolio_url']}. "
+            f"I would welcome a brief 15-minute conversation to share my work and discuss where my systems background can be most impactful to your team this summer.\n\n"
+            f"Sincerely,\n"
+            f"{cls.APPLICANT_PROFILE['full_name']}\n"
+            f"Undergraduate, {cls.APPLICANT_PROFILE['major']}\n"
+            f"{cls.APPLICANT_PROFILE['institution']}\n"
+            f"Portfolio: {cls.APPLICANT_PROFILE['portfolio_url']}"
         )
 
         body = f"{p1}\n\n{p2}\n\n{p3}"
 
         return {
+            "applicant_name": cls.APPLICANT_PROFILE["full_name"],
             "category": OpportunityType.STARTUP.value,
             "organization_name": company_name,
             "recipient_name": recipient_name,
@@ -130,17 +135,21 @@ class DomainAdaptivePersonalizer:
         )
 
         statement = (
-            f"I am applying for the {opp.title} at {org.name} for Summer 2027. "
-            f"As an undergraduate at IIT Delhi with an engineering foundation in numerical methods and systems, "
-            f"my technical experience directly intersects with {org.name}'s mission in {', '.join(opp.technical_domains or ['AI systems'])}.\n\n"
-            f"In my project `{matched_proj_id}`, I developed {proj_info['headline']} using {proj_info['stack']}. "
-            f"{proj_info['metrics']} "
-            f"During this internship, I am looking to contribute to {opp.potential_contribution or 'production engineering systems'}. "
-            f"I bring rigorous mathematical problem-solving from IIT Delhi, coupled with a track record of independently implementing, "
-            f"debugging, and benchmarking end-to-end software systems."
+            f"Position: {opp.title} — {org.name}\n"
+            f"Applicant: {cls.APPLICANT_PROFILE['full_name']}, Undergraduate in {cls.APPLICANT_PROFILE['major']}, {cls.APPLICANT_PROFILE['institution']}\n"
+            f"Portfolio: {cls.APPLICANT_PROFILE['portfolio_url']}\n\n"
+            f"I am writing to express my strong interest in joining {org.name} for Summer 2027 (8–12 weeks). "
+            f"My academic foundation at IIT Delhi centers on numerical transport phenomena, coupled with independent systems and machine learning engineering.\n\n"
+            f"Completed Technical Work:\n"
+            f"In my project `{matched_proj_id}`, I built {proj_info['headline']} using {proj_info['stack']}. "
+            f"{proj_info['metrics']}\n\n"
+            f"Proposed Summer 2027 Contribution:\n"
+            f"At {org.name}, I am eager to apply this rigorous foundation to {opp.potential_contribution or 'production systems engineering and benchmark verification'}. "
+            f"I bring deep mathematical problem-solving, verifiable codebases on GitHub, and a proven track record of independently implementing and debugging complex software pipelines."
         )
 
         return {
+            "applicant_name": cls.APPLICANT_PROFILE["full_name"],
             "category": opp.opportunity_type,
             "organization_name": org.name,
             "role_title": opp.title,
@@ -149,3 +158,140 @@ class DomainAdaptivePersonalizer:
             "cover_statement": statement,
             "format": "OFFICIAL_CAREERS_PORTAL_APPLICATION"
         }
+
+    @classmethod
+    def generate_ten_verified_startup_pitches(cls) -> List[Dict[str, Any]]:
+        """
+        Generates exactly ten factually grounded startup-specific pitch examples for distinct companies,
+        strictly referencing the applicant's verified technical projects without exaggeration.
+        """
+        from src.opportunities.registry import compute_organization_id, compute_opportunity_id
+
+        pitch_specs = [
+            {
+                "company": "Sarvam AI",
+                "recipient": "Founding Engineering Team",
+                "email": "careers@sarvam.ai",
+                "domain": "Indic LLM Inference & Systems",
+                "relevance": "low-resource tokenization and memory-constrained inference serving",
+                "matched_proj": "LLM Inference Intelligence Engine",
+                "problem": "Indian language tokenization leads to longer sequence lengths, saturating GPU memory bandwidth during auto-regressive generation",
+                "proposed": "benchmarking Roofline operational intensity and implementing memory-efficient tokenization batching harnesses to reduce prefill latency"
+            },
+            {
+                "company": "Together AI",
+                "recipient": "Inference Systems Lead",
+                "email": "talent@together.xyz",
+                "domain": "High-Throughput Model Serving",
+                "relevance": "distributed inference infrastructure and GPU serving optimization",
+                "matched_proj": "LLM Inference Intelligence Engine",
+                "problem": "multi-tenant serving creates severe KV-cache memory bandwidth contention under bursty request spikes",
+                "proposed": "profiling memory-bandwidth saturation thresholds and integrating automated load-testing benchmarks for long-context inference pipelines"
+            },
+            {
+                "company": "Fireworks AI",
+                "recipient": "Lin Qiao / Engineering Team",
+                "email": "careers@fireworks.ai",
+                "domain": "Low-Latency LLM Inference Serving",
+                "relevance": "fast inference engines and structured output decoding",
+                "matched_proj": "LLM Inference Intelligence Engine",
+                "problem": "structured JSON decoding introduces runtime overheads that degrade first-token latency",
+                "proposed": "benchmarking ONNX Runtime and serving execution bottlenecks to help validate speculative decoding pipelines"
+            },
+            {
+                "company": "PhysicsX",
+                "recipient": "Engineering Team",
+                "email": "careers@physicsx.ai",
+                "domain": "Scientific ML & Multiphysics Simulation",
+                "relevance": "physics-informed surrogate models for complex engineering flows",
+                "matched_proj": "Neural Process Twin",
+                "problem": "standard PINN formulations suffer gradient pathologies when enforcing stiff boundary conditions in advection-dominated transport",
+                "proposed": "implementing finite-difference residual error metrics and adaptive loss weighting to improve neural operator surrogate stability"
+            },
+            {
+                "company": "Baseten",
+                "recipient": "Model Serving Infrastructure Lead",
+                "email": "talent@baseten.co",
+                "domain": "Model Serving & Performance Engineering",
+                "relevance": "containerized open-weight model deployment and cold-start reduction",
+                "matched_proj": "LLM Inference Intelligence Engine",
+                "problem": "cold starts and heterogeneous hardware memory pooling create unpredictable latency tails",
+                "proposed": "building automated performance profiling harnesses and benchmarking memory-pinned model weight loading routines"
+            },
+            {
+                "company": "Cognition",
+                "recipient": "Scott Wu / Engineering Team",
+                "email": "careers@cognition.ai",
+                "domain": "Autonomous Coding Agent Architecture",
+                "relevance": "agent tool execution sandboxes and deterministic recovery loops",
+                "matched_proj": "Agentic Industrial AI Workbench",
+                "problem": "long-horizon code generation tasks encounter cascading tool execution errors and nondeterministic state corruption",
+                "proposed": "contributing to deterministic execution checkpointing, failure-recovery circuits, and isolated subprocess sandboxing"
+            },
+            {
+                "company": "CynLr",
+                "recipient": "Robotics Vision Team",
+                "email": "careers@cynlr.com",
+                "domain": "Robot Vision & Visual Servoing",
+                "relevance": "depth-agnostic robotic manipulation and real-time kinematic control",
+                "matched_proj": "SuRGE microdrone work",
+                "problem": "dynamic visual feedback loops require microsecond sensor telemetry integration to prevent control instability",
+                "proposed": "designing robust C++ telemetry pipelines and visual odometry integration routines for real-time robotic servo loops"
+            },
+            {
+                "company": "Modular",
+                "recipient": "Chris Lattner / Systems Team",
+                "email": "careers@modular.com",
+                "domain": "High-Performance Compiler & Tensor Runtime",
+                "relevance": "hardware-accelerated tensor compilation and systems programming",
+                "matched_proj": "C++ Peng–Robinson EOS solver",
+                "problem": "numerical thermodynamic solvers and physical kernels require zero-cost abstractions and deterministic memory management",
+                "proposed": "benchmarking numerical solver routines and porting thermodynamic equation-of-state kernels to test MAX engine runtime performance"
+            },
+            {
+                "company": "Agnikul Cosmos",
+                "recipient": "Propulsion & Simulation Team",
+                "email": "careers@agnikul.in",
+                "domain": "Cryogenic Propulsion & Flight Simulation",
+                "relevance": "thermodynamic fluid modeling and real-gas combustor simulation",
+                "matched_proj": "C++ Peng–Robinson EOS solver",
+                "problem": "cryogenic propellants operate near supercritical conditions where ideal-gas assumptions fail, requiring fast cubic equation of state evaluations",
+                "proposed": "integrating robust C++17 cubic equation-of-state flash routines and numerical root solvers into combustion chamber simulation pipelines"
+            },
+            {
+                "company": "Modal Labs",
+                "recipient": "Erik Bernhardsson / Systems Team",
+                "email": "jobs@modal.com",
+                "domain": "Serverless Cloud Runtime for AI Systems",
+                "relevance": "fast container scheduling, memory snapshotting, and distributed Python orchestration",
+                "matched_proj": "Agentic Industrial AI Workbench",
+                "problem": "distributed Python task orchestration requires robust retry semantics, bounded backoff, and rapid fault isolation under high concurrency",
+                "proposed": "implementing automated resilience benchmarks and designing integration test harnesses for asynchronous distributed task queues"
+            }
+        ]
+
+        pitches = []
+        for spec in pitch_specs:
+            org = Organization(
+                organization_id=compute_organization_id(spec["company"], f"https://www.{spec['company'].lower().replace(' ', '')}.com"),
+                name=spec["company"],
+                category=OpportunityType.STARTUP.value
+            )
+            opp = Opportunity(
+                opportunity_id=compute_opportunity_id(org.organization_id, OpportunityType.STARTUP.value, spec["domain"], "Summer 2027"),
+                organization_id=org.organization_id,
+                title=f"Summer 2027 Engineering Placement — {spec['domain']}",
+                opportunity_type=OpportunityType.STARTUP.value,
+                source="STARTUP_REGISTRY",
+                technical_domains=[spec["domain"]],
+                technical_relevance_summary=spec["relevance"],
+                potential_contribution=spec["proposed"],
+                matched_project_id=spec["matched_proj"],
+                contact_email=spec["email"],
+                contact_name=spec["recipient"]
+            )
+            pitch = cls.generate_startup_pitch(opp, org)
+            pitch["company_problem_context"] = spec["problem"]
+            pitches.append(pitch)
+
+        return pitches

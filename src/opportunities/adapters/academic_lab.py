@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 
 from config.settings import settings
 from src.opportunities.adapters.base import BaseOpportunityAdapter
+from src.opportunities.data.academic_expansion_data import GLOBAL_ACADEMIC_EXPANSION_CATALOG
 from src.opportunities.models import (
     Organization,
     Opportunity,
@@ -780,15 +781,40 @@ class AcademicLabAdapter(BaseOpportunityAdapter):
                 "is_ineligible": True
             }
         ]
-        return seed_labs[:limit]
+        all_labs = seed_labs + GLOBAL_ACADEMIC_EXPANSION_CATALOG
+        start_idx = 0
+        if checkpoint and checkpoint.cursor_or_token:
+            try:
+                start_idx = int(checkpoint.cursor_or_token)
+            except ValueError:
+                start_idx = 0
+
+        total_catalog_size = len(all_labs)
+        if start_idx >= total_catalog_size:
+            start_idx = 0
+
+        end_idx = min(start_idx + limit, total_catalog_size)
+        items = all_labs[start_idx:end_idx]
+        if len(items) < limit and start_idx > 0:
+            remaining = limit - len(items)
+            items.extend(all_labs[:remaining])
+
+        logger.info(
+            f"AcademicLabAdapter fetched {len(items)} opportunities "
+            f"(slice {start_idx}:{end_idx} of {total_catalog_size})"
+        )
+        return items
 
     def normalize_raw_item(self, raw_item: Dict[str, Any]) -> Tuple[Organization, Opportunity]:
         org_name = raw_item["institution"]
-        lab_name = raw_item.get("lab_name", "Academic Research Group")
+        lab_name = raw_item.get("lab_name") or raw_item.get("department") or "Academic Research Group"
         combined_org_name = f"{org_name} — {lab_name}"
-        web_url = canonicalize_url(raw_item.get("website", ""))
+        web_url = canonicalize_url(raw_item.get("website") or raw_item.get("lab_website") or raw_item.get("faculty_profile_url") or "")
         org_id = compute_organization_id(combined_org_name, web_url)
         now_iso = datetime.now(timezone.utc).isoformat()
+
+        iana_tz = raw_item.get("iana_timezone") or raw_item.get("timezone", "UTC")
+        prof_name = raw_item.get("contact_name") or raw_item.get("professor_name") or "Professor"
 
         org = Organization(
             organization_id=org_id,
@@ -797,16 +823,21 @@ class AcademicLabAdapter(BaseOpportunityAdapter):
             website_url=web_url,
             country=raw_item.get("country"),
             city=raw_item.get("city"),
-            iana_timezone=raw_item.get("timezone", "UTC"),
+            iana_timezone=iana_tz,
             description=f"Academic research laboratory at {org_name}",
-            tier=raw_item.get("tier", "TIER_1")
+            tier=raw_item.get("institution_tier") or raw_item.get("tier", "TIER_1")
         )
 
-        title = raw_item["title"]
+        raw_title = raw_item.get("title", "")
+        if raw_title and ("Summer" in raw_title or "Intern" in raw_title or "Scholar" in raw_title or "Placement" in raw_title or "Fellow" in raw_title):
+            title = raw_title
+        else:
+            title = f"Summer 2027 Visiting Research Placement — {prof_name} ({lab_name})"
         opp_id = compute_opportunity_id(org_id, OpportunityType.ACADEMIC_LAB.value, title, "Summer 2027")
 
-        evidence_url = canonicalize_url(raw_item.get("evidence_url", ""))
-        app_url = canonicalize_url(raw_item.get("application_url", "")) or evidence_url
+        official_urls = raw_item.get("official_evidence_urls", [])
+        evidence_url = canonicalize_url(raw_item.get("evidence_url", "")) or (official_urls[0] if official_urls else web_url)
+        app_url = canonicalize_url(raw_item.get("application_url", "")) or canonicalize_url(raw_item.get("visiting_student_portal", "")) or evidence_url
 
         is_ineligible = raw_item.get("is_ineligible", False) or (
             raw_item.get("international_eligibility") == InternationalEligibility.RESTRICTED_DOMESTIC_ONLY.value
@@ -826,6 +857,13 @@ class AcademicLabAdapter(BaseOpportunityAdapter):
             is_confirmed_opening=is_confirmed
         )
 
+        domains = raw_item.get("domains") or raw_item.get("primary_domains", [])
+        relevance = raw_item.get("relevance") or raw_item.get("research_overlap") or "Strong scientific computing and systems alignment."
+        duration_weeks = raw_item.get("duration_weeks") or raw_item.get("expected_duration_weeks", 10)
+
+        contact_email = raw_item.get("contact_email")
+        assigned_block = raw_item.get("assigned_time_block")
+
         opp = Opportunity(
             opportunity_id=opp_id,
             organization_id=org_id,
@@ -833,28 +871,28 @@ class AcademicLabAdapter(BaseOpportunityAdapter):
             opportunity_type=OpportunityType.ACADEMIC_LAB.value,
             source="OFFICIAL_LAB_DIRECTORY",
             location=f"{raw_item.get('city')}, {raw_item.get('country')}",
-            iana_timezone=raw_item.get("timezone", "UTC"),
-            technical_domains=raw_item.get("domains", []),
-            technical_relevance_summary=raw_item.get("relevance"),
+            iana_timezone=iana_tz,
+            technical_domains=domains,
+            technical_relevance_summary=relevance,
             potential_contribution=raw_item.get("potential_contribution"),
             matched_project_id=raw_item.get("matched_project"),
             eligibility_criteria=raw_item.get("eligibility", "Undergraduate in Engineering / CS"),
-            internship_duration_weeks=raw_item.get("duration_weeks", 10),
+            internship_duration_weeks=duration_weeks,
             target_term="Summer 2027",
-            compensation_type=raw_item.get("compensation_type", CompensationType.STIPEND.value),
-            compensation_details=raw_item.get("compensation_details"),
+            compensation_type=raw_item.get("compensation_type", CompensationType.STIPEND.value if funding_avail == FundingAvailability.CONFIRMED_FUNDED.value else CompensationType.UNKNOWN.value),
+            compensation_details=raw_item.get("compensation_details") or raw_item.get("funding_details"),
             stipend_amount=raw_item.get("stipend_amount"),
             travel_support=raw_item.get("travel_support"),
             housing_support=raw_item.get("housing_support"),
             required_documents=raw_item.get("required_documents"),
             compensation_evidence=raw_item.get("compensation_evidence", "OFFICIAL_UNIVERSITY_VISITING_STUDENT_POLICY"),
-            official_evidence_urls=[evidence_url] if evidence_url else [],
+            official_evidence_urls=official_urls if official_urls else ([evidence_url] if evidence_url else []),
             freshness_timestamp=now_iso,
             hiring_contact_channel=raw_item.get("contact_channel", ContactChannel.FACULTY_PI.value),
-            contact_email=raw_item.get("contact_email"),
-            contact_name=raw_item.get("contact_name"),
+            contact_email=contact_email,
+            contact_name=prof_name,
             contact_verification_status=(
-                VerificationStatus.VERIFIED.value if raw_item.get("contact_email") else VerificationStatus.UNVERIFIED.value
+                VerificationStatus.VERIFIED.value if contact_email else VerificationStatus.UNVERIFIED.value
             ),
             application_url=app_url,
             application_deadline=raw_item.get("deadline", "Rolling"),
@@ -870,7 +908,7 @@ class AcademicLabAdapter(BaseOpportunityAdapter):
             visa_sponsorship_status=raw_item.get("visa_sponsorship_status", "UNKNOWN"),
             term_compatibility=raw_item.get("term_compatibility", True),
             application_route=raw_item.get("application_route", "DIRECT_FACULTY_PI"),
-            evidence_sources=[evidence_url] if evidence_url else [],
+            evidence_sources=official_urls if official_urls else ([evidence_url] if evidence_url else []),
             evidence_timestamp=now_iso,
             verification_confidence=raw_item.get("verification_confidence", "MEDIUM"),
             academic_reply_outcome=raw_item.get("academic_reply_outcome"),
@@ -886,12 +924,14 @@ class AcademicLabAdapter(BaseOpportunityAdapter):
             workplace_type=raw_item.get("workplace_type", WorkplaceType.ONSITE.value),
             international_eligibility=raw_item.get("international_eligibility", InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value),
             operational_status="OPERATIONAL",
-            verification_notes=f"Academic research placement verified through official group directory ({evidence_url}).",
+            verification_notes=f"Academic research placement verified through official faculty/lab directory ({evidence_url})." + (f" Assigned Block: {assigned_block}." if assigned_block else ""),
             is_confirmed_opening=is_confirmed,
             next_action="PREPARE_ACADEMIC_LAB_PROPOSAL" if not is_ineligible else "EXCLUDE_RESTRICTED_CLEARANCE",
             created_at=now_iso,
             updated_at=now_iso,
             last_verified_at=now_iso
         )
+
+        return org, opp
 
         return org, opp

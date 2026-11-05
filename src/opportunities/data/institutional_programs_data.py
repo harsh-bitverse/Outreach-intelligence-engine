@@ -667,7 +667,7 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
     },
     {
         "institution_name": "Argonne National Laboratory (ANL)",
-        "program_name": "DOE Science Undergraduate Laboratory Internships (SULI) — Computing & Multiphysics",
+        "program_name": "Argonne International Visiting Student Research Program / DOE SULI Computing Track",
         "website": "https://www.anl.gov",
         "country": "United States",
         "city": "Lemont",
@@ -690,7 +690,7 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "housing_support": "Housing allowance or Argonne guest house room provided",
         "required_documents": "Academic CV, official transcript, 2 recommendation letters, essay responses",
         "compensation_evidence": "OFFICIAL_DOE_SULI_PROGRAM_GUIDELINES",
-        "eligibility": "Enrolled undergraduate students in STEM. Non-US citizens eligible through Argonne visiting scholar agreements.",
+        "eligibility": "Enrolled undergraduate students in STEM. Note: Direct DOE SULI federal funding requires US citizenship/LPR; international students (including IIT undergraduates) participate via Argonne Division-sponsored J-1 Visiting Research Scholar appointment.",
         "international_eligibility": InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
         "workplace_type": WorkplaceType.ONSITE.value,
         "evidence_url": "https://www.anl.gov/education/undergraduate-internships",

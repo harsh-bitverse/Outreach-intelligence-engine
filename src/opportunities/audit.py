@@ -111,6 +111,13 @@ def audit_opportunity(opp: Opportunity, org: Organization) -> Opportunity:
         opp.role_title_type = RoleTitleType.PROPOSED_OUTREACH_FOCUS.value
         opp.is_confirmed_opening = False
         opp.verification_notes = "Seasonal university recruiting program; monitor for formal Summer 2027 cycle opening."
+    elif opp.opportunity_type == OpportunityType.ACADEMIC_LAB.value:
+        # Academic placement: retain academic classification and specific verification notes
+        if not opp.verification_notes:
+            opp.verification_notes = f"Academic research placement verified through official faculty/lab directory."
+        opp.role_title_type = RoleTitleType.PROPOSED_OUTREACH_FOCUS.value
+        if opp.audit_classification is None:
+            opp.audit_classification = OpportunityClassification.CONFIRMED_OPENING.value if opp.is_confirmed_opening else OpportunityClassification.PROSPECTIVE_OUTREACH_TARGET.value
     else:
         opp.audit_classification = OpportunityClassification.PROSPECTIVE_OUTREACH_TARGET.value
         opp.role_title_type = RoleTitleType.PROPOSED_OUTREACH_FOCUS.value

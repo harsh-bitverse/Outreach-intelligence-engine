@@ -108,8 +108,8 @@ class UnifiedOutreachBridge:
                 hist_status = ContactHistoryStatus.PORTAL_APPLICATION.value
             elif not has_email:
                 hist_status = ContactHistoryStatus.UNVERIFIED.value
-            elif not is_verified:
-                hist_status = ContactHistoryStatus.NEEDS_REVIEW.value
+            elif not is_verified or (opp.contact_verification_status or "").upper() == "NEEDS_CONTACT_VERIFICATION":
+                hist_status = ContactHistoryStatus.NEEDS_CONTACT_VERIFICATION.value
             else:
                 is_suppressed = self.repo.is_contact_suppressed_or_already_contacted(opp.contact_email)
                 if is_suppressed:
@@ -152,6 +152,11 @@ class UnifiedOutreachBridge:
             routing_channel = "EMAIL_OUTREACH"
             outreach_readiness = "EXCLUDED_SUPPRESSED"
             next_action = "EXCLUDE_FROM_DISPATCH_ALREADY_CONTACTED"
+            assigned_block_id = tz_calc["assigned_block_id"]
+        elif hist_status == ContactHistoryStatus.NEEDS_CONTACT_VERIFICATION.value:
+            routing_channel = "UNVERIFIED_EMAIL"
+            outreach_readiness = "QUARANTINE_NEEDS_CONTACT_VERIFICATION"
+            next_action = "VERIFY_RECIPIENT_CONTACT_EVIDENCE"
             assigned_block_id = tz_calc["assigned_block_id"]
         else:  # NEEDS_REVIEW
             routing_channel = "UNVERIFIED_EMAIL"

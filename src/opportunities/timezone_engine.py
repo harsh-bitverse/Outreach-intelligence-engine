@@ -447,8 +447,10 @@ class CanonicalRegionalBlockRegistry:
         target_date: Optional[date] = None
     ) -> Tuple[bool, str]:
         """
-        Determines whether the given target_date is a standard working day (Monday - Friday)
+        Determines whether the given target_date is a standard working day
         in the recipient's local timezone.
+        For Middle East (Gulf/Saudi), working week is Sunday through Thursday.
+        For Western/Asian regions, working week is Monday through Friday.
         """
         if target_date is None:
             target_date = date(2026, 11, 5)
@@ -457,12 +459,22 @@ class CanonicalRegionalBlockRegistry:
         # Recipient midday on target date
         midday_local = datetime.combine(target_date, time(12, 0), tzinfo=tz)
         weekday = midday_local.weekday()  # Monday is 0, Sunday is 6
-
         day_name = midday_local.strftime("%A")
-        if weekday < 5:
-            return True, f"WORKING_DAY: {day_name} is a recipient-local working day"
+
+        tz_lower = iana_timezone.lower()
+        is_middle_east = any(k in tz_lower for k in ["riyadh", "dubai", "qatar", "kuwait", "bahrain", "muscat", "saudi", "gulf"])
+
+        if is_middle_east:
+            # Middle East: Sunday (6), Mon (0), Tue (1), Wed (2), Thu (3)
+            if weekday in (4, 5):  # Friday, Saturday
+                return False, f"NON_WORKING_DAY: {day_name} is weekend in Middle East"
+            else:
+                return True, f"WORKING_DAY: {day_name} is working day in Middle East"
         else:
-            return False, f"NON_WORKING_DAY: {day_name} is a recipient-local weekend"
+            if weekday < 5:  # Monday to Friday
+                return True, f"WORKING_DAY: {day_name} is a recipient-local working day"
+            else:
+                return False, f"NON_WORKING_DAY: {day_name} is a recipient-local weekend"
 
 
 class DynamicTimezoneEngine:
@@ -710,3 +722,45 @@ class DynamicTimezoneEngine:
             return False, f"TOO_EARLY: Recipient local time {local_time_str} is before 08:30 working hours", local_time_str
         else:
             return False, f"PAST_WINDOW: Recipient local time {local_time_str} has passed the 09:30 morning peak window", local_time_str
+
+    @classmethod
+    def is_recipient_in_active_window(
+        cls,
+        iana_timezone: str,
+        now_utc: Optional[datetime] = None
+    ) -> Tuple[bool, str]:
+        """
+        Calculates dynamic recipient dispatch eligibility based on:
+        1. Recipient working day (accounting for regional calendars, e.g. Sun-Thu in Middle East).
+        2. Recipient local morning arrival window (08:30 - 09:30 local midpoint).
+        """
+        if now_utc is None:
+            now_utc = datetime.now(timezone.utc)
+        elif now_utc.tzinfo is None:
+            now_utc = now_utc.replace(tzinfo=timezone.utc)
+
+        tz = cls.get_zone_info(iana_timezone)
+        recipient_local_dt = now_utc.astimezone(tz)
+        local_date = recipient_local_dt.date()
+        local_time = recipient_local_dt.time()
+        local_time_str = recipient_local_dt.strftime("%H:%M %Z")
+
+        # 1. Working Day Check
+        is_working_day, wd_reason = CanonicalRegionalBlockRegistry.is_recipient_working_day(iana_timezone, local_date)
+        if not is_working_day:
+            return False, f"NON_WORKING_DAY: {wd_reason}"
+
+        # 2. Local Time Window (08:30 to 09:30)
+        window_start = time(8, 30)
+        window_end = time(9, 30)
+        if window_start <= local_time <= window_end:
+            return True, f"ACTIVE_WINDOW: Recipient local time {local_time_str} is within 08:30-09:30 morning window"
+        elif local_time < window_start:
+            return False, f"OUTSIDE_HOURS: Recipient local time {local_time_str} is before 08:30"
+        else:
+            return False, f"OUTSIDE_HOURS: Recipient local time {local_time_str} is past 09:30"
+
+
+# Alias for backward compatibility across modules
+OpportunityTimezoneEngine = DynamicTimezoneEngine
+

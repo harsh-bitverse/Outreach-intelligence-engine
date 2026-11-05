@@ -304,12 +304,19 @@ class ContactVerifier:
                             "reason": f"PREVIOUS_ATTEMPT_BOUNCED: {full_name} had a previous bounce under {cand['email']}; address change requires manual review."
                         }
 
-        # 7. Sourcing Credibility Check
-        if not evidence_urls or len([u for u in evidence_urls if u and u.strip()]) == 0:
+        # 7. Sourcing Credibility & Email Evidence Grounding Check
+        # For every contact marked VERIFIED_CONTACT, require an actual source connecting
+        # that exact email to the intended person or official contact channel.
+        # Syntax checks are necessary but insufficient; never infer or repair missing TLDs without independent evidence.
+        valid_evidence = [
+            u for u in (evidence_urls or [])
+            if u and isinstance(u, str) and u.strip() and u.strip() not in ("[]", "None", "")
+        ]
+        if not valid_evidence:
             return {
-                "classification": "UNVERIFIED",
+                "classification": "NEEDS_CONTACT_VERIFICATION",
                 "is_dispatch_eligible": False,
-                "reason": "UNVERIFIED_SOURCE: Lacks verified official evidence URLs."
+                "reason": "NEEDS_CONTACT_VERIFICATION: Lacks verified official evidence URL connecting email address to person or channel."
             }
 
         # 8. Organization Association Check

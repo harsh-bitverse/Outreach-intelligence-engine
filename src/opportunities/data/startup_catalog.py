@@ -13,12 +13,13 @@ from src.opportunities.data.us_startups import US_STARTUPS
 from src.opportunities.data.global_startups import GLOBAL_STARTUPS
 from src.opportunities.data.expansion_batch_session06 import NEW_STARTUPS
 from src.opportunities.data.expansion_batch_session07 import NEW_STARTUPS_SESSION07
+from src.opportunities.data.expansion_batch_session08 import NEW_STARTUPS_SESSION08
 
 # Combine and deduplicate by canonical company name
 def _get_deduplicated_catalog() -> List[Dict[str, Any]]:
     seen_names = set()
     catalog = []
-    all_startups = INDIA_STARTUPS + US_STARTUPS + GLOBAL_STARTUPS + NEW_STARTUPS + NEW_STARTUPS_SESSION07
+    all_startups = INDIA_STARTUPS + US_STARTUPS + GLOBAL_STARTUPS + NEW_STARTUPS + NEW_STARTUPS_SESSION07 + NEW_STARTUPS_SESSION08
     for startup in all_startups:
         s = dict(startup)
         if "title" not in s or not s["title"]:

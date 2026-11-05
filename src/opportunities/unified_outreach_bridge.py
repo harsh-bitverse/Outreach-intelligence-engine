@@ -155,8 +155,9 @@ class UnifiedOutreachBridge:
         if is_portal or opp.application_url:
             portal_packet = self._generate_portal_packet(opp, org)
 
-        # 7. Delivery Tracker Reference
-        msg_id_blueprint = f"<1793.{abs(hash(opp.opportunity_id)) % 1000000}@{opp.opportunity_id[:8]}.outreach>"
+        # 7. Internal Tracking & Planned Dispatch Token (No Fictional SMTP Message-ID)
+        internal_tracking_id = f"TRK-{opp.opportunity_id[:12]}"
+        planned_dispatch_ref = f"PLAN-{assigned_block_id}-{opp.opportunity_id[:8]}"
 
         result = {
             "opportunity_id": opp.opportunity_id,
@@ -168,24 +169,75 @@ class UnifiedOutreachBridge:
             "outreach_readiness": outreach_readiness,
             "contact_history_status": hist_status,
             "assigned_block_id": assigned_block_id,
+            "canonical_block_id": tz_calc.get("canonical_block_id", assigned_block_id),
+            "canonical_label": tz_calc.get("canonical_label", f"{assigned_block_id} ({tz_calc['block_name']})"),
             "region_name": tz_calc["block_name"],
             "recipient_mailing_window": tz_calc["local_mailing_window"],
             "ist_dispatch_window": tz_calc["ist_mailing_window"],
             "iana_timezone": tz_str,
             "utc_offset": tz_calc["utc_offset"],
             "is_dst_active": tz_calc["is_dst_active"],
+            "is_recipient_working_day": tz_calc.get("is_recipient_working_day", True),
             "contact_email": opp.contact_email,
             "contact_name": opp.contact_name,
             "application_url": opp.application_url,
             "qualification_score": opp.qualification_score,
             "priority_tier": opp.priority_tier or "PROMISING",
             "next_action": next_action,
-            "tracking_reference": msg_id_blueprint,
+            "internal_tracking_id": internal_tracking_id,
+            "planned_dispatch_ref": planned_dispatch_ref,
+            "tracking_reference": internal_tracking_id,
+            "smtp_message_id": None,  # Real Message-ID generated ONLY upon actual/simulated message construction
             "draft_packet": draft_packet,
             "portal_packet": portal_packet
         }
 
         return result
+
+    @classmethod
+    def generate_real_message_id(cls, opp_id: str, sender_domain: str = "iitd.ac.in") -> str:
+        """
+        Generates authentic outgoing SMTP Message-ID at actual MIME message construction.
+        Format: <{timestamp_ms}.{pid}.{hash_suffix}@{sender_domain}>
+        """
+        now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+        pid = os.getpid()
+        hash_suffix = abs(hash(f"{opp_id}:{now_ms}")) % 10000000
+        return f"<{now_ms}.{pid}.{hash_suffix}@{sender_domain}>"
+
+    @classmethod
+    def simulate_smtp_dispatch(
+        cls,
+        route_result: Dict[str, Any],
+        dry_run: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Simulates atomic message construction, generating an authentic outgoing Message-ID,
+        and recording simulated SMTP acceptance separately.
+        Guaranteed ZERO writes to production database and ZERO real SMTP transmissions.
+        """
+        opp_id = route_result["opportunity_id"]
+        recipient = route_result.get("contact_email") or "test@domain.com"
+        real_msg_id = cls.generate_real_message_id(opp_id)
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Simulated SMTP 250 response
+        smtp_token = f"k{abs(hash(real_msg_id)) % 1000000000}"
+        smtp_response = f"250 2.0.0 Ok: queued as {smtp_token}"
+
+        dispatch_record = {
+            "opportunity_id": opp_id,
+            "internal_tracking_id": route_result["internal_tracking_id"],
+            "recipient_email": recipient,
+            "smtp_message_id": real_msg_id,
+            "smtp_status": "SMTP_ACCEPTED_SIMULATED",
+            "smtp_response_code": smtp_response,
+            "smtp_accepted_at": now_iso,
+            "delivery_watch_status": "ACTIVE_10_MIN_WATCH",
+            "is_dry_run": dry_run,
+            "historical_sent_written": False  # Dry-run NEVER marks historical SENT in production
+        }
+        return dispatch_record
 
     def _generate_domain_draft(self, opp: Opportunity, org: Organization) -> Dict[str, Any]:
         """

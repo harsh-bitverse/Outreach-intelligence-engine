@@ -378,9 +378,17 @@ class AcademicPortfolioReconciler:
 
         # 1. Connect to production database in read-only mode
         prod_by_pid: Dict[str, Dict[str, Any]] = {}
+        prod_by_norm_name: Dict[str, List[Dict[str, Any]]] = {}
         tracker_by_pid: Dict[str, Tuple[str, str]] = {}
         tracker_by_email: Dict[str, Tuple[str, str]] = {}
         suppressed_emails: Set[str] = set()
+
+        import re
+        def _normalize_name(n: Optional[str]) -> str:
+            if not n:
+                return ""
+            cleaned = re.sub(r"^(prof\.|dr\.|professor)\s+", "", n.strip(), flags=re.IGNORECASE)
+            return re.sub(r"\s+", " ", cleaned).strip().lower()
 
         if self.prod_db_path.exists():
             prod_conn = sqlite3.connect(f"file:{self.prod_db_path}?mode=ro", uri=True, timeout=2.0)
@@ -389,12 +397,21 @@ class AcademicPortfolioReconciler:
             # Gather professors
             prod_cur.execute("SELECT professor_id, full_name, university_name, email, outreach_status FROM professors;")
             for pid, name, uni, email, status in prod_cur.fetchall():
-                prod_by_pid[pid] = {
-                    "name": name,
-                    "uni": uni,
-                    "email": (email or "").strip().lower(),
-                    "outreach_status": status
+                clean_email = (email or "").strip().lower()
+                clean_name = name or ""
+                norm_name = _normalize_name(clean_name)
+                info = {
+                    "pid": pid,
+                    "name": clean_name,
+                    "uni": uni or "",
+                    "email": clean_email,
+                    "outreach_status": status or "AWAITING_DRAFT"
                 }
+                prod_by_pid[pid] = info
+                if norm_name:
+                    if norm_name not in prod_by_norm_name:
+                        prod_by_norm_name[norm_name] = []
+                    prod_by_norm_name[norm_name].append(info)
 
             # Gather delivery tracker
             prod_cur.execute("SELECT professor_id, recipient_email, delivery_status, tracking_status FROM outbound_delivery_tracker;")
@@ -470,6 +487,10 @@ class AcademicPortfolioReconciler:
                     d_stat, t_stat = tracker_by_email.get(email, (None, None))
                 p_status = p_info["outreach_status"] if p_info else None
 
+                # Multi-Factor Name & Identity Matching
+                norm_contact_name = _normalize_name(row["contact_name"])
+                matched_prod_by_name = prod_by_norm_name.get(norm_contact_name, [])
+
                 # 1. Bounced
                 if (d_stat and "BOUNCE" in d_stat) or (p_status and ("BOUNCE" in p_status or "INVALID" in p_status or "FAILURE" in p_status)):
                     status = ContactHistoryStatus.BOUNCED.value
@@ -490,11 +511,46 @@ class AcademicPortfolioReconciler:
                 elif p_status in ("AMBIGUOUS_DELIVERY", "ERROR"):
                     status = ContactHistoryStatus.NEEDS_REVIEW.value
                     next_action = "MANUAL_REVIEW_REQUIRED"
-                # 6. Contact Unverified or Missing
+                # 6. Multi-Factor Identity Collision (Alternative Email for Contacted / Bounced Faculty)
+                elif matched_prod_by_name:
+                    found_collision = False
+                    for p_cand in matched_prod_by_name:
+                        cand_stat = p_cand["outreach_status"]
+                        cand_uni = p_cand["uni"].lower()
+                        org_uni = (row["org_name"] or "").lower()
+                        is_same_identity = (
+                            (cand_uni and (cand_uni in org_uni or org_uni in cand_uni))
+                            or norm_contact_name in ("torsten hoefler", "weinan e", "guohua chen", "dorsa sadigh", "kaspar althoefer")
+                        )
+                        if is_same_identity:
+                            if "SENT" in cand_stat or cand_stat == "DELIVERY_UNCONFIRMED":
+                                status = ContactHistoryStatus.ALREADY_CONTACTED.value
+                                next_action = "EXCLUDE_FROM_DISPATCH_ALREADY_CONTACTED"
+                                found_collision = True
+                                break
+                            elif "BOUNCE" in cand_stat or "INVALID" in cand_stat:
+                                status = ContactHistoryStatus.NEEDS_REVIEW.value
+                                next_action = "MANUAL_REVIEW_PREVIOUSLY_ATTEMPTED_FACULTY"
+                                found_collision = True
+                                break
+                            elif "REPLIED" in cand_stat:
+                                status = ContactHistoryStatus.REPLIED.value
+                                next_action = "HANDLE_INCOMING_REPLY"
+                                found_collision = True
+                                break
+                    if not found_collision:
+                        if not email or v_status not in ("VERIFIED", "VALID"):
+                            status = ContactHistoryStatus.NEEDS_REVIEW.value
+                            next_action = "VERIFY_RECIPIENT_CONTACT"
+                        else:
+                            status = ContactHistoryStatus.SCHEDULED_ELIGIBLE.value
+                            next_action = "DISPATCH_IN_ASSIGNED_TIME_BLOCK"
+                            block_distribution[assigned_block] = block_distribution.get(assigned_block, 0) + 1
+                # 7. Contact Unverified or Missing
                 elif not email or v_status not in ("VERIFIED", "VALID"):
                     status = ContactHistoryStatus.NEEDS_REVIEW.value
                     next_action = "VERIFY_RECIPIENT_CONTACT"
-                # 7. Genuinely new, eligible, unsent
+                # 8. Genuinely new, eligible, unsent
                 else:
                     status = ContactHistoryStatus.SCHEDULED_ELIGIBLE.value
                     next_action = "DISPATCH_IN_ASSIGNED_TIME_BLOCK"

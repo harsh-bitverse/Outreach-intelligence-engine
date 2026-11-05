@@ -777,5 +777,7 @@ FRONTIER_INDUSTRY_DATA: List[Dict[str, Any]] = [
 
 from src.opportunities.data.expansion_batch_session06 import NEW_FRONTIER_INDUSTRY
 from src.opportunities.data.expansion_batch_session07 import NEW_FRONTIER_INDUSTRY_SESSION07
+from src.opportunities.data.expansion_batch_session08 import NEW_FRONTIER_INDUSTRY_SESSION08
 FRONTIER_INDUSTRY_DATA.extend(NEW_FRONTIER_INDUSTRY)
 FRONTIER_INDUSTRY_DATA.extend(NEW_FRONTIER_INDUSTRY_SESSION07)
+FRONTIER_INDUSTRY_DATA.extend(NEW_FRONTIER_INDUSTRY_SESSION08)

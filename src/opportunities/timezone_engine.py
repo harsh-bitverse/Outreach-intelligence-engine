@@ -163,6 +163,307 @@ DEVELOPMENT_EXTENDED_BLOCKS: Dict[str, Dict[str, Any]] = {
     },
 }
 
+# Canonical Regional Blocks Registry
+# Unites production numeric IDs (BLOCK_01..13), legacy descriptive IDs (BLOCK_01_JP_KR..13_OCEANIA),
+# and explicit canonical labels to eliminate ambiguity across operator reports.
+CANONICAL_REGIONAL_BLOCKS: Dict[str, Dict[str, Any]] = {
+    "BLOCK_01_NZ": {
+        "canonical_id": "BLOCK_01_NZ",
+        "production_numeric_id": "BLOCK_01",
+        "legacy_geographic_id": "BLOCK_13_OCEANIA",
+        "canonical_label": "BLOCK_01_NZ (New Zealand)",
+        "name": "New Zealand",
+        "target_local_window": "08:30 - 09:30 NZDT (UTC+13)",
+        "reference_timezone": "Pacific/Auckland",
+        "primary_timezones": ["Pacific/Auckland"],
+        "approx_ist": "01:00 - 02:00 IST",
+        "start_ist": "01:00",
+        "end_ist": "02:00",
+        "start_time": time(1, 0),
+        "end_time": time(2, 0),
+    },
+    "BLOCK_02_AU_EAST": {
+        "canonical_id": "BLOCK_02_AU_EAST",
+        "production_numeric_id": "BLOCK_02",
+        "legacy_geographic_id": "BLOCK_13_OCEANIA",
+        "canonical_label": "BLOCK_02_AU_EAST (Australia Eastern Daylight)",
+        "name": "Australia Eastern Daylight",
+        "target_local_window": "08:30 - 09:30 AEDT (UTC+11)",
+        "reference_timezone": "Australia/Sydney",
+        "primary_timezones": ["Australia/Sydney", "Australia/Melbourne", "Australia/Hobart", "Australia/Canberra"],
+        "approx_ist": "03:00 - 04:00 IST",
+        "start_ist": "03:00",
+        "end_ist": "04:00",
+        "start_time": time(3, 0),
+        "end_time": time(4, 0),
+    },
+    "BLOCK_03_AU_CENTRAL": {
+        "canonical_id": "BLOCK_03_AU_CENTRAL",
+        "production_numeric_id": "BLOCK_03",
+        "legacy_geographic_id": "BLOCK_13_OCEANIA",
+        "canonical_label": "BLOCK_03_AU_CENTRAL (Australia Central & Queensland)",
+        "name": "Australia Central & Queensland",
+        "target_local_window": "08:30 - 09:30 ACDT/AEST (UTC+10.5/+10)",
+        "reference_timezone": "Australia/Adelaide",
+        "primary_timezones": ["Australia/Adelaide", "Australia/Darwin", "Australia/Brisbane"],
+        "approx_ist": "04:00 - 05:00 IST",
+        "start_ist": "04:00",
+        "end_ist": "05:00",
+        "start_time": time(4, 0),
+        "end_time": time(5, 0),
+    },
+    "BLOCK_04_JP_KR": {
+        "canonical_id": "BLOCK_04_JP_KR",
+        "production_numeric_id": "BLOCK_04",
+        "legacy_geographic_id": "BLOCK_01_JP_KR",
+        "canonical_label": "BLOCK_04_JP_KR (Japan & South Korea)",
+        "name": "Japan & South Korea",
+        "target_local_window": "08:30 - 09:30 JST/KST (UTC+9)",
+        "reference_timezone": "Asia/Tokyo",
+        "primary_timezones": ["Asia/Tokyo", "Asia/Seoul"],
+        "approx_ist": "05:00 - 06:00 IST",
+        "start_ist": "05:00",
+        "end_ist": "06:00",
+        "start_time": time(5, 0),
+        "end_time": time(6, 0),
+    },
+    "BLOCK_05_CN_SG": {
+        "canonical_id": "BLOCK_05_CN_SG",
+        "production_numeric_id": "BLOCK_05",
+        "legacy_geographic_id": "BLOCK_02_SG_CN_HK_TW",
+        "canonical_label": "BLOCK_05_CN_SG (Greater China, Singapore, Malaysia & WA)",
+        "name": "Greater China, Singapore, Malaysia & WA",
+        "target_local_window": "08:30 - 09:30 CST/HKT/SGT/AWST (UTC+8)",
+        "reference_timezone": "Asia/Singapore",
+        "primary_timezones": ["Asia/Singapore", "Asia/Hong_Kong", "Asia/Shanghai", "Asia/Taipei", "Asia/Kuala_Lumpur", "Australia/Perth", "Asia/Macau", "Asia/Beijing"],
+        "approx_ist": "06:00 - 07:00 IST",
+        "start_ist": "06:00",
+        "end_ist": "07:00",
+        "start_time": time(6, 0),
+        "end_time": time(7, 0),
+    },
+    "BLOCK_06_ME_RU": {
+        "canonical_id": "BLOCK_06_ME_RU",
+        "production_numeric_id": "BLOCK_06",
+        "legacy_geographic_id": "BLOCK_05_SA_TR_RU",
+        "canonical_label": "BLOCK_06_ME_RU (Middle East & Russia)",
+        "name": "Middle East & Russia",
+        "target_local_window": "08:30 - 09:30 AST/MSK (UTC+3)",
+        "reference_timezone": "Asia/Riyadh",
+        "primary_timezones": ["Asia/Riyadh", "Asia/Dubai", "Europe/Moscow", "Asia/Qatar", "Asia/Kuwait", "Asia/Baghdad", "Asia/Bahrain"],
+        "approx_ist": "11:00 - 12:00 IST",
+        "start_ist": "11:00",
+        "end_ist": "12:00",
+        "start_time": time(11, 0),
+        "end_time": time(12, 0),
+    },
+    "BLOCK_07_CONT_EU": {
+        "canonical_id": "BLOCK_07_CONT_EU",
+        "production_numeric_id": "BLOCK_07",
+        "legacy_geographic_id": "BLOCK_07_CONT_EU",
+        "canonical_label": "BLOCK_07_CONT_EU (Continental Europe CET)",
+        "name": "Continental Europe (CET)",
+        "target_local_window": "08:30 - 09:30 CET/CEST (UTC+1/+2)",
+        "reference_timezone": "Europe/Berlin",
+        "primary_timezones": ["Europe/Berlin", "Europe/Paris", "Europe/Zurich", "Europe/Amsterdam", "Europe/Rome", "Europe/Madrid", "Europe/Stockholm", "Europe/Copenhagen", "Europe/Oslo", "Europe/Vienna", "Europe/Brussels", "Europe/Warsaw", "Europe/Prague"],
+        "approx_ist": "13:00 - 14:00 IST",
+        "start_ist": "13:00",
+        "end_ist": "14:00",
+        "start_time": time(13, 0),
+        "end_time": time(14, 0),
+    },
+    "BLOCK_08_UK_IE": {
+        "canonical_id": "BLOCK_08_UK_IE",
+        "production_numeric_id": "BLOCK_08",
+        "legacy_geographic_id": "BLOCK_08_UK_IE_PT",
+        "canonical_label": "BLOCK_08_UK_IE (United Kingdom & Ireland GMT)",
+        "name": "United Kingdom & Ireland (GMT)",
+        "target_local_window": "08:30 - 09:30 GMT/BST (UTC+0/+1)",
+        "reference_timezone": "Europe/London",
+        "primary_timezones": ["Europe/London", "Europe/Dublin", "Europe/Lisbon"],
+        "approx_ist": "14:00 - 15:00 IST",
+        "start_ist": "14:00",
+        "end_ist": "15:00",
+        "start_time": time(14, 0),
+        "end_time": time(15, 0),
+    },
+    "BLOCK_09_LATAM": {
+        "canonical_id": "BLOCK_09_LATAM",
+        "production_numeric_id": "BLOCK_09",
+        "legacy_geographic_id": None,
+        "canonical_label": "BLOCK_09_LATAM (Latin America)",
+        "name": "Latin America (Argentina & Chile)",
+        "target_local_window": "08:30 - 09:30 ART/CLST (UTC-3)",
+        "reference_timezone": "America/Argentina/Buenos_Aires",
+        "primary_timezones": ["America/Argentina/Buenos_Aires", "America/Santiago", "America/Sao_Paulo"],
+        "approx_ist": "17:00 - 18:00 IST",
+        "start_ist": "17:00",
+        "end_ist": "18:00",
+        "start_time": time(17, 0),
+        "end_time": time(18, 0),
+    },
+    "BLOCK_10_US_EAST": {
+        "canonical_id": "BLOCK_10_US_EAST",
+        "production_numeric_id": "BLOCK_10",
+        "legacy_geographic_id": "BLOCK_09_US_EAST",
+        "canonical_label": "BLOCK_10_US_EAST (US & Canada Eastern)",
+        "name": "US & Canada Eastern",
+        "target_local_window": "08:30 - 09:30 EDT/EST (UTC-4/-5)",
+        "reference_timezone": "America/New_York",
+        "primary_timezones": ["America/New_York", "America/Detroit", "America/Toronto", "America/Montreal", "America/Indiana/Indianapolis"],
+        "approx_ist": "18:00 - 19:00 IST",
+        "start_ist": "18:00",
+        "end_ist": "19:00",
+        "start_time": time(18, 0),
+        "end_time": time(19, 0),
+    },
+    "BLOCK_11_US_CENTRAL": {
+        "canonical_id": "BLOCK_11_US_CENTRAL",
+        "production_numeric_id": "BLOCK_11",
+        "legacy_geographic_id": "BLOCK_10_US_CENTRAL",
+        "canonical_label": "BLOCK_11_US_CENTRAL (US Central)",
+        "name": "US Central",
+        "target_local_window": "08:30 - 09:30 CDT/CST (UTC-5/-6)",
+        "reference_timezone": "America/Chicago",
+        "primary_timezones": ["America/Chicago", "America/Winnipeg"],
+        "approx_ist": "19:00 - 20:00 IST",
+        "start_ist": "19:00",
+        "end_ist": "20:00",
+        "start_time": time(19, 0),
+        "end_time": time(20, 0),
+    },
+    "BLOCK_12_US_MOUNTAIN": {
+        "canonical_id": "BLOCK_12_US_MOUNTAIN",
+        "production_numeric_id": "BLOCK_12",
+        "legacy_geographic_id": "BLOCK_11_US_MOUNTAIN",
+        "canonical_label": "BLOCK_12_US_MOUNTAIN (Canada Mountain / US Mountain)",
+        "name": "Canada Mountain / US Mountain",
+        "target_local_window": "08:30 - 09:30 MDT/MST (UTC-6/-7)",
+        "reference_timezone": "America/Denver",
+        "primary_timezones": ["America/Denver", "America/Edmonton", "America/Phoenix", "America/Calgary"],
+        "approx_ist": "20:00 - 21:00 IST",
+        "start_ist": "20:00",
+        "end_ist": "21:00",
+        "start_time": time(20, 0),
+        "end_time": time(21, 0),
+    },
+    "BLOCK_13_US_PACIFIC": {
+        "canonical_id": "BLOCK_13_US_PACIFIC",
+        "production_numeric_id": "BLOCK_13",
+        "legacy_geographic_id": "BLOCK_12_US_PACIFIC",
+        "canonical_label": "BLOCK_13_US_PACIFIC (US & Canada Pacific)",
+        "name": "US & Canada Pacific",
+        "target_local_window": "08:30 - 09:30 PDT/PST (UTC-7/-8)",
+        "reference_timezone": "America/Los_Angeles",
+        "primary_timezones": ["America/Los_Angeles", "America/Vancouver", "America/Seattle", "America/San_Francisco"],
+        "approx_ist": "21:00 - 22:00 IST",
+        "start_ist": "21:00",
+        "end_ist": "22:00",
+        "start_time": time(21, 0),
+        "end_time": time(22, 0),
+    },
+    "BLOCK_DEV_EAST_EU": {
+        "canonical_id": "BLOCK_DEV_EAST_EU",
+        "production_numeric_id": "BLOCK_DEV_EAST_EU",
+        "legacy_geographic_id": "BLOCK_06_EAST_EU",
+        "canonical_label": "BLOCK_DEV_EAST_EU (Eastern Europe EET)",
+        "name": "Eastern Europe (EET Standard Time)",
+        "target_local_window": "08:30 - 09:30 EET (UTC+2)",
+        "reference_timezone": "Europe/Athens",
+        "primary_timezones": ["Europe/Athens", "Europe/Helsinki", "Europe/Vilnius", "Europe/Bucharest", "Europe/Sofia", "Europe/Riga", "Europe/Tallinn"],
+        "approx_ist": "12:00 - 13:00 IST",
+        "start_ist": "12:00",
+        "end_ist": "13:00",
+        "start_time": time(12, 0),
+        "end_time": time(13, 0),
+    },
+    "BLOCK_DOMESTIC_IN": {
+        "canonical_id": "BLOCK_DOMESTIC_IN",
+        "production_numeric_id": "BLOCK_DOMESTIC_IN",
+        "legacy_geographic_id": None,
+        "canonical_label": "BLOCK_DOMESTIC_IN (India Domestic IST)",
+        "name": "India Domestic",
+        "target_local_window": "08:30 - 09:30 IST (UTC+5:30)",
+        "reference_timezone": "Asia/Kolkata",
+        "primary_timezones": ["Asia/Kolkata", "Asia/Calcutta"],
+        "approx_ist": "08:30 - 09:30 IST",
+        "start_ist": "08:30",
+        "end_ist": "09:30",
+        "start_time": time(8, 30),
+        "end_time": time(9, 30),
+    }
+}
+
+
+class CanonicalRegionalBlockRegistry:
+    """
+    Authoritative canonical registry that unifies:
+    1. Production numeric blocks (BLOCK_01 to BLOCK_13 from queue_runner.py)
+    2. Legacy descriptive block IDs (BLOCK_01_JP_KR, BLOCK_09_US_EAST from time_blocks.py)
+    3. Explicit canonical identifiers and labels (e.g. BLOCK_10_US_EAST (US & Canada Eastern))
+    4. Exact IANA timezone resolution and recipient-local working-day calculation.
+    """
+
+    @classmethod
+    def resolve_block(cls, identifier_or_tz: str) -> Dict[str, Any]:
+        """
+        Resolves any block identifier or timezone into its canonical block definition.
+        """
+        raw = (identifier_or_tz or "").strip()
+        raw_upper = raw.upper()
+
+        # 1. Direct match on canonical_id
+        if raw_upper in CANONICAL_REGIONAL_BLOCKS:
+            return CANONICAL_REGIONAL_BLOCKS[raw_upper]
+
+        # 2. Match on production numeric ID (e.g. 'BLOCK_10', 'BLOCK_04', 'BLOCK_02')
+        for b in CANONICAL_REGIONAL_BLOCKS.values():
+            if b["production_numeric_id"] == raw_upper:
+                return b
+
+        # 3. Match on legacy descriptive ID (e.g. 'BLOCK_09_US_EAST', 'BLOCK_01_JP_KR')
+        for b in CANONICAL_REGIONAL_BLOCKS.values():
+            if b.get("legacy_geographic_id") == raw_upper:
+                return b
+
+        # 4. Match on canonical label
+        for b in CANONICAL_REGIONAL_BLOCKS.values():
+            if raw_upper in b["canonical_label"].upper() or b["canonical_label"].upper() in raw_upper:
+                return b
+
+        # 5. Match by IANA timezone in primary_timezones
+        raw_lower = raw.lower()
+        for b in CANONICAL_REGIONAL_BLOCKS.values():
+            if any(raw_lower == tz.lower() or raw_lower in tz.lower() for tz in b["primary_timezones"]):
+                return b
+
+        # Fallback to Continental Europe
+        return CANONICAL_REGIONAL_BLOCKS["BLOCK_07_CONT_EU"]
+
+    @classmethod
+    def is_recipient_working_day(
+        cls,
+        iana_timezone: str,
+        target_date: Optional[date] = None
+    ) -> Tuple[bool, str]:
+        """
+        Determines whether the given target_date is a standard working day (Monday - Friday)
+        in the recipient's local timezone.
+        """
+        if target_date is None:
+            target_date = date(2026, 11, 5)
+
+        tz = DynamicTimezoneEngine.get_zone_info(iana_timezone)
+        # Recipient midday on target date
+        midday_local = datetime.combine(target_date, time(12, 0), tzinfo=tz)
+        weekday = midday_local.weekday()  # Monday is 0, Sunday is 6
+
+        day_name = midday_local.strftime("%A")
+        if weekday < 5:
+            return True, f"WORKING_DAY: {day_name} is a recipient-local working day"
+        else:
+            return False, f"NON_WORKING_DAY: {day_name} is a recipient-local weekend"
+
 
 class DynamicTimezoneEngine:
     """
@@ -262,6 +563,9 @@ class DynamicTimezoneEngine:
             ist_end_time=dt_ist_end.time()
         )
 
+        canonical_info = CanonicalRegionalBlockRegistry.resolve_block(assigned_block_id)
+        is_working_day, working_day_reason = CanonicalRegionalBlockRegistry.is_recipient_working_day(iana_timezone, target_date)
+
         return {
             "iana_timezone": str(tz),
             "target_date": target_date.isoformat(),
@@ -273,11 +577,18 @@ class DynamicTimezoneEngine:
             "is_dst_active": is_dst,
             "timezone_abbreviation": local_tz_abbr,
             "assigned_block_id": assigned_block_id,
-            "block_name": block_name,
+            "canonical_block_id": canonical_info["canonical_id"],
+            "canonical_label": canonical_info["canonical_label"],
+            "production_block_id": canonical_info["production_numeric_id"],
+            "legacy_block_id": canonical_info.get("legacy_geographic_id"),
+            "block_name": canonical_info["name"],
+            "is_recipient_working_day": is_working_day,
+            "working_day_reason": working_day_reason,
             "recipient_specific_eligibility": {
                 "start_ist": ist_start_str,
                 "end_ist": ist_end_str,
-                "recipient_local_hours": "08:30 - 09:30"
+                "recipient_local_hours": "08:30 - 09:30",
+                "is_working_day": is_working_day
             }
         }
 

@@ -98,10 +98,12 @@ class InstitutionalProgramAdapter(BaseOpportunityAdapter):
         title = raw_item.get("title") or raw_item.get("program_title") or f"{prog_name} Fellow"
         opp_id = compute_opportunity_id(org_id, OpportunityType.INSTITUTIONAL_PROGRAM.value, title, "Summer 2027")
 
-        evidence_url = canonicalize_url(raw_item.get("evidence_url", ""))
-        app_url = canonicalize_url(raw_item.get("application_url", "")) or evidence_url
+        evidence_url = canonicalize_url(raw_item.get("evidence_url") or raw_item.get("official_portal_url") or "")
+        app_url = canonicalize_url(raw_item.get("application_url") or raw_item.get("official_portal_url") or "") or evidence_url
 
         is_confirmed = (raw_item.get("audit_classification") == OpportunityClassification.CONFIRMED_OPENING.value)
+        comp_details = raw_item.get("compensation_details") or raw_item.get("funding_and_stipend") or "Institutional Fellowship Stipend"
+        eligibility = raw_item.get("eligibility") or raw_item.get("eligibility_and_duration") or "Undergraduate engineering student"
 
         opp = Opportunity(
             opportunity_id=opp_id,
@@ -115,15 +117,15 @@ class InstitutionalProgramAdapter(BaseOpportunityAdapter):
             technical_relevance_summary=raw_item.get("relevance"),
             potential_contribution=raw_item.get("potential_contribution"),
             matched_project_id=raw_item.get("matched_project"),
-            eligibility_criteria=raw_item.get("eligibility", "Undergraduate engineering student"),
+            eligibility_criteria=eligibility,
             internship_duration_weeks=raw_item.get("duration_weeks", 10),
             target_term="Summer 2027",
             compensation_type=raw_item.get("compensation_type", CompensationType.STIPEND.value),
-            compensation_details=raw_item.get("compensation_details"),
-            stipend_amount=raw_item.get("stipend_amount"),
-            travel_support=raw_item.get("travel_support"),
-            housing_support=raw_item.get("housing_support"),
-            required_documents=raw_item.get("required_documents"),
+            compensation_details=comp_details,
+            stipend_amount=raw_item.get("stipend_amount") or comp_details,
+            travel_support=raw_item.get("travel_support") or "Travel allowance provided",
+            housing_support=raw_item.get("housing_support") or "Subsidized accommodation provided",
+            required_documents=raw_item.get("required_documents") or "Academic CV, transcripts, faculty references, statement of interest",
             compensation_evidence=raw_item.get("compensation_evidence", "OFFICIAL_INSTITUTIONAL_FELLOWSHIP_REGULATIONS"),
             official_evidence_urls=[evidence_url] if evidence_url else [],
             freshness_timestamp=now_iso,

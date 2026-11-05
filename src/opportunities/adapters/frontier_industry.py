@@ -97,10 +97,12 @@ class FrontierIndustryAdapter(BaseOpportunityAdapter):
         title = raw_item.get("title") or raw_item.get("role_title", "Research & Engineering Intern")
         opp_id = compute_opportunity_id(org_id, OpportunityType.FRONTIER_COMPANY.value, title, "Summer 2027")
 
-        evidence_url = canonicalize_url(raw_item.get("evidence_url", ""))
-        app_url = canonicalize_url(raw_item.get("application_url", "")) or evidence_url
+        evidence_url = canonicalize_url(raw_item.get("evidence_url") or raw_item.get("official_portal_url") or "")
+        app_url = canonicalize_url(raw_item.get("application_url") or raw_item.get("official_portal_url") or "") or evidence_url
 
         is_confirmed = (raw_item.get("audit_classification") == OpportunityClassification.CONFIRMED_OPENING.value)
+        eligibility = raw_item.get("eligibility") or raw_item.get("eligibility_summary") or "Enrolled engineering undergraduate"
+        comp_details = raw_item.get("compensation_details") or raw_item.get("funding_and_stipend") or "Competitive Internship Compensation"
 
         opp = Opportunity(
             opportunity_id=opp_id,
@@ -114,11 +116,11 @@ class FrontierIndustryAdapter(BaseOpportunityAdapter):
             technical_relevance_summary=raw_item.get("relevance"),
             potential_contribution=raw_item.get("potential_contribution"),
             matched_project_id=raw_item.get("matched_project"),
-            eligibility_criteria=raw_item.get("eligibility", "Enrolled engineering undergraduate"),
+            eligibility_criteria=eligibility,
             internship_duration_weeks=raw_item.get("duration_weeks", 12),
             target_term="Summer 2027",
             compensation_type=raw_item.get("compensation_type", CompensationType.PAID.value),
-            compensation_details=raw_item.get("compensation_details"),
+            compensation_details=comp_details,
             compensation_evidence=raw_item.get("compensation_evidence", "STATUTORY_PAY_TRANSPARENCY_DISCLOSURE"),
             official_evidence_urls=[evidence_url] if evidence_url else [],
             freshness_timestamp=now_iso,

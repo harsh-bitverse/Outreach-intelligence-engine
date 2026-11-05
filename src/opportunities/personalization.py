@@ -754,7 +754,7 @@ class DomainAdaptivePersonalizer:
             {
                 "org": "CERN (European Organization for Nuclear Research)",
                 "recipient": "CERN openlab Student Team",
-                "email": "openlab-students@cern",
+                "email": "openlab-students@cern.ch",
                 "domain": "High-Throughput Computing & AI (CERN openlab)",
                 "relevance": "operational intensity diagnostics, high-throughput distributed pipeline scheduling, and low-latency physics event processing",
                 "matched_proj": "LLM Inference Intelligence Engine",

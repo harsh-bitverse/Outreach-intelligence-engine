@@ -47,6 +47,7 @@ from src.opportunities.repository import OpportunityRepository
 from src.opportunities.personalization import DomainAdaptivePersonalizer
 from src.opportunities.timezone_engine import DynamicTimezoneEngine
 from src.opportunities.workbook_sync import OpportunityWorkbookSync
+from src.opportunities.contact_verifier import validate_email_syntax
 from src.security.audit_logger import audit_logger
 
 logger = logging.getLogger("unified_outreach_bridge")
@@ -90,16 +91,24 @@ class UnifiedOutreachBridge:
             or (not has_email and bool(opp.application_url))
         )
 
+        # Email syntax & FQDN validation (rejects invalid syntax such as 'ml-research@apple')
+        email_valid, email_reason = validate_email_syntax(opp.contact_email) if opp.contact_email else (False, "NO_EMAIL")
+        is_invalid_email = bool(opp.contact_email and not email_valid)
+
         # 2. Dynamic Timezone & Regional Block Calculation (Target Date Aware)
         tz_str = opp.iana_timezone or org.iana_timezone or "UTC"
         tz_calc = DynamicTimezoneEngine.calculate_mailing_window(tz_str, target_date=target_date)
 
         # 3. Determine Authoritative Contact History Status
         hist_status = opp.contact_history_status
-        if not hist_status:
+        if is_invalid_email:
+            hist_status = ContactHistoryStatus.INVALID.value
+        elif not hist_status:
             if is_portal:
                 hist_status = ContactHistoryStatus.PORTAL_APPLICATION.value
-            elif not has_email or not is_verified:
+            elif not has_email:
+                hist_status = ContactHistoryStatus.UNVERIFIED.value
+            elif not is_verified:
                 hist_status = ContactHistoryStatus.NEEDS_REVIEW.value
             else:
                 is_suppressed = self.repo.is_contact_suppressed_or_already_contacted(opp.contact_email)
@@ -114,6 +123,11 @@ class UnifiedOutreachBridge:
             outreach_readiness = "PORTAL_TRACKED"
             next_action = "PREPARE_APPLICATION_DOSSIER"
             assigned_block_id = "PORTAL_DEADLINE_TRACKER"
+        elif hist_status == ContactHistoryStatus.INVALID.value:
+            routing_channel = "INVALID_EMAIL"
+            outreach_readiness = "EXCLUDED_INVALID_EMAIL_SYNTAX"
+            next_action = f"EXCLUDE_FROM_DISPATCH_INVALID_ADDRESS: {email_reason}"
+            assigned_block_id = tz_calc["assigned_block_id"]
         elif hist_status == ContactHistoryStatus.SCHEDULED_ELIGIBLE.value:
             routing_channel = "EMAIL_OUTREACH"
             outreach_readiness = "READY_FOR_SCHEDULED_DISPATCH"
@@ -218,6 +232,12 @@ class UnifiedOutreachBridge:
         """
         opp_id = route_result["opportunity_id"]
         recipient = route_result.get("contact_email") or "test@domain.com"
+
+        # Validate recipient syntax before simulating SMTP dispatch
+        syntax_ok, syntax_err = validate_email_syntax(recipient)
+        if not syntax_ok:
+            raise ValueError(f"DISPATCH_REJECTED: Recipient address '{recipient}' failed validation: {syntax_err}")
+
         real_msg_id = cls.generate_real_message_id(opp_id)
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -398,13 +418,14 @@ class UnifiedOutreachBridge:
         portal_tracked: List[Dict[str, Any]] = []
         unverified_quarantine: List[Dict[str, Any]] = []
         suppressed_excluded: List[Dict[str, Any]] = []
+        invalid_excluded: List[Dict[str, Any]] = []
 
         block_distribution: Dict[str, int] = {}
         category_distribution: Dict[str, Dict[str, int]] = {
-            OpportunityType.ACADEMIC_LAB.value: {"eligible": 0, "sent": 0, "bounced": 0, "replied": 0, "portal": 0, "unverified": 0, "suppressed": 0},
-            OpportunityType.STARTUP.value: {"eligible": 0, "sent": 0, "bounced": 0, "replied": 0, "portal": 0, "unverified": 0, "suppressed": 0},
-            OpportunityType.FRONTIER_COMPANY.value: {"eligible": 0, "sent": 0, "bounced": 0, "replied": 0, "portal": 0, "unverified": 0, "suppressed": 0},
-            OpportunityType.INSTITUTIONAL_PROGRAM.value: {"eligible": 0, "sent": 0, "bounced": 0, "replied": 0, "portal": 0, "unverified": 0, "suppressed": 0}
+            OpportunityType.ACADEMIC_LAB.value: {"eligible": 0, "sent": 0, "bounced": 0, "replied": 0, "portal": 0, "unverified": 0, "suppressed": 0, "invalid": 0},
+            OpportunityType.STARTUP.value: {"eligible": 0, "sent": 0, "bounced": 0, "replied": 0, "portal": 0, "unverified": 0, "suppressed": 0, "invalid": 0},
+            OpportunityType.FRONTIER_COMPANY.value: {"eligible": 0, "sent": 0, "bounced": 0, "replied": 0, "portal": 0, "unverified": 0, "suppressed": 0, "invalid": 0},
+            OpportunityType.INSTITUTIONAL_PROGRAM.value: {"eligible": 0, "sent": 0, "bounced": 0, "replied": 0, "portal": 0, "unverified": 0, "suppressed": 0, "invalid": 0}
         }
 
         for opp in all_opps:
@@ -449,6 +470,11 @@ class UnifiedOutreachBridge:
                 if cat in category_distribution:
                     category_distribution[cat]["suppressed"] += 1
 
+            elif readiness == "EXCLUDED_INVALID_EMAIL_SYNTAX":
+                invalid_excluded.append(processed)
+                if cat in category_distribution:
+                    category_distribution[cat]["invalid"] += 1
+
             else:  # QUARANTINE_UNVERIFIED
                 unverified_quarantine.append(processed)
                 if cat in category_distribution:
@@ -462,6 +488,7 @@ class UnifiedOutreachBridge:
             "bounced_count": len(bounced_excluded),
             "replied_count": len(replied_resolved),
             "suppressed_count": len(suppressed_excluded),
+            "invalid_count": len(invalid_excluded),
             "portal_tracked_count": len(portal_tracked),
             "unverified_quarantine_count": len(unverified_quarantine),
             "block_distribution": block_distribution,

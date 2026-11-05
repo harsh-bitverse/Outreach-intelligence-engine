@@ -48,6 +48,7 @@ from src.opportunities.registry import (
     compute_organization_id,
     compute_opportunity_id
 )
+from src.opportunities.contact_verifier import validate_email_syntax
 
 logger = logging.getLogger(__name__)
 
@@ -479,6 +480,12 @@ class AcademicPortfolioReconciler:
                 status = ContactHistoryStatus.PORTAL_APPLICATION.value
                 next_action = "PREPARE_APPLICATION_DOSSIER"
                 assigned_block = "PORTAL_DEADLINE_TRACKER"
+            elif email and not validate_email_syntax(email)[0]:
+                status = ContactHistoryStatus.INVALID.value
+                next_action = f"EXCLUDE_FROM_DISPATCH_INVALID_SYNTAX: {validate_email_syntax(email)[1]}"
+            elif not email:
+                status = ContactHistoryStatus.UNVERIFIED.value
+                next_action = "VERIFY_RECIPIENT_CONTACT"
             else:
                 # Production Campaign History Check
                 p_info = prod_by_pid.get(pid) if pid else None

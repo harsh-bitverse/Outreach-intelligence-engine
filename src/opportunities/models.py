@@ -119,6 +119,8 @@ class ContactHistoryStatus(str, Enum):
     REPLIED = "REPLIED"
     PORTAL_APPLICATION = "PORTAL_APPLICATION"
     NEEDS_REVIEW = "NEEDS_REVIEW"
+    INVALID = "INVALID"
+    UNVERIFIED = "UNVERIFIED"
 
 
 class AcademicClassification(str, Enum):

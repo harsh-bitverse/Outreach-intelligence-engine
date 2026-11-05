@@ -774,3 +774,8 @@ FRONTIER_INDUSTRY_DATA: List[Dict[str, Any]] = [
         "deadline": "Rolling"
     }
 ]
+
+from src.opportunities.data.expansion_batch_session06 import NEW_FRONTIER_INDUSTRY
+from src.opportunities.data.expansion_batch_session07 import NEW_FRONTIER_INDUSTRY_SESSION07
+FRONTIER_INDUSTRY_DATA.extend(NEW_FRONTIER_INDUSTRY)
+FRONTIER_INDUSTRY_DATA.extend(NEW_FRONTIER_INDUSTRY_SESSION07)

@@ -108,6 +108,19 @@ class ApplicationStatus(str, Enum):
     WITHDRAWN = "WITHDRAWN"
 
 
+class ContactHistoryStatus(str, Enum):
+    DISCOVERED = "DISCOVERED"
+    QUALIFIED = "QUALIFIED"
+    VERIFIED_CONTACT = "VERIFIED_CONTACT"
+    SCHEDULED_ELIGIBLE = "SCHEDULED_ELIGIBLE"
+    ALREADY_CONTACTED = "ALREADY_CONTACTED"
+    DELIVERY_UNCONFIRMED = "DELIVERY_UNCONFIRMED"
+    BOUNCED = "BOUNCED"
+    REPLIED = "REPLIED"
+    PORTAL_APPLICATION = "PORTAL_APPLICATION"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+
+
 class AcademicClassification(str, Enum):
     CONFIRMED_OPENING = "CONFIRMED_OPENING"
     PROSPECTIVE_INQUIRY = "PROSPECTIVE_INQUIRY"
@@ -255,6 +268,10 @@ class Opportunity:
     reply_evidence_snippet: Optional[str] = None
     reply_evidence_id: Optional[str] = None
     professor_id: Optional[str] = None
+    contact_history_status: Optional[str] = None
+    assigned_block_id: Optional[str] = None
+    recipient_mailing_window: Optional[str] = None
+    ist_eligibility_window: Optional[str] = None
     operational_status: str = "OPERATIONAL"
     verification_notes: Optional[str] = None
     last_verified_at: Optional[str] = None

@@ -1,0 +1,401 @@
+"""
+Opportunity Intelligence Engine: Dynamic Timezone & Scheduling Engine.
+
+Calculates recipient-local mailing windows using authentic IANA timezones and
+Python's standard library `zoneinfo`, accounting for exact target-date daylight-saving
+time (DST) transitions.
+
+Reconciled with the 13 Authoritative Production Time Blocks from `queue_runner.py`
+while introducing development-only extended blocks (e.g. Eastern Europe EET and India Domestic)
+and strict recipient-specific eligibility calculations.
+"""
+
+from datetime import datetime, date, time, timedelta
+from typing import Dict, Any, List, Optional, Tuple
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+import logging
+
+logger = logging.getLogger("timezone_engine")
+
+IST_TZ = ZoneInfo("Asia/Kolkata")
+UTC_TZ = ZoneInfo("UTC")
+
+# 13 Authoritative Production Regional Blocks (aligned with `src/scheduler/queue_runner.py`)
+PRODUCTION_TIME_BLOCKS: Dict[str, Dict[str, Any]] = {
+    "BLOCK_01": {
+        "name": "New Zealand",
+        "start_ist": "01:00",
+        "end_ist": "02:00",
+        "local_target": "09:00 NZDT (UTC+13)",
+        "reference_timezone": "Pacific/Auckland",
+        "start_time": time(1, 0),
+        "end_time": time(2, 0),
+    },
+    "BLOCK_02": {
+        "name": "Australia Eastern Daylight",
+        "start_ist": "03:00",
+        "end_ist": "04:00",
+        "local_target": "09:00 AEDT (UTC+11)",
+        "reference_timezone": "Australia/Sydney",
+        "start_time": time(3, 0),
+        "end_time": time(4, 0),
+    },
+    "BLOCK_03": {
+        "name": "Australia Central & Queensland",
+        "start_ist": "04:00",
+        "end_ist": "05:00",
+        "local_target": "09:00 ACDT/AEST (UTC+10.5 / +10)",
+        "reference_timezone": "Australia/Adelaide",
+        "start_time": time(4, 0),
+        "end_time": time(5, 0),
+    },
+    "BLOCK_04": {
+        "name": "Japan & South Korea",
+        "start_ist": "05:00",
+        "end_ist": "06:00",
+        "local_target": "09:00 JST/KST (UTC+9)",
+        "reference_timezone": "Asia/Tokyo",
+        "start_time": time(5, 0),
+        "end_time": time(6, 0),
+    },
+    "BLOCK_05": {
+        "name": "Greater China, Singapore, Malaysia & WA",
+        "start_ist": "06:00",
+        "end_ist": "07:00",
+        "local_target": "09:00 CST/HKT/SGT/AWST (UTC+8)",
+        "reference_timezone": "Asia/Singapore",
+        "start_time": time(6, 0),
+        "end_time": time(7, 0),
+    },
+    "BLOCK_06": {
+        "name": "Middle East & Russia",
+        "start_ist": "11:00",
+        "end_ist": "12:00",
+        "local_target": "09:00 AST/MSK (UTC+3)",
+        "reference_timezone": "Asia/Riyadh",
+        "start_time": time(11, 0),
+        "end_time": time(12, 0),
+    },
+    "BLOCK_07": {
+        "name": "Continental Europe (CET)",
+        "start_ist": "13:00",
+        "end_ist": "14:00",
+        "local_target": "09:00 CET (UTC+1)",
+        "reference_timezone": "Europe/Berlin",
+        "start_time": time(13, 0),
+        "end_time": time(14, 0),
+    },
+    "BLOCK_08": {
+        "name": "United Kingdom & Ireland (GMT)",
+        "start_ist": "14:00",
+        "end_ist": "15:00",
+        "local_target": "09:00 GMT (UTC+0)",
+        "reference_timezone": "Europe/London",
+        "start_time": time(14, 0),
+        "end_time": time(15, 0),
+    },
+    "BLOCK_09": {
+        "name": "Latin America (Argentina & Chile)",
+        "start_ist": "17:00",
+        "end_ist": "18:00",
+        "local_target": "09:00 ART/CLST (UTC-3)",
+        "reference_timezone": "America/Argentina/Buenos_Aires",
+        "start_time": time(17, 0),
+        "end_time": time(18, 0),
+    },
+    "BLOCK_10": {
+        "name": "US & Canada Eastern",
+        "start_ist": "18:00",  # Summer EDT; in Winter EST, 08:30 is 19:00 IST
+        "end_ist": "19:00",
+        "local_target": "09:00 EDT/EST (UTC-4/-5)",
+        "reference_timezone": "America/New_York",
+        "start_time": time(18, 0),
+        "end_time": time(19, 0),
+    },
+    "BLOCK_11": {
+        "name": "US Central",
+        "start_ist": "19:00",  # Summer CDT; in Winter CST, 08:30 is 20:00 IST
+        "end_ist": "20:00",
+        "local_target": "09:00 CDT/CST (UTC-5/-6)",
+        "reference_timezone": "America/Chicago",
+        "start_time": time(19, 0),
+        "end_time": time(20, 0),
+    },
+    "BLOCK_12": {
+        "name": "Canada Mountain / US Mountain",
+        "start_ist": "20:00",  # Summer MDT; in Winter MST, 08:30 is 21:00 IST
+        "end_ist": "21:00",
+        "local_target": "09:00 MDT/MST (UTC-6/-7)",
+        "reference_timezone": "America/Denver",
+        "start_time": time(20, 0),
+        "end_time": time(21, 0),
+    },
+    "BLOCK_13": {
+        "name": "US & Canada Pacific",
+        "start_ist": "21:00",  # Summer PDT; in Winter PST, 08:30 is 22:00 IST
+        "end_ist": "22:00",
+        "local_target": "09:00 PDT/PST (UTC-7/-8)",
+        "reference_timezone": "America/Los_Angeles",
+        "start_time": time(21, 0),
+        "end_time": time(22, 0),
+    },
+}
+
+# Development-Only Extended Blocks for Regional Accuracy
+DEVELOPMENT_EXTENDED_BLOCKS: Dict[str, Dict[str, Any]] = {
+    "BLOCK_DEV_EAST_EU": {
+        "name": "Eastern Europe (EET Standard Time)",
+        "start_ist": "12:00",
+        "end_ist": "13:00",
+        "local_target": "08:30 - 09:30 EET (UTC+2)",
+        "reference_timezone": "Europe/Athens",
+        "start_time": time(12, 0),
+        "end_time": time(13, 0),
+    },
+    "BLOCK_DOMESTIC_IN": {
+        "name": "India Domestic",
+        "start_ist": "08:30",
+        "end_ist": "09:30",
+        "local_target": "08:30 - 09:30 IST (UTC+5:30)",
+        "reference_timezone": "Asia/Kolkata",
+        "start_time": time(8, 30),
+        "end_time": time(9, 30),
+    },
+}
+
+
+class DynamicTimezoneEngine:
+    """
+    Authoritative timezone and mailing window engine.
+    Computes exact daylight-saving adjusted mailing windows using Python zoneinfo.
+    """
+
+    @staticmethod
+    def get_zone_info(tz_name: Optional[str]) -> ZoneInfo:
+        """Safely parses IANA timezone string or returns UTC."""
+        if not tz_name:
+            return UTC_TZ
+        try:
+            return ZoneInfo(tz_name.strip())
+        except (ZoneInfoNotFoundError, ValueError, Exception):
+            # Known aliases and fallbacks
+            cleaned = tz_name.strip()
+            fallback_map = {
+                "US/Eastern": "America/New_York",
+                "US/Pacific": "America/Los_Angeles",
+                "US/Central": "America/Chicago",
+                "US/Mountain": "America/Denver",
+                "GMT": "Europe/London",
+                "BST": "Europe/London",
+                "CET": "Europe/Berlin",
+                "CEST": "Europe/Berlin",
+                "EET": "Europe/Athens",
+                "EEST": "Europe/Athens",
+                "JST": "Asia/Tokyo",
+                "KST": "Asia/Seoul",
+                "SGT": "Asia/Singapore",
+                "AEST": "Australia/Sydney",
+                "AEDT": "Australia/Sydney",
+            }
+            mapped = fallback_map.get(cleaned)
+            if mapped:
+                try:
+                    return ZoneInfo(mapped)
+                except Exception:
+                    pass
+            logger.warning(f"Unrecognized timezone '{tz_name}', defaulting to UTC")
+            return UTC_TZ
+
+    @classmethod
+    def calculate_mailing_window(
+        cls,
+        iana_timezone: str,
+        target_date: Optional[date] = None,
+        local_start_time: time = time(8, 30),
+        local_end_time: time = time(9, 30)
+    ) -> Dict[str, Any]:
+        """
+        Calculates the recipient-local mailing window and exact IST conversion
+        for a specific target date, accounting for DST.
+
+        Example (on 2026-11-05):
+        - Europe/Athens (EET, UTC+2): 08:30 EET -> 12:00 IST
+        - America/New_York (EST, UTC-5): 08:30 EST -> 19:00 IST
+        - Europe/London (GMT, UTC+0): 08:30 GMT -> 14:00 IST
+        """
+        if target_date is None:
+            target_date = date(2026, 11, 5)
+
+        tz = cls.get_zone_info(iana_timezone)
+
+        # Build naive local datetimes and attach recipient timezone
+        dt_local_start = datetime.combine(target_date, local_start_time, tzinfo=tz)
+        dt_local_end = datetime.combine(target_date, local_end_time, tzinfo=tz)
+
+        # Convert to IST (Asia/Kolkata)
+        dt_ist_start = dt_local_start.astimezone(IST_TZ)
+        dt_ist_end = dt_local_end.astimezone(IST_TZ)
+
+        # Check DST status
+        dst_delta = dt_local_start.dst()
+        is_dst = dst_delta is not None and dst_delta.total_seconds() != 0
+
+        # Formatted strings
+        ist_start_str = dt_ist_start.strftime("%H:%M")
+        ist_end_str = dt_ist_end.strftime("%H:%M")
+        ist_window_str = f"{ist_start_str} - {ist_end_str} IST"
+
+        local_start_str = dt_local_start.strftime("%H:%M")
+        local_end_str = dt_local_end.strftime("%H:%M")
+        local_tz_abbr = dt_local_start.strftime("%Z")
+        local_window_str = f"{local_start_str} - {local_end_str} {local_tz_abbr}"
+
+        utc_offset_str = dt_local_start.strftime("%z")
+        # Format UTC offset e.g. +0200 -> +02:00
+        if len(utc_offset_str) == 5:
+            utc_offset_str = f"{utc_offset_str[:3]}:{utc_offset_str[3:]}"
+
+        # Determine appropriate production regional block vs development block
+        assigned_block_id, block_name = cls.match_time_block(
+            iana_timezone=iana_timezone,
+            ist_start_time=dt_ist_start.time(),
+            ist_end_time=dt_ist_end.time()
+        )
+
+        return {
+            "iana_timezone": str(tz),
+            "target_date": target_date.isoformat(),
+            "local_mailing_window": local_window_str,
+            "ist_mailing_window": ist_window_str,
+            "ist_window_start": ist_start_str,
+            "ist_window_end": ist_end_str,
+            "utc_offset": utc_offset_str,
+            "is_dst_active": is_dst,
+            "timezone_abbreviation": local_tz_abbr,
+            "assigned_block_id": assigned_block_id,
+            "block_name": block_name,
+            "recipient_specific_eligibility": {
+                "start_ist": ist_start_str,
+                "end_ist": ist_end_str,
+                "recipient_local_hours": "08:30 - 09:30"
+            }
+        }
+
+    @classmethod
+    def match_time_block(
+        cls,
+        iana_timezone: str,
+        ist_start_time: time,
+        ist_end_time: time
+    ) -> Tuple[str, str]:
+        """
+        Maps the computed IST window to the closest production regional block
+        or development-extended block.
+        """
+        tz_lower = iana_timezone.lower()
+
+        # 1. India Domestic Check
+        if "kolkata" in tz_lower or "calcutta" in tz_lower:
+            return "BLOCK_DOMESTIC_IN", "India Domestic"
+
+        # 2. Eastern Europe Check (e.g., Athens, Helsinki, Vilnius, Bucharest)
+        if any(c in tz_lower for c in ["athens", "vilnius", "helsinki", "bucharest", "sofia", "riga", "tallinn"]):
+            # At 12:00 - 13:00 IST in winter, this is development block BLOCK_DEV_EAST_EU
+            # In production, closest is BLOCK_06 or BLOCK_07
+            return "BLOCK_DEV_EAST_EU", "Eastern Europe (EET Standard Time)"
+
+        # 3. New Zealand
+        if "auckland" in tz_lower or "pacific/auckland" in tz_lower:
+            return "BLOCK_01", "New Zealand"
+
+        # 4. Australia Eastern (Sydney, Melbourne, Hobart)
+        if any(c in tz_lower for c in ["sydney", "melbourne", "hobart", "canberra"]):
+            return "BLOCK_02", "Australia Eastern Daylight"
+
+        # 5. Australia Central & Queensland (Adelaide, Darwin, Brisbane)
+        if any(c in tz_lower for c in ["adelaide", "darwin", "brisbane"]):
+            return "BLOCK_03", "Australia Central & Queensland"
+
+        # 6. Japan & Korea
+        if any(c in tz_lower for c in ["tokyo", "seoul"]):
+            return "BLOCK_04", "Japan & South Korea"
+
+        # 7. Greater China, Singapore, Malaysia, WA (Perth)
+        if any(c in tz_lower for c in ["singapore", "hong_kong", "shanghai", "taipei", "kuala_lumpur", "perth", "macau", "beijing"]):
+            return "BLOCK_05", "Greater China, Singapore, Malaysia & WA"
+
+        # 8. Middle East & Russia (Riyadh, Dubai, Moscow, Qatar)
+        if any(c in tz_lower for c in ["riyadh", "dubai", "moscow", "qatar", "kuwait", "baghdad", "bahrain"]):
+            return "BLOCK_06", "Middle East & Russia"
+
+        # 9. Continental Europe (Berlin, Paris, Zurich, Rome, Amsterdam, etc.)
+        if any(c in tz_lower for c in ["berlin", "paris", "zurich", "amsterdam", "rome", "madrid", "stockholm", "copenhagen", "oslo", "vienna", "brussels", "warsaw", "prague"]):
+            return "BLOCK_07", "Continental Europe (CET)"
+
+        # 10. UK & Ireland (London, Dublin, Lisbon)
+        if any(c in tz_lower for c in ["london", "dublin", "lisbon"]):
+            return "BLOCK_08", "United Kingdom & Ireland (GMT)"
+
+        # 11. Latin America
+        if any(c in tz_lower for c in ["buenos_aires", "santiago", "sao_paulo", "argentina"]):
+            return "BLOCK_09", "Latin America (Argentina & Chile)"
+
+        # 12. US & Canada Eastern
+        if any(c in tz_lower for c in ["new_york", "toronto", "detroit", "indiana", "montreal", "eastern"]):
+            return "BLOCK_10", "US & Canada Eastern"
+
+        # 13. US Central
+        if any(c in tz_lower for c in ["chicago", "central", "winnipeg"]):
+            return "BLOCK_11", "US Central"
+
+        # 14. Mountain
+        if any(c in tz_lower for c in ["denver", "edmonton", "mountain", "calgary", "phoenix"]):
+            return "BLOCK_12", "Canada Mountain / US Mountain"
+
+        # 15. US & Canada Pacific
+        if any(c in tz_lower for c in ["los_angeles", "vancouver", "pacific", "seattle", "san_francisco"]):
+            return "BLOCK_13", "US & Canada Pacific"
+
+        # Fallback by IST start hour
+        hour = ist_start_time.hour
+        for b_id, b_info in PRODUCTION_TIME_BLOCKS.items():
+            b_sh = int(b_info["start_ist"].split(":")[0])
+            b_eh = int(b_info["end_ist"].split(":")[0])
+            if b_sh <= hour < b_eh:
+                return b_id, b_info["name"]
+
+        return "BLOCK_07", "Continental Europe (Default Fallback)"
+
+    @classmethod
+    def is_eligible_at_ist(
+        cls,
+        iana_timezone: str,
+        current_dt_ist: Optional[datetime] = None
+    ) -> Tuple[bool, str, str]:
+        """
+        Determines whether the recipient at `iana_timezone` is currently within
+        their authorized local mailing window (08:30 - 09:30 local time).
+
+        Returns:
+            (is_eligible, reason, recipient_local_time_str)
+        """
+        if current_dt_ist is None:
+            current_dt_ist = datetime.now(IST_TZ)
+        elif current_dt_ist.tzinfo is None:
+            current_dt_ist = current_dt_ist.replace(tzinfo=IST_TZ)
+
+        tz = cls.get_zone_info(iana_timezone)
+        recipient_local_dt = current_dt_ist.astimezone(tz)
+        local_time = recipient_local_dt.time()
+        local_time_str = recipient_local_dt.strftime("%H:%M %Z")
+
+        # Authorized working window: 08:30 to 09:30 recipient local time
+        window_start = time(8, 30)
+        window_end = time(9, 30)
+
+        if window_start <= local_time <= window_end:
+            return True, f"ELIGIBLE: Recipient local time {local_time_str} is within authorized 08:30-09:30 window", local_time_str
+        elif local_time < window_start:
+            return False, f"TOO_EARLY: Recipient local time {local_time_str} is before 08:30 working hours", local_time_str
+        else:
+            return False, f"PAST_WINDOW: Recipient local time {local_time_str} has passed the 09:30 morning peak window", local_time_str

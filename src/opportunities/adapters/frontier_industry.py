@@ -76,7 +76,7 @@ class FrontierIndustryAdapter(BaseOpportunityAdapter):
         return items
 
     def normalize_raw_item(self, raw_item: Dict[str, Any]) -> Tuple[Organization, Opportunity]:
-        company_name = raw_item["company_name"]
+        company_name = raw_item.get("company_name") or raw_item.get("organization_name", "Frontier Organization")
         web_url = canonicalize_url(raw_item.get("website", ""))
         org_id = compute_organization_id(company_name, web_url)
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -94,7 +94,7 @@ class FrontierIndustryAdapter(BaseOpportunityAdapter):
             tier=raw_item.get("tier", "TIER_1")
         )
 
-        title = raw_item["title"]
+        title = raw_item.get("title") or raw_item.get("role_title", "Research & Engineering Intern")
         opp_id = compute_opportunity_id(org_id, OpportunityType.FRONTIER_COMPANY.value, title, "Summer 2027")
 
         evidence_url = canonicalize_url(raw_item.get("evidence_url", ""))

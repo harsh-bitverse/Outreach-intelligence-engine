@@ -18,7 +18,7 @@ import sqlite3
 import json
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Set
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 from config.settings import settings
 from src.opportunities.models import (
@@ -39,8 +39,10 @@ from src.opportunities.models import (
     VisitingStudentPolicy,
     HostingAvailability,
     FundingAvailability,
-    AcademicReplyOutcome
+    AcademicReplyOutcome,
+    ContactHistoryStatus
 )
+from src.opportunities.timezone_engine import DynamicTimezoneEngine, PRODUCTION_TIME_BLOCKS, DEVELOPMENT_EXTENDED_BLOCKS
 from src.opportunities.registry import (
     canonicalize_url,
     compute_organization_id,
@@ -64,13 +66,13 @@ class AcademicPortfolioReconciler:
         self.prod_db_path = prod_db_path or (settings.DATA_DIR / "outreach_engine.db")
         self.dev_db_path = dev_db_path or (settings.DATA_DIR / "development" / "opportunity_dev.db")
 
-    def load_production_professors(self) -> List[Dict[str, Any]]:
+    def load_production_professors(self) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
         """
-        Loads all 1,390 professors from production database in READ-ONLY mode.
+        Loads all 1,390 professors and inbound reply messages from production database in READ-ONLY mode.
         """
         if not self.prod_db_path.exists():
             logger.warning(f"Production database not found at {self.prod_db_path}")
-            return []
+            return [], {}
 
         # Read-only URI connection with short timeout
         conn = sqlite3.connect(f"file:{self.prod_db_path}?mode=ro", uri=True, timeout=2.0)
@@ -89,10 +91,22 @@ class AcademicPortfolioReconciler:
             ORDER BY processing_sequence ASC;
         """)
         rows = [dict(r) for r in cur.fetchall()]
+
+        # Query inbound messages
+        inbound_msgs: Dict[str, Dict[str, Any]] = {}
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='email_messages';")
+        if cur.fetchone():
+            cur.execute("""
+                SELECT professor_id, message_id, subject, body, sent_received_at
+                FROM email_messages
+                WHERE direction = 'INBOUND';
+            """)
+            inbound_msgs = {r["professor_id"]: dict(r) for r in cur.fetchall()}
+
         conn.close()
 
-        logger.info(f"Loaded {len(rows)} production professors from {self.prod_db_path}")
-        return rows
+        logger.info(f"Loaded {len(rows)} production professors and {len(inbound_msgs)} inbound replies from {self.prod_db_path}")
+        return rows, inbound_msgs
 
     def reconcile_into_development_db(self) -> Dict[str, Any]:
         """
@@ -100,9 +114,10 @@ class AcademicPortfolioReconciler:
         - Identifies existing development academic records that match production professors
         - Ingests production professors with source='PRODUCTION_CAMPAIGN_LINKED'
         - Preserves exact historical delivery, outreach, and email statuses
+        - Decouples address delivery failures from academic/visa ineligibility
         - Returns full reconciliation accounting metrics
         """
-        prod_profs = self.load_production_professors()
+        prod_profs, inbound_msgs = self.load_production_professors()
         if not prod_profs:
             return {"status": "ERROR", "message": "No production professors loaded"}
 
@@ -167,18 +182,79 @@ class AcademicPortfolioReconciler:
             is_replied = "REPLIED" in p_status
             is_sent = "SENT" in p_status
 
+            reply_evidence = None
+            reply_ts = None
+
             if is_bounced or is_suppressed:
-                acad_class = AcademicClassification.INELIGIBLE.value
+                # CRITICAL SEPARATION: Contact failure != Academic / Visa Ineligibility!
+                # Research match remains valid as a prospective inquiry,
+                # but the contact is marked INVALID and excluded from dispatch.
+                acad_class = AcademicClassification.PROSPECTIVE_INQUIRY.value
                 hosting_avail = HostingAvailability.UNKNOWN.value
                 reply_outcome = AcademicReplyOutcome.BOUNCED.value if is_bounced else AcademicReplyOutcome.DECLINED.value
+                contact_verif = "INVALID" if is_bounced else p_verif
+                next_act = "EXCLUDE_FROM_DISPATCH_NEED_ALTERNATIVE_CONTACT"
+                verif_notes = (
+                    f"Reconciled from production campaign (Time Block: {p.get('time_block', 'UNASSIGNED')}). "
+                    f"Contact status: {p_status} (Delivery Bounced/Invalid). "
+                    f"Research alignment remains valid; candidate excluded from dispatch pending verified alternative contact."
+                )
             elif is_replied:
                 acad_class = AcademicClassification.PROSPECTIVE_INQUIRY.value
                 hosting_avail = HostingAvailability.UNKNOWN.value
-                reply_outcome = AcademicReplyOutcome.NEEDS_REVIEW.value
+                contact_verif = p_verif
+
+                # Check if specific inbound message exists
+                inbound_info = inbound_msgs.get(p_id)
+                if inbound_info:
+                    inbound_body = (inbound_info.get("body") or "").lower()
+                    reply_ts = inbound_info.get("sent_received_at")
+                    reply_evidence = inbound_info.get("body", "")[:250]
+                    if any(term in inbound_body for term in ["zoom", "call", "schedule a call", "meet", "speak", "interview"]):
+                        reply_outcome = AcademicReplyOutcome.INTERVIEW_REQUESTED.value
+                        next_act = "SCHEDULE_ZOOM_INTERVIEW"
+                    elif any(term in inbound_body for term in ["interested", "glad to host", "welcome to apply"]):
+                        reply_outcome = AcademicReplyOutcome.INTERESTED.value
+                        next_act = "PREPARE_FORMAL_PROPOSAL"
+                    elif any(term in inbound_body for term in ["full", "capacity", "no space", "no openings"]):
+                        reply_outcome = AcademicReplyOutcome.CAPACITY_FULL.value
+                        next_act = "LOG_LAB_CAPACITY_FULL"
+                    elif any(term in inbound_body for term in ["no funding", "unfunded", "cannot fund"]):
+                        reply_outcome = AcademicReplyOutcome.FUNDING_UNAVAILABLE.value
+                        next_act = "EXPLORE_EXTERNAL_SCHOLARSHIP"
+                    elif any(term in inbound_body for term in ["cannot take", "decline", "unable to accept"]):
+                        reply_outcome = AcademicReplyOutcome.DECLINED.value
+                        next_act = "ARCHIVE_DECLINED_INQUIRY"
+                    else:
+                        reply_outcome = AcademicReplyOutcome.NEEDS_REVIEW.value
+                        next_act = "REVIEW_PROFESSOR_REPLY"
+                else:
+                    reply_outcome = AcademicReplyOutcome.NEEDS_REVIEW.value
+                    next_act = "REVIEW_PROFESSOR_REPLY"
+                    reply_evidence = "Reply recorded in production tracking; message body awaiting IMAP synchronization."
+                    reply_ts = p.get("updated_at")
+
+                verif_notes = (
+                    f"Reconciled from production campaign (Time Block: {p.get('time_block', 'UNASSIGNED')}). "
+                    f"Outreach status: REPLIED. Reply outcome: {reply_outcome}."
+                )
+            elif is_sent:
+                acad_class = AcademicClassification.PROSPECTIVE_INQUIRY.value
+                hosting_avail = HostingAvailability.UNKNOWN.value
+                reply_outcome = AcademicReplyOutcome.NO_REPLY.value
+                contact_verif = p_verif
+                next_act = "AWAITING_REPLY_MONITOR"
+                verif_notes = (
+                    f"Reconciled from production campaign (Time Block: {p.get('time_block', 'UNASSIGNED')}). "
+                    f"Outreach dispatched via production SMTP; tracking delivery/reply."
+                )
             else:
                 acad_class = AcademicClassification.PROSPECTIVE_INQUIRY.value
                 hosting_avail = HostingAvailability.UNKNOWN.value
-                reply_outcome = AcademicReplyOutcome.NO_REPLY.value if is_sent else None
+                reply_outcome = None
+                contact_verif = p_verif
+                next_act = "AWAITING_REVIEW"
+                verif_notes = f"Reconciled from production campaign (Time Block: {p.get('time_block', 'UNASSIGNED')})."
 
             # Split research domains
             raw_areas = p.get("research_areas") or ""
@@ -197,9 +273,15 @@ class AcademicPortfolioReconciler:
                         professor_id = ?,
                         operational_status = ?,
                         contact_verification_status = ?,
+                        academic_classification = ?,
+                        academic_reply_outcome = ?,
+                        reply_timestamp = ?,
+                        reply_evidence_snippet = ?,
+                        verification_notes = ?,
+                        next_action = ?,
                         updated_at = ?
                     WHERE opportunity_id = ?;
-                """, (p_id, p_status, p_verif, now_iso, matching_dev_opp_id))
+                """, (p_id, p_status, contact_verif, acad_class, reply_outcome, reply_ts, reply_evidence, verif_notes, next_act, now_iso, matching_dev_opp_id))
             else:
                 reconciliation_stats["net_new_production_ingested"] += 1
                 # Ingest production record into development opportunities table
@@ -222,13 +304,19 @@ class AcademicPortfolioReconciler:
                         funding_availability, application_route, academic_reply_outcome,
                         professor_id, operational_status, verification_notes,
                         discovery_status, application_status, is_confirmed_opening, next_action,
-                        created_at, updated_at, last_checked_at
+                        created_at, updated_at, last_checked_at, reply_timestamp, reply_evidence_snippet
                     ) VALUES (
-                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                     )
                     ON CONFLICT(opportunity_id) DO UPDATE SET
                         operational_status = excluded.operational_status,
                         contact_verification_status = excluded.contact_verification_status,
+                        academic_classification = excluded.academic_classification,
+                        academic_reply_outcome = excluded.academic_reply_outcome,
+                        reply_timestamp = excluded.reply_timestamp,
+                        reply_evidence_snippet = excluded.reply_evidence_snippet,
+                        verification_notes = excluded.verification_notes,
+                        next_action = excluded.next_action,
                         updated_at = excluded.updated_at;
                 """, (
                     opp_id, org_id, title, OpportunityType.ACADEMIC_LAB.value, "PRODUCTION_CAMPAIGN_LINKED",
@@ -241,7 +329,7 @@ class AcademicPortfolioReconciler:
                     "Funding availability subject to faculty discretion / institutional fellowship.",
                     evidence_urls_json, now_iso,
                     ContactChannel.FACULTY_PI.value, p_email, p_name,
-                    p_verif, p.get("faculty_profile_url") or "", "Rolling",
+                    contact_verif, p.get("faculty_profile_url") or "", "Rolling",
                     75.0, PriorityTier.HIGH_PRIORITY.value, PortfolioTier.TIER_B_STRONG_MATCH.value,
                     RequisitionType.UNDERGRADUATE_INTERNSHIP.value, RoleTitleType.PROPOSED_OUTREACH_FOCUS.value,
                     WorkplaceType.ONSITE.value, InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
@@ -249,9 +337,10 @@ class AcademicPortfolioReconciler:
                     VisitingStudentPolicy.INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED.value,
                     0, hosting_avail, FundingAvailability.UNKNOWN.value,
                     "DIRECT_FACULTY_PI", reply_outcome,
-                    p_id, p_status, f"Reconciled from production campaign (Time Block: {p.get('time_block', 'UNASSIGNED')}).",
-                    "QUALIFIED", "NOT_APPLIED", 0, "AWAITING_REVIEW",
-                    p.get("created_at") or now_iso, now_iso, now_iso
+                    p_id, p_status, verif_notes,
+                    "QUALIFIED", "NOT_APPLIED", 0, next_act,
+                    p.get("created_at") or now_iso, now_iso, now_iso,
+                    reply_ts, reply_evidence
                 ))
 
         conn.commit()
@@ -263,3 +352,189 @@ class AcademicPortfolioReconciler:
             f"{reconciliation_stats['net_new_production_ingested']} net-new ingested)."
         )
         return reconciliation_stats
+
+    def reconcile_all_contacts(self, target_date: Optional[date] = None) -> Dict[str, Any]:
+        """
+        Reconciles all opportunities in opportunity_dev.db against the latest
+        production campaign history in outreach_engine.db (READ-ONLY).
+
+        Recognizes:
+        - Previously contacted addresses
+        - SMTP-accepted messages still awaiting final delivery (DELIVERY_UNCONFIRMED)
+        - Permanent bounces (BOUNCED)
+        - Alternative addresses already contacted (ALREADY_CONTACTED)
+        - Genuine professor replies (REPLIED)
+        - Interview requests, declines, and opt-outs
+        - Existing suppression policies
+        - Ambiguous deliveries & errors (NEEDS_REVIEW)
+        - Portal requisitions (PORTAL_APPLICATION)
+        - Genuinely new, eligible, unsent contacts (SCHEDULED_ELIGIBLE)
+
+        Computes recipient-specific IANA mailing windows and IST eligibility windows
+        using DynamicTimezoneEngine.
+        """
+        if target_date is None:
+            target_date = date(2026, 11, 5)
+
+        # 1. Connect to production database in read-only mode
+        prod_by_pid: Dict[str, Dict[str, Any]] = {}
+        tracker_by_pid: Dict[str, Tuple[str, str]] = {}
+        tracker_by_email: Dict[str, Tuple[str, str]] = {}
+        suppressed_emails: Set[str] = set()
+
+        if self.prod_db_path.exists():
+            prod_conn = sqlite3.connect(f"file:{self.prod_db_path}?mode=ro", uri=True, timeout=2.0)
+            prod_cur = prod_conn.cursor()
+
+            # Gather professors
+            prod_cur.execute("SELECT professor_id, full_name, university_name, email, outreach_status FROM professors;")
+            for pid, name, uni, email, status in prod_cur.fetchall():
+                prod_by_pid[pid] = {
+                    "name": name,
+                    "uni": uni,
+                    "email": (email or "").strip().lower(),
+                    "outreach_status": status
+                }
+
+            # Gather delivery tracker
+            prod_cur.execute("SELECT professor_id, recipient_email, delivery_status, tracking_status FROM outbound_delivery_tracker;")
+            for pid, email, d_stat, t_stat in prod_cur.fetchall():
+                em = (email or "").strip().lower()
+                tracker_by_pid[pid] = (d_stat, t_stat)
+                if em:
+                    tracker_by_email[em] = (d_stat, t_stat)
+
+            # Gather suppression list
+            prod_cur.execute("SELECT email FROM suppression_list;")
+            for (em,) in prod_cur.fetchall():
+                if em:
+                    suppressed_emails.add(em.strip().lower())
+
+            prod_conn.close()
+        else:
+            logger.warning(f"Production database not accessible at {self.prod_db_path}")
+
+        # 2. Gather dev opportunities
+        dev_conn = sqlite3.connect(str(self.dev_db_path))
+        dev_conn.row_factory = sqlite3.Row
+        dev_cur = dev_conn.cursor()
+
+        dev_cur.execute("""
+            SELECT o.opportunity_id, o.professor_id, o.opportunity_type, o.title, o.contact_name, o.contact_email,
+                   o.contact_verification_status, o.hiring_contact_channel, o.application_url, o.iana_timezone,
+                   org.name as org_name, org.category as org_category
+            FROM opportunities o
+            JOIN organizations org ON o.organization_id = org.organization_id;
+        """)
+        dev_opps = dev_cur.fetchall()
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        counts = {s.value: 0 for s in ContactHistoryStatus}
+        block_distribution: Dict[str, int] = {}
+        category_reconciliation: Dict[str, Dict[str, int]] = {}
+
+        updates: List[Tuple[str, str, str, str, str, str]] = []
+
+        for row in dev_opps:
+            opp_id = row["opportunity_id"]
+            pid = row["professor_id"]
+            cat = row["opportunity_type"]
+            email = (row["contact_email"] or "").strip().lower()
+            v_status = (row["contact_verification_status"] or "").upper()
+            channel = row["hiring_contact_channel"]
+            app_url = row["application_url"]
+            tz_str = row["iana_timezone"] or "UTC"
+
+            if cat not in category_reconciliation:
+                category_reconciliation[cat] = {s.value: 0 for s in ContactHistoryStatus}
+
+            # Calculate exact timezone mailing window
+            tz_calc = DynamicTimezoneEngine.calculate_mailing_window(tz_str, target_date=target_date)
+            assigned_block = tz_calc["assigned_block_id"]
+            recip_window = tz_calc["local_mailing_window"]
+            ist_window = tz_calc["ist_mailing_window"]
+
+            # Routing and contact status logic
+            is_portal = (channel == ContactChannel.APPLICATION_PORTAL.value or (not email and bool(app_url)))
+
+            if is_portal:
+                status = ContactHistoryStatus.PORTAL_APPLICATION.value
+                next_action = "PREPARE_APPLICATION_DOSSIER"
+                assigned_block = "PORTAL_DEADLINE_TRACKER"
+            else:
+                # Production Campaign History Check
+                p_info = prod_by_pid.get(pid) if pid else None
+                d_stat, t_stat = tracker_by_pid.get(pid, (None, None)) if pid else (None, None)
+                if not d_stat and email:
+                    d_stat, t_stat = tracker_by_email.get(email, (None, None))
+                p_status = p_info["outreach_status"] if p_info else None
+
+                # 1. Bounced
+                if (d_stat and "BOUNCE" in d_stat) or (p_status and ("BOUNCE" in p_status or "INVALID" in p_status or "FAILURE" in p_status)):
+                    status = ContactHistoryStatus.BOUNCED.value
+                    next_action = "EXCLUDE_FROM_DISPATCH_BOUNCED"
+                # 2. Replied
+                elif d_stat == "REPLIED" or (p_status and "REPLIED" in p_status):
+                    status = ContactHistoryStatus.REPLIED.value
+                    next_action = "HANDLE_INCOMING_REPLY"
+                # 3. Suppressed / Previously Contacted
+                elif email in suppressed_emails or (p_status and "SUPPRESSED" in p_status):
+                    status = ContactHistoryStatus.ALREADY_CONTACTED.value
+                    next_action = "EXCLUDE_FROM_DISPATCH_ALREADY_CONTACTED"
+                # 4. Delivery Unconfirmed (dispatched in production)
+                elif d_stat == "UNCONFIRMED" or t_stat == "WATCH_COMPLETE" or (p_status and "SENT" in p_status):
+                    status = ContactHistoryStatus.DELIVERY_UNCONFIRMED.value
+                    next_action = "MONITOR_DELIVERY_IN_FLIGHT"
+                # 5. Error / Ambiguous
+                elif p_status in ("AMBIGUOUS_DELIVERY", "ERROR"):
+                    status = ContactHistoryStatus.NEEDS_REVIEW.value
+                    next_action = "MANUAL_REVIEW_REQUIRED"
+                # 6. Contact Unverified or Missing
+                elif not email or v_status not in ("VERIFIED", "VALID"):
+                    status = ContactHistoryStatus.NEEDS_REVIEW.value
+                    next_action = "VERIFY_RECIPIENT_CONTACT"
+                # 7. Genuinely new, eligible, unsent
+                else:
+                    status = ContactHistoryStatus.SCHEDULED_ELIGIBLE.value
+                    next_action = "DISPATCH_IN_ASSIGNED_TIME_BLOCK"
+                    block_distribution[assigned_block] = block_distribution.get(assigned_block, 0) + 1
+
+            counts[status] = counts.get(status, 0) + 1
+            category_reconciliation[cat][status] = category_reconciliation[cat].get(status, 0) + 1
+
+            updates.append((
+                status, assigned_block, recip_window, ist_window, next_action, opp_id
+            ))
+
+        # Batch update opportunities table
+        dev_cur.executemany("""
+            UPDATE opportunities SET
+                contact_history_status = ?,
+                assigned_block_id = ?,
+                recipient_mailing_window = ?,
+                ist_eligibility_window = ?,
+                next_action = ?,
+                updated_at = datetime('now')
+            WHERE opportunity_id = ?;
+        """, updates)
+
+        dev_conn.commit()
+        dev_conn.close()
+
+        logger.info(f"Reconciled {len(dev_opps)} opportunities against production contact history.")
+
+        return {
+            "total_opportunities_evaluated": len(dev_opps),
+            "target_date": target_date.isoformat(),
+            "reconciled_breakdown": counts,
+            "category_reconciliation": category_reconciliation,
+            "block_distribution_eligible": block_distribution,
+            "scheduled_eligible_count": counts[ContactHistoryStatus.SCHEDULED_ELIGIBLE.value],
+            "delivery_unconfirmed_count": counts[ContactHistoryStatus.DELIVERY_UNCONFIRMED.value],
+            "bounced_count": counts[ContactHistoryStatus.BOUNCED.value],
+            "replied_count": counts[ContactHistoryStatus.REPLIED.value],
+            "already_contacted_count": counts[ContactHistoryStatus.ALREADY_CONTACTED.value],
+            "portal_application_count": counts[ContactHistoryStatus.PORTAL_APPLICATION.value],
+            "needs_review_count": counts[ContactHistoryStatus.NEEDS_REVIEW.value]
+        }

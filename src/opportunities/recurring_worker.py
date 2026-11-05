@@ -17,7 +17,7 @@ import logging
 import sqlite3
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 from config.settings import settings
 from src.opportunities.models import (
@@ -39,6 +39,8 @@ from src.opportunities.audit import audit_opportunity
 from src.opportunities.ranking import OpportunityRanker
 from src.opportunities.workbook_sync import OpportunityWorkbookSync
 from src.opportunities.scheduling import OpportunityScheduler
+from src.opportunities.unified_outreach_bridge import UnifiedOutreachBridge
+from src.opportunities.academic_reconciliation import AcademicPortfolioReconciler
 from src.security.audit_logger import audit_logger
 
 # Ensure logs directory exists
@@ -154,7 +156,7 @@ class RecurringDiscoveryWorker:
                     )
 
                 try:
-                    raw_items = adapter.fetch_raw_opportunities(checkpoint=chk, limit=30)
+                    raw_items = adapter.fetch_raw_opportunities(checkpoint=chk, limit=150)
                     new_in_adapter = 0
 
                     for item in raw_items:
@@ -205,8 +207,13 @@ class RecurringDiscoveryWorker:
                         chk.error_message = str(adp_err)
                         repo.save_checkpoint(chk)
 
-            # Re-evaluate all opportunities in database for Excel synchronization
-            all_opps = repo.list_opportunities(min_score=40.0, limit=500)
+            # Step 1: Reconcile all opportunities against production history & compute exact IANA timezones
+            target_date = date(2026, 11, 5)
+            reconciler = AcademicPortfolioReconciler()
+            reconcile_stats = reconciler.reconcile_all_contacts(target_date=target_date)
+
+            # Step 2: Load all reconciled opportunities for Excel synchronization
+            all_opps = repo.list_opportunities(min_score=0.0, limit=10000)
             summary["total_qualified"] = len(all_opps)
 
             orgs_by_id: Dict[str, Organization] = {}
@@ -216,13 +223,32 @@ class RecurringDiscoveryWorker:
                     if org_obj:
                         orgs_by_id[o.organization_id] = org_obj
 
-            # Synchronize Workbook atomically
+            # Step 3: Build unified inventory and schedule records with accurate timezones
+            bridge = UnifiedOutreachBridge(repo=repo, workbook_sync=wb_sync)
+            inventory = bridge.build_unified_outreach_inventory(target_date=target_date)
+
+            sched_records: List[Dict[str, Any]] = []
+            for o in all_opps:
+                org = orgs_by_id.get(o.organization_id)
+                processed = bridge.route_and_process_opportunity(o, org, target_date=target_date)
+                sched_records.append(processed)
+
+            # Step 4: Synchronize Workbook sheets atomically
             wb_sync.initialize_opportunity_sheets()
             wb_sync.sync_opportunities(all_opps, orgs_by_id)
-
-            sched_records = OpportunityScheduler.generate_unified_schedule(all_opps, orgs_by_id)
             sched_count = wb_sync.sync_unified_schedule(sched_records)
             summary["unified_schedule_count"] = sched_count
+
+            summary["unified_inventory"] = {
+                "total_evaluated": inventory["total_evaluated"],
+                "scheduled_eligible": inventory["scheduled_eligible_count"],
+                "delivery_unconfirmed": inventory["delivery_unconfirmed_count"],
+                "bounced_excluded": inventory["bounced_count"],
+                "replied_resolved": inventory["replied_count"],
+                "portal_tracked": inventory["portal_tracked_count"],
+                "unverified_quarantine": inventory["unverified_quarantine_count"],
+                "suppressed_excluded": inventory["suppressed_count"]
+            }
 
             end_time = datetime.now(timezone.utc)
             duration = (end_time - start_time).total_seconds()

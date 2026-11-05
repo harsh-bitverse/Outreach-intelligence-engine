@@ -100,7 +100,7 @@ class StartupAdapter(BaseOpportunityAdapter):
             tier=tier
         )
 
-        title = raw_item["title"]
+        title = raw_item.get("title") or f"Summer 2027 Engineering Placement — {company_name}"
         opp_id = compute_opportunity_id(org_id, OpportunityType.STARTUP.value, title, "Summer 2027")
 
         evidence_urls = [canonicalize_url(raw_item.get("evidence_url", ""))]

@@ -186,6 +186,21 @@ UNCATALOGUED_ATS_TARGETS = [
         "relevance": "Infinite spatial canvas architectures, multi-user CRDT synchronization, and visual agent tooling.",
         "potential_contribution": "Implementing deterministic canvas state snapshotting and agent tool integration hooks.",
         "matched_project": "Agentic Industrial AI Workbench"
+    },
+    {
+        "name": "Anthropic",
+        "website": "https://www.anthropic.com",
+        "city": "San Francisco",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["AI Safety", "LLM Systems", "Inference Infrastructure", "Distributed Training"],
+        "funding_stage": "SERIES_D",
+        "tier": "TIER_1",
+        "kind": "greenhouse",
+        "board_id": "anthropic",
+        "relevance": "Frontier AI systems infrastructure, high-throughput model serving, and distributed GPU clusters.",
+        "potential_contribution": "Benchmarking inference kernel operational intensity and evaluating token latency under speculative decoding.",
+        "matched_project": "LLM Inference Intelligence Engine"
     }
 ]
 

@@ -44,7 +44,8 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "housing_support": "Subsidized accommodation reservation in CERN hostel",
         "required_documents": "CV, official university transcript, academic reference letter, statement of interest",
         "compensation_evidence": "OFFICIAL_CERN_FELLOWSHIP_REGULATIONS",
-        "eligibility": "Bachelor or Master students having completed at least 3 years of full-time engineering/CS university study.",
+        "eligibility": "Bachelor or Master students having completed at least 3 years (6 full academic semesters) of full-time engineering/CS university study by June 2027.",
+        "applicant_specific_eligibility": "ELIGIBLE — Harshith N completes 6th semester B.Tech at IIT Delhi in May 2027, meeting the 6-semester threshold prior to June 2027 programme start.",
         "international_eligibility": InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
         "workplace_type": WorkplaceType.ONSITE.value,
         "evidence_url": "https://openlab.cern/summer-student-programme",
@@ -66,7 +67,8 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "role_title_type": RoleTitleType.EXACT.value,
         "requisition_type": RequisitionType.FELLOWSHIP_PROGRAM.value,
         "portfolio_tier": PortfolioTier.TIER_A_ELITE_PRIORITY.value,
-        "audit_classification": OpportunityClassification.CONFIRMED_OPENING.value,
+        "audit_classification": OpportunityClassification.FUTURE_OPENING_MONITOR.value,
+        "is_confirmed_opening": False,
         "relevance": "Direct match with IIT Delhi Chemical Engineering curriculum, transport phenomena, and finite-difference PDE error bounds.",
         "potential_contribution": "Formulating adaptive loss weighting for physics-constrained neural operators in collaboration with German host laboratory.",
         "matched_project": "PINN Error Estimation term paper",
@@ -78,14 +80,16 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "housing_support": "Assisted booking in student residence by host institute",
         "required_documents": "DAAD research proposal, host professor invitation letter, university endorsement/NOC, transcripts",
         "compensation_evidence": "OFFICIAL_DAAD_SCHOLARSHIP_GUIDELINES",
-        "eligibility": "Indian undergraduate engineering students (5th/6th semester B.Tech at IIT Delhi). Top academic ranking.",
+        "eligibility": "Indian undergraduate engineering students (5th/6th semester B.Tech at IIT Delhi). Top academic ranking, min 8.5/10 CGPA.",
+        "applicant_specific_eligibility": "ELIGIBLE — Pre-requisites satisfied; pending host invitation letter and official call opening.",
+        "verification_notes": "DAAD WISE Summer 2027 call pending official announcement from DAAD India office; monitored for formal portal opening.",
         "international_eligibility": InternationalEligibility.ELIGIBLE_DOMESTIC.value,
         "workplace_type": WorkplaceType.ONSITE.value,
         "evidence_url": "https://www.daad.in/en/find-funding/scholarships-for-indians/wise-fellowship/",
         "application_url": "https://www.daad.in/en/find-funding/scholarships-for-indians/wise-fellowship/",
         "contact_channel": ContactChannel.APPLICATION_PORTAL.value,
         "contact_name": "DAAD India Scholarship Office",
-        "deadline": "2026-11-15"
+        "deadline": "2026-11-15 (Annual Call)"
     },
     {
         "institution_name": "Mitacs",
@@ -100,7 +104,8 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "role_title_type": RoleTitleType.EXACT.value,
         "requisition_type": RequisitionType.FELLOWSHIP_PROGRAM.value,
         "portfolio_tier": PortfolioTier.TIER_A_ELITE_PRIORITY.value,
-        "audit_classification": OpportunityClassification.CONFIRMED_OPENING.value,
+        "audit_classification": OpportunityClassification.FUTURE_OPENING_MONITOR.value,
+        "is_confirmed_opening": False,
         "relevance": "Direct intersection with Neural Process Twin surrogate modeling and autonomous robot kinematics.",
         "potential_contribution": "Developing high-fidelity neural operator surrogates for multiphysics transport simulation under Canadian host professor.",
         "matched_project": "Neural Process Twin",
@@ -112,7 +117,9 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "housing_support": "CAD $1,500+ accommodation stipend provided",
         "required_documents": "CV, official transcript, academic recommendation letters, matched project rankings",
         "compensation_evidence": "OFFICIAL_MITACS_GLOBALINK_AWARD_NOTICE",
-        "eligibility": "Full-time undergraduate students from partner countries (including India - IITs). Min GPA 8.0/10.",
+        "eligibility": "Full-time enrolled undergraduate students in India (including IIT Delhi) in penultimate year of study with minimum CGPA 8.0/10.",
+        "applicant_specific_eligibility": "ELIGIBLE — Pre-requisites satisfied; monitored for formal portal cycle dates.",
+        "verification_notes": "Mitacs Globalink 2027 application cycle: annual portal opens June–August, deadline mid-September; currently monitored for next open cycle.",
         "international_eligibility": InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
         "workplace_type": WorkplaceType.ONSITE.value,
         "evidence_url": "https://www.mitacs.ca/our-programs/globalink-research-internship-students/",
@@ -656,29 +663,32 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "housing_support": "Assistance securing summer housing in Los Alamos / Santa Fe",
         "required_documents": "CV, official transcript, cover letter, letter of recommendation",
         "compensation_evidence": "OFFICIAL_DOE_LANL_STUDENT_PAY_SCALE",
-        "eligibility": "Undergraduate engineering/CS students with C++ and parallel programming skills. International students eligible for non-sensitive projects via J-1.",
+        "eligibility": "Undergraduate engineering/CS students with C++ and parallel programming skills. Note: Domestic federal awards require US citizenship/LPR; international students eligible for non-sensitive projects via LANL Division-sponsored J-1 appointment.",
         "international_eligibility": InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
         "workplace_type": WorkplaceType.ONSITE.value,
         "evidence_url": "https://www.lanl.gov/careers/students-internships/undergraduate/index.php",
         "application_url": "https://www.lanl.gov/careers/students-internships/undergraduate/index.php",
         "contact_channel": ContactChannel.APPLICATION_PORTAL.value,
         "contact_name": "LANL Student Programs Office",
-        "deadline": "2027-01-31"
+        "deadline": "2027-01-31",
+        "application_route": "DIVISION_HOSTING_AGREEMENT",
+        "verification_notes": "Division-sponsored J-1 research internship. US domestic clearance projects restricted to US citizens."
     },
     {
         "institution_name": "Argonne National Laboratory (ANL)",
-        "program_name": "Argonne International Visiting Student Research Program / DOE SULI Computing Track",
+        "program_name": "Argonne International Visiting Student Research Program / Division Computing Track",
         "website": "https://www.anl.gov",
         "country": "United States",
         "city": "Lemont",
         "timezone": "America/Chicago",
         "host_group": "Mathematics and Computer Science (MCS) / Aurora Supercomputer",
         "domains": ["Exascale Computing", "SciML", "Numerical PDEs", "Optimization"],
-        "title": "Argonne Research Scholar — Mathematics & Computer Science Division (Summer 2027)",
-        "role_title_type": RoleTitleType.EXACT.value,
+        "title": "Argonne International Visiting Scholar — Mathematics & Computer Science Division (Summer 2027)",
+        "role_title_type": RoleTitleType.PROPOSED_OUTREACH_FOCUS.value,
         "requisition_type": RequisitionType.FELLOWSHIP_PROGRAM.value,
         "portfolio_tier": PortfolioTier.TIER_A_ELITE_PRIORITY.value,
-        "audit_classification": OpportunityClassification.CONFIRMED_OPENING.value,
+        "audit_classification": OpportunityClassification.PROSPECTIVE_OUTREACH_TARGET.value,
+        "is_confirmed_opening": False,
         "relevance": "Direct alignment with Neural Process Twin surrogate modeling, PDE solvers, and high-performance computing.",
         "potential_contribution": "Implementing benchmark comparisons between neural operator stencils and MPI numerical baselines on Aurora compute nodes.",
         "matched_project": "Neural Process Twin",
@@ -690,14 +700,16 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "housing_support": "Housing allowance or Argonne guest house room provided",
         "required_documents": "Academic CV, official transcript, 2 recommendation letters, essay responses",
         "compensation_evidence": "OFFICIAL_DOE_SULI_PROGRAM_GUIDELINES",
-        "eligibility": "Enrolled undergraduate students in STEM. Note: Direct DOE SULI federal funding requires US citizenship/LPR; international students (including IIT undergraduates) participate via Argonne Division-sponsored J-1 Visiting Research Scholar appointment.",
+        "eligibility": "Undergraduate STEM students. Note: Direct federal DOE SULI funding is restricted to US Citizens/LPRs; international students (including IIT undergraduates) participate via Argonne Division-sponsored J-1 Visiting Research Scholar appointment.",
         "international_eligibility": InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
         "workplace_type": WorkplaceType.ONSITE.value,
         "evidence_url": "https://www.anl.gov/education/undergraduate-internships",
         "application_url": "https://www.anl.gov/education/undergraduate-internships",
         "contact_channel": ContactChannel.APPLICATION_PORTAL.value,
         "contact_name": "Argonne Educational Programs",
-        "deadline": "2027-01-10"
+        "deadline": "2027-01-10",
+        "application_route": "DIVISION_HOSTING_AGREEMENT",
+        "verification_notes": "Division-sponsored J-1 Visiting Research Scholar appointment track. Note: Direct federal DOE SULI funding is restricted to US Citizens and Lawful Permanent Residents."
     },
     {
         "institution_name": "Oak Ridge National Laboratory (ORNL)",
@@ -724,14 +736,16 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "housing_support": "Subsidized housing allowance of $200/week provided",
         "required_documents": "CV, official transcript, statement of goals, 2 letters of recommendation",
         "compensation_evidence": "OFFICIAL_ORNL_STUDENT_RESEARCH_PROGRAM",
-        "eligibility": "Undergraduate students in computer science, engineering, or applied mathematics. International applicants eligible via J-1.",
+        "eligibility": "Undergraduate students in computer science, engineering, or applied mathematics. International applicants eligible via ORNL Division-sponsored J-1 exchange visitor appointment.",
         "international_eligibility": InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
         "workplace_type": WorkplaceType.ONSITE.value,
         "evidence_url": "https://www.ornl.gov/careers/student-internships",
         "application_url": "https://www.ornl.gov/careers/student-internships",
         "contact_channel": ContactChannel.APPLICATION_PORTAL.value,
         "contact_name": "ORNL Student Internships",
-        "deadline": "2027-02-01"
+        "deadline": "2027-02-01",
+        "application_route": "DIVISION_HOSTING_AGREEMENT",
+        "verification_notes": "Division-sponsored J-1 research internship. Direct federal domestic SULI track restricted to US citizens."
     },
     {
         "institution_name": "Lawrence Berkeley National Laboratory (LBNL)",
@@ -758,14 +772,16 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "housing_support": "Bay Area housing supplement provided for out-of-area students",
         "required_documents": "Academic resume, transcripts, 2 recommendation letters, project portfolio link",
         "compensation_evidence": "OFFICIAL_LBNL_NERSC_INTERNSHIP_ANNOUNCEMENT",
-        "eligibility": "Undergraduate students in CS, engineering, or computational science. J-1 visa sponsorship supported.",
+        "eligibility": "Undergraduate students in CS, engineering, or computational science. J-1 visa sponsorship supported via LBNL Division international scholar appointment.",
         "international_eligibility": InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
         "workplace_type": WorkplaceType.HYBRID.value,
         "evidence_url": "https://www.nersc.gov/about/nersc-staff/internships/",
         "application_url": "https://www.nersc.gov/about/nersc-staff/internships/",
         "contact_channel": ContactChannel.APPLICATION_PORTAL.value,
         "contact_name": "NERSC Internship Coordinator",
-        "deadline": "2027-01-31"
+        "deadline": "2027-01-31",
+        "application_route": "DIVISION_HOSTING_AGREEMENT",
+        "verification_notes": "Division-sponsored J-1 research scholar internship. US domestic federal clearance roles restricted."
     },
     {
         "institution_name": "Paul Scherrer Institute (PSI)",
@@ -802,3 +818,8 @@ INSTITUTIONAL_PROGRAMS_DATA: List[Dict[str, Any]] = [
         "deadline": "2027-02-15"
     }
 ]
+
+from src.opportunities.data.expansion_batch_session06 import NEW_INSTITUTIONAL_PROGRAMS
+from src.opportunities.data.expansion_batch_session07 import NEW_INSTITUTIONAL_PROGRAMS_SESSION07
+INSTITUTIONAL_PROGRAMS_DATA.extend(NEW_INSTITUTIONAL_PROGRAMS)
+INSTITUTIONAL_PROGRAMS_DATA.extend(NEW_INSTITUTIONAL_PROGRAMS_SESSION07)

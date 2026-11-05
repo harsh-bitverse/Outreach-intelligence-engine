@@ -77,8 +77,8 @@ class InstitutionalProgramAdapter(BaseOpportunityAdapter):
         return items
 
     def normalize_raw_item(self, raw_item: Dict[str, Any]) -> Tuple[Organization, Opportunity]:
-        inst_name = raw_item["institution_name"]
-        prog_name = raw_item.get("program_name", inst_name)
+        inst_name = raw_item.get("institution_name") or raw_item.get("organization_name", "Public Institution")
+        prog_name = raw_item.get("program_name") or raw_item.get("program_title") or inst_name
         web_url = canonicalize_url(raw_item.get("website", ""))
         org_id = compute_organization_id(inst_name, web_url)
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -95,7 +95,7 @@ class InstitutionalProgramAdapter(BaseOpportunityAdapter):
             tier=raw_item.get("tier", "TIER_1")
         )
 
-        title = raw_item["title"]
+        title = raw_item.get("title") or raw_item.get("program_title") or f"{prog_name} Fellow"
         opp_id = compute_opportunity_id(org_id, OpportunityType.INSTITUTIONAL_PROGRAM.value, title, "Summer 2027")
 
         evidence_url = canonicalize_url(raw_item.get("evidence_url", ""))

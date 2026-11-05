@@ -113,10 +113,11 @@ class OpportunityRepository:
                 evidence_sources, evidence_timestamp, verification_confidence,
                 academic_reply_outcome, reply_timestamp, reply_evidence_snippet,
                 reply_evidence_id, professor_id,
+                contact_history_status, assigned_block_id, recipient_mailing_window, ist_eligibility_window,
                 operational_status, verification_notes, last_verified_at,
                 discovery_status, application_status, is_confirmed_opening, next_action,
                 created_at, updated_at, last_checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(opportunity_id) DO UPDATE SET
                 title = excluded.title,
                 location = excluded.location,
@@ -168,6 +169,10 @@ class OpportunityRepository:
                 reply_evidence_snippet = excluded.reply_evidence_snippet,
                 reply_evidence_id = excluded.reply_evidence_id,
                 professor_id = excluded.professor_id,
+                contact_history_status = excluded.contact_history_status,
+                assigned_block_id = excluded.assigned_block_id,
+                recipient_mailing_window = excluded.recipient_mailing_window,
+                ist_eligibility_window = excluded.ist_eligibility_window,
                 operational_status = excluded.operational_status,
                 verification_notes = excluded.verification_notes,
                 last_verified_at = excluded.last_verified_at,
@@ -197,6 +202,7 @@ class OpportunityRepository:
             evidence_sources_json, opp.evidence_timestamp, opp.verification_confidence,
             opp.academic_reply_outcome, opp.reply_timestamp, opp.reply_evidence_snippet,
             opp.reply_evidence_id, opp.professor_id,
+            opp.contact_history_status, opp.assigned_block_id, opp.recipient_mailing_window, opp.ist_eligibility_window,
             opp.operational_status, opp.verification_notes, opp.last_verified_at,
             opp.discovery_status, opp.application_status, 1 if opp.is_confirmed_opening else 0,
             opp.next_action, opp.created_at or now_iso, now_iso, now_iso
@@ -413,6 +419,10 @@ class OpportunityRepository:
         reply_evidence_snippet = row["reply_evidence_snippet"] if "reply_evidence_snippet" in row.keys() else None
         reply_evidence_id = row["reply_evidence_id"] if "reply_evidence_id" in row.keys() else None
         professor_id = row["professor_id"] if "professor_id" in row.keys() else None
+        contact_history_status = row["contact_history_status"] if "contact_history_status" in row.keys() else None
+        assigned_block_id = row["assigned_block_id"] if "assigned_block_id" in row.keys() else None
+        recipient_mailing_window = row["recipient_mailing_window"] if "recipient_mailing_window" in row.keys() else None
+        ist_eligibility_window = row["ist_eligibility_window"] if "ist_eligibility_window" in row.keys() else None
 
         return Opportunity(
             opportunity_id=row["opportunity_id"],
@@ -470,6 +480,10 @@ class OpportunityRepository:
             reply_evidence_snippet=reply_evidence_snippet,
             reply_evidence_id=reply_evidence_id,
             professor_id=professor_id,
+            contact_history_status=contact_history_status,
+            assigned_block_id=assigned_block_id,
+            recipient_mailing_window=recipient_mailing_window,
+            ist_eligibility_window=ist_eligibility_window,
             operational_status=operational_status,
             verification_notes=verification_notes,
             last_verified_at=last_verified_at,

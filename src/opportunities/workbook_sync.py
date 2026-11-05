@@ -283,13 +283,22 @@ class OpportunityWorkbookSync:
             if "Unified Outreach Schedule" not in wb.sheetnames:
                 ws = wb.create_sheet(title="Unified Outreach Schedule")
                 headers = [
-                    "Schedule ID", "Priority Tier", "Category", "Organization", "Role Title",
-                    "Channel", "Assigned Block", "Region", "IST Dispatch Window",
-                    "Score", "Recipient / Portal", "Deadline", "Status", "Next Action"
+                    "Opportunity ID", "Category", "Organization", "Contact Identity", "Verified Email",
+                    "Location", "IANA Timezone", "Recipient-Local Window", "Corresponding IST Window",
+                    "Assigned Block", "Region Name", "Contact-History Eligibility", "Scheduled Status",
+                    "Technical Relevance", "Outreach Strategy", "Tracking Reference", "Next Action"
                 ]
                 self._format_header_row(ws, headers)
             else:
                 ws = wb["Unified Outreach Schedule"]
+                # Ensure header row has full 17 columns
+                headers = [
+                    "Opportunity ID", "Category", "Organization", "Contact Identity", "Verified Email",
+                    "Location", "IANA Timezone", "Recipient-Local Window", "Corresponding IST Window",
+                    "Assigned Block", "Region Name", "Contact-History Eligibility", "Scheduled Status",
+                    "Technical Relevance", "Outreach Strategy", "Tracking Reference", "Next Action"
+                ]
+                self._format_header_row(ws, headers)
 
             # Clear existing data rows (keep header row 1)
             if ws.max_row > 1:
@@ -299,20 +308,23 @@ class OpportunityWorkbookSync:
             for rec in schedule_records:
                 row_idx = ws.max_row + 1
                 values = [
-                    rec.get("schedule_id", f"sched_{count+1}"),
-                    rec.get("priority_tier", "PROMISING"),
+                    rec.get("opportunity_id", f"opp_{count+1}"),
                     rec.get("category", "STARTUP"),
                     rec.get("organization_name", ""),
-                    rec.get("role_title", ""),
-                    rec.get("channel", "EMAIL_DISPATCH"),
-                    rec.get("assigned_block_id", "BLOCK_DOMESTIC_IN"),
-                    rec.get("region_name", "India Domestic"),
-                    rec.get("ist_window", "08:00 - 09:30 IST"),
-                    rec.get("qualification_score", 0.0),
-                    rec.get("contact_recipient", ""),
-                    rec.get("deadline", "Rolling"),
-                    rec.get("status", "QUEUED_FOR_REVIEW"),
-                    rec.get("next_action", "")
+                    rec.get("contact_identity", rec.get("contact_name", "")),
+                    rec.get("contact_email", rec.get("contact_recipient", "")),
+                    rec.get("location", "Global"),
+                    rec.get("iana_timezone", "UTC"),
+                    rec.get("recipient_mailing_window", "08:30 - 09:30 Local"),
+                    rec.get("ist_dispatch_window", rec.get("ist_window", "")),
+                    rec.get("assigned_block_id", "BLOCK_10"),
+                    rec.get("region_name", "Global"),
+                    rec.get("contact_history_status", "SCHEDULED_ELIGIBLE"),
+                    rec.get("outreach_readiness", rec.get("status", "READY_FOR_SCHEDULED_DISPATCH")),
+                    rec.get("technical_relevance", rec.get("role_title", "")),
+                    rec.get("strategy", rec.get("channel", "EMAIL_OUTREACH")),
+                    rec.get("tracking_reference", "MONITOR_IMAP_72H"),
+                    rec.get("next_action", "DISPATCH_IN_ASSIGNED_TIME_BLOCK")
                 ]
                 self._write_row(ws, row_idx, values)
                 count += 1

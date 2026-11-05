@@ -228,9 +228,10 @@ class PortfolioDashboard:
             },
             "10_professors_contacted": telemetry.get("professors_contacted", 0),
             "11_emails_actually_bounced": telemetry.get("emails_bounced", 0),
-            "12_positive_replies_and_interviews": (row["positive_replies_and_interviews"] or 0) if row else 0,
+            "12_positive_replies_and_interviews": max((row["positive_replies_and_interviews"] or 0) if row else 0, telemetry.get("interview_requested", 0) + telemetry.get("positive_reply", 0)),
             "13_applications_in_progress": (row["applications_in_progress"] or 0) if row else 0,
-            "14_confirmed_offers": (row["confirmed_offers"] or 0) if row else 0
+            "14_confirmed_offers": (row["confirmed_offers"] or 0) if row else 0,
+            "telemetry_breakdown": telemetry
         }
 
     @classmethod

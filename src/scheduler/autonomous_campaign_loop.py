@@ -12,6 +12,7 @@ Implements the exact scheduler -> AI author -> SMTP -> Excel update loop:
 
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -21,6 +22,8 @@ from datetime import date, datetime, time as dtime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from zoneinfo import ZoneInfo
+
+logger = logging.getLogger(__name__)
 
 import openpyxl
 from config.settings import settings

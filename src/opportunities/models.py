@@ -220,7 +220,7 @@ class Opportunity:
     organization_id: str
     title: str
     opportunity_type: str
-    source: str
+    source: str = "CATALOG_CURATED"
     location: Optional[str] = None
     iana_timezone: str = "UTC"
     technical_domains: List[str] = field(default_factory=list)

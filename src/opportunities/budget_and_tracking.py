@@ -37,14 +37,25 @@ class GlobalBudgetManager:
     # Established production rate-limiting configuration
     BATCH_SIZE: int = getattr(settings, "BATCH_SIZE", 10)
     INTER_BATCH_BREAK_SECONDS: int = getattr(settings, "COOLING_BREAK_SECONDS", 300)
+    BATCH_COOLING_BREAK_SECONDS: int = INTER_BATCH_BREAK_SECONDS
     MIN_PER_MESSAGE_INTERVAL_SECONDS: int = getattr(settings, "MIN_INTERVAL_SECONDS_BETWEEN_EMAILS", 25)
     DEFAULT_DAILY_LIMIT: int = getattr(settings, "DAILY_MAX_OUTREACH", 200)
     SMTP_RATE_LIMIT_COOLDOWN_SECONDS: int = getattr(settings, "SMTP_RATE_LIMIT_COOLDOWN_SECONDS", 900)
 
-    def __init__(self, daily_limit: Optional[int] = None):
+    def __init__(
+        self,
+        daily_limit: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        cooling_period_seconds: Optional[int] = None,
+        authorized_categories: Optional[set] = None
+    ):
         self.daily_limit = daily_limit or self.DEFAULT_DAILY_LIMIT
+        self.batch_size = batch_size or self.BATCH_SIZE
+        self.cooling_period_seconds = cooling_period_seconds or self.INTER_BATCH_BREAK_SECONDS
+        self.authorized_categories = set(authorized_categories) if authorized_categories else {"ACADEMIC_PROFESSOR", "ACADEMIC_LAB"}
         self._category_dispatches: Dict[str, int] = {
             "ACADEMIC_PROFESSOR": 0,
+            "ACADEMIC_LAB": 0,
             "STARTUP": 0,
             "FRONTIER_COMPANY": 0,
             "INSTITUTIONAL_PROGRAM": 0
@@ -55,6 +66,12 @@ class GlobalBudgetManager:
         self._last_dispatch_at: Optional[datetime] = None
         self._current_batch_count: int = 0
         self._last_batch_completed_at: Optional[datetime] = None
+
+    def authorize_category(self, category: str) -> None:
+        """Authorizes sending for a specific category (e.g. following explicit operator approval)."""
+        self.authorized_categories.add(category)
+        if category not in self._category_dispatches:
+            self._category_dispatches[category] = 0
 
     def reset_if_new_day(self) -> None:
         """Resets daily sending count at midnight IST."""
@@ -87,8 +104,8 @@ class GlobalBudgetManager:
         if now is None:
             now = datetime.now(timezone.utc)
 
-        # 1. Background discovery category sending authorization check
-        if category not in ("ACADEMIC_PROFESSOR", "ACADEMIC_LAB"):
+        # 1. Category sending authorization check (Production protection safeguard)
+        if category not in self.authorized_categories:
             return False, f"CATEGORY_SENDING_NOT_AUTHORIZED: Category '{category}' requires explicit user authorization"
 
         # 2. Check daily ceiling across ALL categories combined (200 emails / IST day)

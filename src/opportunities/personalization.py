@@ -903,3 +903,7 @@ class DomainAdaptivePersonalizer:
             twenty_drafts.append(draft)
 
         return twenty_drafts
+
+    # Backward-compatible convenience aliases
+    generate_academic_outreach = generate_academic_professor_pitch
+    generate_industry_packet = generate_frontier_industry_packet

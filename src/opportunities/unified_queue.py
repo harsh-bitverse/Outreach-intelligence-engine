@@ -132,6 +132,48 @@ class UnifiedOutreachQueueManager:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_uq_block ON unified_outreach_queue(assigned_block_id);")
         self.dev_conn.commit()
 
+    def populate_queue_from_opportunities(
+        self,
+        limit: Optional[int] = None,
+        target_date: Optional[date] = None
+    ) -> Dict[str, int]:
+        """
+        Populates the unified outreach queue from all reconciled opportunities in development SQLite.
+        Strictly applies production collision suppression and portal isolation.
+        """
+        from src.opportunities.repository import OpportunityRepository
+        repo = OpportunityRepository(self.dev_conn)
+        opps = repo.list_opportunities(min_score=0.0, limit=limit or 10000)
+
+        stats = {
+            "total_processed": len(opps),
+            "queued": 0,
+            "routed_portal": 0,
+            "suppressed_collision": 0,
+            "rejected_unverified": 0,
+            "rejected_invalid": 0
+        }
+
+        for opp in opps:
+            org = repo.get_organization(opp.organization_id)
+            if not org:
+                continue
+
+            item = self.enqueue_opportunity(opp, org, target_date=target_date)
+            if item.queue_status == "QUEUED":
+                stats["queued"] += 1
+            elif item.queue_status == "ROUTED_PORTAL":
+                stats["routed_portal"] += 1
+            elif item.queue_status == "SUPPRESSED_COLLISION":
+                stats["suppressed_collision"] += 1
+            elif item.queue_status == "REJECTED_UNVERIFIED":
+                stats["rejected_unverified"] += 1
+            elif item.queue_status == "REJECTED_INVALID":
+                stats["rejected_invalid"] += 1
+
+        logger.info(f"Populated unified queue from {stats['total_processed']} opportunities: {stats}")
+        return stats
+
     def enqueue_opportunity(
         self,
         opp: Opportunity,
@@ -149,7 +191,7 @@ class UnifiedOutreachQueueManager:
         now_iso = datetime.now(timezone.utc).isoformat()
         queue_id = f"UQ-{opp.opportunity_id[:12]}"
 
-        tz_str = opp.iana_timezone or org.iana_timezone or "UTC"
+        tz_str = (opp.iana_timezone if opp.iana_timezone and opp.iana_timezone != "UTC" else None) or org.iana_timezone or "UTC"
         tz_calc = DynamicTimezoneEngine.calculate_mailing_window(tz_str, target_date=target_date)
         assigned_block = tz_calc["assigned_block_id"]
 

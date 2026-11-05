@@ -168,43 +168,58 @@ class ContactVerifier:
             cur = prod_conn.cursor()
 
             # Suppression list
-            cur.execute("SELECT email FROM suppression_list;")
-            for (em,) in cur.fetchall():
-                if em:
-                    self.suppressed_emails.add(em.strip().lower())
+            try:
+                cur.execute("SELECT email FROM suppression_list;")
+                for (em,) in cur.fetchall():
+                    if em:
+                        self.suppressed_emails.add(em.strip().lower())
+            except Exception:
+                try:
+                    cur.execute("SELECT email FROM outreach_suppressions;")
+                    for (em,) in cur.fetchall():
+                        if em:
+                            self.suppressed_emails.add(em.strip().lower())
+                except Exception:
+                    pass
 
             # Bounced and unconfirmed tracker records
-            cur.execute("SELECT recipient_email, delivery_status FROM outbound_delivery_tracker;")
-            for em, d_stat in cur.fetchall():
-                if em:
-                    clean = em.strip().lower()
-                    if d_stat and "BOUNCE" in d_stat:
-                        self.bounced_emails.add(clean)
-                    elif d_stat in ("UNCONFIRMED", "REPLIED") or "SENT" in (d_stat or ""):
-                        self.contacted_emails.add(clean)
+            try:
+                cur.execute("SELECT recipient_email, delivery_status FROM outbound_delivery_tracker;")
+                for em, d_stat in cur.fetchall():
+                    if em:
+                        clean = em.strip().lower()
+                        if d_stat and "BOUNCE" in d_stat:
+                            self.bounced_emails.add(clean)
+                        elif d_stat in ("UNCONFIRMED", "REPLIED") or "SENT" in (d_stat or ""):
+                            self.contacted_emails.add(clean)
+            except Exception:
+                pass
 
             # Professors table
-            cur.execute("SELECT full_name, university_name, email, outreach_status FROM professors;")
-            for name, uni, em, stat in cur.fetchall():
-                clean_em = (em or "").strip().lower()
-                clean_name = (name or "").strip().lower()
-                clean_name = re.sub(r"^(prof\.|dr\.|professor)\s*", "", clean_name).strip()
+            try:
+                cur.execute("SELECT full_name, university_name, email, outreach_status FROM professors;")
+                for name, uni, em, stat in cur.fetchall():
+                    clean_em = (em or "").strip().lower()
+                    clean_name = (name or "").strip().lower()
+                    clean_name = re.sub(r"^(prof\.|dr\.|professor)\s*", "", clean_name).strip()
 
-                if clean_em:
-                    if stat and ("SENT" in stat or "DELIVERY_UNCONFIRMED" in stat):
-                        self.contacted_emails.add(clean_em)
-                    elif stat and ("BOUNCE" in stat or "INVALID" in stat):
-                        self.bounced_emails.add(clean_em)
+                    if clean_em:
+                        if stat and ("SENT" in stat or "DELIVERY_UNCONFIRMED" in stat):
+                            self.contacted_emails.add(clean_em)
+                        elif stat and ("BOUNCE" in stat or "INVALID" in stat):
+                            self.bounced_emails.add(clean_em)
 
-                if clean_name:
-                    if clean_name not in self.contacted_names:
-                        self.contacted_names[clean_name] = []
-                    self.contacted_names[clean_name].append({
-                        "name": name,
-                        "uni": uni or "",
-                        "email": clean_em,
-                        "status": stat or "UNKNOWN"
-                    })
+                    if clean_name:
+                        if clean_name not in self.contacted_names:
+                            self.contacted_names[clean_name] = []
+                        self.contacted_names[clean_name].append({
+                            "name": name,
+                            "uni": uni or "",
+                            "email": clean_em,
+                            "status": stat or "UNKNOWN"
+                        })
+            except Exception:
+                pass
 
             prod_conn.close()
         except Exception as e:

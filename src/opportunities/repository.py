@@ -88,6 +88,7 @@ class OpportunityRepository:
         now_iso = datetime.now(timezone.utc).isoformat()
         tech_domains_json = json.dumps(opp.technical_domains or [])
         evidence_urls_json = json.dumps(opp.official_evidence_urls or [])
+        evidence_sources_json = json.dumps(opp.evidence_sources or [])
         score_breakdown_json = json.dumps(opp.score_breakdown.to_dict()) if opp.score_breakdown else None
 
         cur = self.conn.cursor()
@@ -105,10 +106,17 @@ class OpportunityRepository:
                 audit_classification, role_title_type, workplace_type,
                 international_eligibility, compensation_evidence,
                 stipend_amount, travel_support, housing_support, required_documents,
+                academic_classification, institution_visiting_policy,
+                hosting_history_verified, hosting_history_evidence,
+                summer_2027_hosting_availability, funding_availability,
+                visa_sponsorship_status, term_compatibility, application_route,
+                evidence_sources, evidence_timestamp, verification_confidence,
+                academic_reply_outcome, reply_timestamp, reply_evidence_snippet,
+                reply_evidence_id, professor_id,
                 operational_status, verification_notes, last_verified_at,
                 discovery_status, application_status, is_confirmed_opening, next_action,
                 created_at, updated_at, last_checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(opportunity_id) DO UPDATE SET
                 title = excluded.title,
                 location = excluded.location,
@@ -143,6 +151,23 @@ class OpportunityRepository:
                 travel_support = excluded.travel_support,
                 housing_support = excluded.housing_support,
                 required_documents = excluded.required_documents,
+                academic_classification = excluded.academic_classification,
+                institution_visiting_policy = excluded.institution_visiting_policy,
+                hosting_history_verified = excluded.hosting_history_verified,
+                hosting_history_evidence = excluded.hosting_history_evidence,
+                summer_2027_hosting_availability = excluded.summer_2027_hosting_availability,
+                funding_availability = excluded.funding_availability,
+                visa_sponsorship_status = excluded.visa_sponsorship_status,
+                term_compatibility = excluded.term_compatibility,
+                application_route = excluded.application_route,
+                evidence_sources = excluded.evidence_sources,
+                evidence_timestamp = excluded.evidence_timestamp,
+                verification_confidence = excluded.verification_confidence,
+                academic_reply_outcome = excluded.academic_reply_outcome,
+                reply_timestamp = excluded.reply_timestamp,
+                reply_evidence_snippet = excluded.reply_evidence_snippet,
+                reply_evidence_id = excluded.reply_evidence_id,
+                professor_id = excluded.professor_id,
                 operational_status = excluded.operational_status,
                 verification_notes = excluded.verification_notes,
                 last_verified_at = excluded.last_verified_at,
@@ -165,6 +190,13 @@ class OpportunityRepository:
             opp.audit_classification, opp.role_title_type, opp.workplace_type,
             opp.international_eligibility, opp.compensation_evidence,
             opp.stipend_amount, opp.travel_support, opp.housing_support, opp.required_documents,
+            opp.academic_classification, opp.institution_visiting_policy,
+            1 if opp.hosting_history_verified else 0, opp.hosting_history_evidence,
+            opp.summer_2027_hosting_availability, opp.funding_availability,
+            opp.visa_sponsorship_status, 1 if opp.term_compatibility else 0, opp.application_route,
+            evidence_sources_json, opp.evidence_timestamp, opp.verification_confidence,
+            opp.academic_reply_outcome, opp.reply_timestamp, opp.reply_evidence_snippet,
+            opp.reply_evidence_id, opp.professor_id,
             opp.operational_status, opp.verification_notes, opp.last_verified_at,
             opp.discovery_status, opp.application_status, 1 if opp.is_confirmed_opening else 0,
             opp.next_action, opp.created_at or now_iso, now_iso, now_iso
@@ -358,6 +390,30 @@ class OpportunityRepository:
         housing_support = row["housing_support"] if "housing_support" in row.keys() else None
         required_documents = row["required_documents"] if "required_documents" in row.keys() else None
 
+        # Academic qualification, feasibility & reply integration dimensions
+        academic_classification = row["academic_classification"] if "academic_classification" in row.keys() else None
+        institution_visiting_policy = row["institution_visiting_policy"] if "institution_visiting_policy" in row.keys() else "POLICY_UNVERIFIED"
+        hosting_history_verified = bool(row["hosting_history_verified"]) if "hosting_history_verified" in row.keys() and row["hosting_history_verified"] is not None else False
+        hosting_history_evidence = row["hosting_history_evidence"] if "hosting_history_evidence" in row.keys() else None
+        summer_2027_hosting_availability = row["summer_2027_hosting_availability"] if "summer_2027_hosting_availability" in row.keys() else "UNKNOWN"
+        funding_availability = row["funding_availability"] if "funding_availability" in row.keys() else "UNKNOWN"
+        visa_sponsorship_status = row["visa_sponsorship_status"] if "visa_sponsorship_status" in row.keys() else "UNKNOWN"
+        term_compatibility = bool(row["term_compatibility"]) if "term_compatibility" in row.keys() and row["term_compatibility"] is not None else True
+        application_route = row["application_route"] if "application_route" in row.keys() else "DIRECT_FACULTY_PI"
+        evidence_sources = []
+        if "evidence_sources" in row.keys() and row["evidence_sources"]:
+            try:
+                evidence_sources = json.loads(row["evidence_sources"])
+            except Exception:
+                evidence_sources = []
+        evidence_timestamp = row["evidence_timestamp"] if "evidence_timestamp" in row.keys() else None
+        verification_confidence = row["verification_confidence"] if "verification_confidence" in row.keys() else "MEDIUM"
+        academic_reply_outcome = row["academic_reply_outcome"] if "academic_reply_outcome" in row.keys() else None
+        reply_timestamp = row["reply_timestamp"] if "reply_timestamp" in row.keys() else None
+        reply_evidence_snippet = row["reply_evidence_snippet"] if "reply_evidence_snippet" in row.keys() else None
+        reply_evidence_id = row["reply_evidence_id"] if "reply_evidence_id" in row.keys() else None
+        professor_id = row["professor_id"] if "professor_id" in row.keys() else None
+
         return Opportunity(
             opportunity_id=row["opportunity_id"],
             organization_id=row["organization_id"],
@@ -397,6 +453,23 @@ class OpportunityRepository:
             travel_support=travel_support,
             housing_support=housing_support,
             required_documents=required_documents,
+            academic_classification=academic_classification,
+            institution_visiting_policy=institution_visiting_policy,
+            hosting_history_verified=hosting_history_verified,
+            hosting_history_evidence=hosting_history_evidence,
+            summer_2027_hosting_availability=summer_2027_hosting_availability,
+            funding_availability=funding_availability,
+            visa_sponsorship_status=visa_sponsorship_status,
+            term_compatibility=term_compatibility,
+            application_route=application_route,
+            evidence_sources=evidence_sources,
+            evidence_timestamp=evidence_timestamp,
+            verification_confidence=verification_confidence,
+            academic_reply_outcome=academic_reply_outcome,
+            reply_timestamp=reply_timestamp,
+            reply_evidence_snippet=reply_evidence_snippet,
+            reply_evidence_id=reply_evidence_id,
+            professor_id=professor_id,
             operational_status=operational_status,
             verification_notes=verification_notes,
             last_verified_at=last_verified_at,

@@ -107,6 +107,8 @@ class PortfolioDashboard:
         chk_rows = cur.fetchall()
         last_sweep = chk_rows[0]["last_queried_at"] if chk_rows else "Never"
 
+        acad_report = cls.compute_academic_portfolio_metrics(conn)
+
         if should_close:
             conn.close()
 
@@ -154,7 +156,81 @@ class PortfolioDashboard:
             "sweep_status": {
                 "last_successful_sweep": last_sweep,
                 "recurring_task_registered": True
-            }
+            },
+            "academic_qualification_report": acad_report
+        }
+
+    @classmethod
+    def compute_academic_portfolio_metrics(
+        cls,
+        db_source: Union[str, Path, sqlite3.Connection],
+        prod_db_path: Optional[Path] = None
+    ) -> Dict[str, Any]:
+        """
+        Computes the 14 independent academic qualification, feasibility, and response dimensions
+        without double-counting across primary classifications.
+        """
+        should_close = False
+        if isinstance(db_source, sqlite3.Connection):
+            conn = db_source
+        else:
+            conn = sqlite3.connect(str(db_source))
+            conn.row_factory = sqlite3.Row
+            should_close = True
+
+        cur = conn.cursor()
+
+        # Query all academic lab opportunities
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_research_matched,
+                SUM(CASE WHEN academic_classification = 'CONFIRMED_OPENING' THEN 1 ELSE 0 END) as confirmed_openings,
+                SUM(CASE WHEN academic_classification = 'PROSPECTIVE_INQUIRY' THEN 1 ELSE 0 END) as prospective_inquiries,
+                SUM(CASE WHEN hosting_history_verified = 1 THEN 1 ELSE 0 END) as hosting_history_verified,
+                SUM(CASE WHEN institution_visiting_policy IN ('FORMAL_VISITING_STUDENT_PROGRAM', 'INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED') THEN 1 ELSE 0 END) as institutionally_eligible,
+                SUM(CASE WHEN academic_classification = 'INSTITUTION_POLICY_UNVERIFIED' OR institution_visiting_policy = 'POLICY_UNVERIFIED' THEN 1 ELSE 0 END) as eligibility_unknown,
+                SUM(CASE WHEN academic_classification = 'INELIGIBLE' OR audit_classification = 'INELIGIBLE' THEN 1 ELSE 0 END) as confirmed_ineligible,
+                SUM(CASE WHEN academic_classification = 'CONFIRMED_UNAVAILABLE_2027' OR summer_2027_hosting_availability = 'CONFIRMED_UNAVAILABLE' THEN 1 ELSE 0 END) as confirmed_unavailable,
+                SUM(CASE WHEN funding_availability = 'CONFIRMED_FUNDED' OR compensation_type IN ('PAID', 'STIPEND') THEN 1 ELSE 0 END) as funded,
+                SUM(CASE WHEN funding_availability = 'CONFIRMED_UNFUNDED' THEN 1 ELSE 0 END) as unfunded,
+                SUM(CASE WHEN funding_availability = 'EXTERNAL_SCHOLARSHIP_REQUIRED' THEN 1 ELSE 0 END) as external_scholarship_required,
+                SUM(CASE WHEN funding_availability = 'UNKNOWN' AND compensation_type = 'UNKNOWN' THEN 1 ELSE 0 END) as funding_unknown,
+                SUM(CASE WHEN academic_reply_outcome IN ('INTERESTED', 'INTERVIEW_REQUESTED') THEN 1 ELSE 0 END) as positive_replies_and_interviews,
+                SUM(CASE WHEN application_status IN ('DRAFTING', 'READY_TO_SUBMIT', 'SUBMITTED', 'INTERVIEWING') THEN 1 ELSE 0 END) as applications_in_progress,
+                SUM(CASE WHEN application_status = 'OFFERED' THEN 1 ELSE 0 END) as confirmed_offers
+            FROM opportunities
+            WHERE opportunity_type = 'ACADEMIC_LAB';
+        """)
+        row = cur.fetchone()
+
+        if should_close:
+            conn.close()
+
+        # Telemetry from bridge
+        from src.opportunities.academic_bridge import AcademicOutreachBridge
+        bridge = AcademicOutreachBridge(prod_db_path)
+        telemetry = bridge.get_production_outreach_telemetry()
+
+        return {
+            "1_total_research_matched_professors": (row["total_research_matched"] or 0) if row else 0,
+            "2_confirmed_summer_2027_openings": (row["confirmed_openings"] or 0) if row else 0,
+            "3_prospective_research_inquiries": (row["prospective_inquiries"] or 0) if row else 0,
+            "4_previously_hosted_visiting_students": (row["hosting_history_verified"] or 0) if row else 0,
+            "5_institutionally_eligible_contacts": (row["institutionally_eligible"] or 0) if row else 0,
+            "6_eligibility_unknown": (row["eligibility_unknown"] or 0) if row else 0,
+            "7_confirmed_ineligible_contacts": (row["confirmed_ineligible"] or 0) if row else 0,
+            "8_confirmed_unavailable_labs": (row["confirmed_unavailable"] or 0) if row else 0,
+            "9_funding_breakdown": {
+                "confirmed_funded": (row["funded"] or 0) if row else 0,
+                "confirmed_unfunded": (row["unfunded"] or 0) if row else 0,
+                "external_scholarship_required": (row["external_scholarship_required"] or 0) if row else 0,
+                "funding_unknown": (row["funding_unknown"] or 0) if row else 0
+            },
+            "10_professors_contacted": telemetry.get("professors_contacted", 0),
+            "11_emails_actually_bounced": telemetry.get("emails_bounced", 0),
+            "12_positive_replies_and_interviews": (row["positive_replies_and_interviews"] or 0) if row else 0,
+            "13_applications_in_progress": (row["applications_in_progress"] or 0) if row else 0,
+            "14_confirmed_offers": (row["confirmed_offers"] or 0) if row else 0
         }
 
     @classmethod
@@ -175,6 +251,7 @@ class PortfolioDashboard:
         tiers = d["quality_tier_distribution"]
         hiring = d["hiring_reality_classification"]
         verif = d["verification_and_evidence"]
+        acad = d.get("academic_qualification_report", {})
 
         lines = [
             "# Global Summer 2027 Opportunity Portfolio Dashboard (Target Capacity: **8,000**)",
@@ -205,4 +282,30 @@ class PortfolioDashboard:
             f"- **Compensation Grounded as UNKNOWN**: {verif['compensation_unknown']} (truthful grounding)",
             f"- **Last Discovery Sweep**: `{d['sweep_status']['last_successful_sweep']}`"
         ]
+
+        if acad:
+            f_bd = acad.get("9_funding_breakdown", {})
+            lines.extend([
+                "",
+                "## 5. Academic Internship Feasibility & Verification Report (14 Dimensions)",
+                f"1. **Total Unique Research-Matched Professors**: {acad.get('1_total_research_matched_professors', 0)}",
+                f"2. **Confirmed Summer 2027 Openings (`CONFIRMED_OPENING`)**: {acad.get('2_confirmed_summer_2027_openings', 0)}",
+                f"3. **Prospective Research Inquiries (`PROSPECTIVE_INQUIRY`)**: {acad.get('3_prospective_research_inquiries', 0)}",
+                f"4. **Previously Hosted Visiting Students (Verified Evidence)**: {acad.get('4_previously_hosted_visiting_students', 0)}",
+                f"5. **Institutionally Eligible Contacts (Formal Program / Independent Policy)**: {acad.get('5_institutionally_eligible_contacts', 0)}",
+                f"6. **Eligibility Policy Unknown (`POLICY_UNVERIFIED`)**: {acad.get('6_eligibility_unknown', 0)}",
+                f"7. **Confirmed Ineligible Contacts (Degree/Clearance/Nationality Restricted)**: {acad.get('7_confirmed_ineligible_contacts', 0)}",
+                f"8. **Confirmed Unavailable Labs (`CONFIRMED_UNAVAILABLE_2027`)**: {acad.get('8_confirmed_unavailable_labs', 0)}",
+                f"9. **Funding Breakdown**:",
+                f"   - Confirmed Funded (Stipend / Grant): {f_bd.get('confirmed_funded', 0)}",
+                f"   - Confirmed Unfunded: {f_bd.get('confirmed_unfunded', 0)}",
+                f"   - External Scholarship Required (DAAD/Mitacs): {f_bd.get('external_scholarship_required', 0)}",
+                f"   - Funding Unknown (Faculty Discretion): {f_bd.get('funding_unknown', 0)}",
+                f"10. **Professors Contacted (Live Outreach History)**: {acad.get('10_professors_contacted', 0)}",
+                f"11. **Emails Actually Bounced (Delivery Status Ledger)**: {acad.get('11_emails_actually_bounced', 0)}",
+                f"12. **Positive Replies & Interviews Requested**: {acad.get('12_positive_replies_and_interviews', 0)}",
+                f"13. **Applications in Progress**: {acad.get('13_applications_in_progress', 0)}",
+                f"14. **Confirmed Offers**: {acad.get('14_confirmed_offers', 0)}"
+            ])
+
         return "\n".join(lines)

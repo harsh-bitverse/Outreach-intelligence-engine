@@ -108,6 +108,49 @@ class ApplicationStatus(str, Enum):
     WITHDRAWN = "WITHDRAWN"
 
 
+class AcademicClassification(str, Enum):
+    CONFIRMED_OPENING = "CONFIRMED_OPENING"
+    PROSPECTIVE_INQUIRY = "PROSPECTIVE_INQUIRY"
+    HOSTING_HISTORY_VERIFIED = "HOSTING_HISTORY_VERIFIED"
+    INSTITUTION_POLICY_UNVERIFIED = "INSTITUTION_POLICY_UNVERIFIED"
+    CONFIRMED_UNAVAILABLE_2027 = "CONFIRMED_UNAVAILABLE_2027"
+    INELIGIBLE = "INELIGIBLE"
+
+
+class VisitingStudentPolicy(str, Enum):
+    FORMAL_VISITING_STUDENT_PROGRAM = "FORMAL_VISITING_STUDENT_PROGRAM"
+    INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED = "INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED"
+    RESTRICTED_TO_PARTNER_UNIVERSITIES = "RESTRICTED_TO_PARTNER_UNIVERSITIES"
+    POLICY_UNVERIFIED = "POLICY_UNVERIFIED"
+    NOT_PERMITTED = "NOT_PERMITTED"
+
+
+class HostingAvailability(str, Enum):
+    CONFIRMED_AVAILABLE = "CONFIRMED_AVAILABLE"
+    CONFIRMED_UNAVAILABLE = "CONFIRMED_UNAVAILABLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class FundingAvailability(str, Enum):
+    CONFIRMED_FUNDED = "CONFIRMED_FUNDED"
+    CONFIRMED_UNFUNDED = "CONFIRMED_UNFUNDED"
+    EXTERNAL_SCHOLARSHIP_REQUIRED = "EXTERNAL_SCHOLARSHIP_REQUIRED"
+    UNKNOWN = "UNKNOWN"
+
+
+class AcademicReplyOutcome(str, Enum):
+    INTERESTED = "INTERESTED"
+    INTERVIEW_REQUESTED = "INTERVIEW_REQUESTED"
+    CAPACITY_FULL = "CAPACITY_FULL"
+    FUNDING_UNAVAILABLE = "FUNDING_UNAVAILABLE"
+    APPLICATION_REFERRED = "APPLICATION_REFERRED"
+    DECLINED = "DECLINED"
+    UNRELATED_REPLY = "UNRELATED_REPLY"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    NO_REPLY = "NO_REPLY"
+    BOUNCED = "BOUNCED"
+
+
 @dataclass
 class Organization:
     organization_id: str
@@ -194,6 +237,24 @@ class Opportunity:
     travel_support: Optional[str] = None
     housing_support: Optional[str] = None
     required_documents: Optional[str] = None
+    # Academic qualification, feasibility & reply integration dimensions
+    academic_classification: Optional[str] = None
+    institution_visiting_policy: str = VisitingStudentPolicy.POLICY_UNVERIFIED.value
+    hosting_history_verified: bool = False
+    hosting_history_evidence: Optional[str] = None
+    summer_2027_hosting_availability: str = HostingAvailability.UNKNOWN.value
+    funding_availability: str = FundingAvailability.UNKNOWN.value
+    visa_sponsorship_status: str = "UNKNOWN"
+    term_compatibility: bool = True
+    application_route: str = "DIRECT_FACULTY_PI"
+    evidence_sources: List[str] = field(default_factory=list)
+    evidence_timestamp: Optional[str] = None
+    verification_confidence: str = "MEDIUM"
+    academic_reply_outcome: Optional[str] = None
+    reply_timestamp: Optional[str] = None
+    reply_evidence_snippet: Optional[str] = None
+    reply_evidence_id: Optional[str] = None
+    professor_id: Optional[str] = None
     operational_status: str = "OPERATIONAL"
     verification_notes: Optional[str] = None
     last_verified_at: Optional[str] = None

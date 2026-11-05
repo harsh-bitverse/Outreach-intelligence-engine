@@ -77,6 +77,24 @@ CREATE TABLE IF NOT EXISTS opportunities (
     travel_support TEXT,
     housing_support TEXT,
     required_documents TEXT,
+    -- Academic qualification, feasibility & reply integration dimensions
+    academic_classification TEXT,
+    institution_visiting_policy TEXT DEFAULT 'POLICY_UNVERIFIED',
+    hosting_history_verified INTEGER DEFAULT 0,
+    hosting_history_evidence TEXT,
+    summer_2027_hosting_availability TEXT DEFAULT 'UNKNOWN',
+    funding_availability TEXT DEFAULT 'UNKNOWN',
+    visa_sponsorship_status TEXT DEFAULT 'UNKNOWN',
+    term_compatibility INTEGER DEFAULT 1,
+    application_route TEXT DEFAULT 'DIRECT_FACULTY_PI',
+    evidence_sources TEXT,
+    evidence_timestamp TEXT,
+    verification_confidence TEXT DEFAULT 'MEDIUM',
+    academic_reply_outcome TEXT,
+    reply_timestamp TEXT,
+    reply_evidence_snippet TEXT,
+    reply_evidence_id TEXT,
+    professor_id TEXT,
     operational_status TEXT DEFAULT 'OPERATIONAL',
     verification_notes TEXT,
     last_verified_at TEXT,
@@ -175,6 +193,40 @@ def apply_opportunity_migrations(conn: sqlite3.Connection) -> Dict[str, Any]:
             cursor.execute("ALTER TABLE opportunities ADD COLUMN verification_notes TEXT;")
         if "last_verified_at" not in columns:
             cursor.execute("ALTER TABLE opportunities ADD COLUMN last_verified_at TEXT;")
+        if "academic_classification" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN academic_classification TEXT;")
+        if "institution_visiting_policy" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN institution_visiting_policy TEXT DEFAULT 'POLICY_UNVERIFIED';")
+        if "hosting_history_verified" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN hosting_history_verified INTEGER DEFAULT 0;")
+        if "hosting_history_evidence" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN hosting_history_evidence TEXT;")
+        if "summer_2027_hosting_availability" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN summer_2027_hosting_availability TEXT DEFAULT 'UNKNOWN';")
+        if "funding_availability" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN funding_availability TEXT DEFAULT 'UNKNOWN';")
+        if "visa_sponsorship_status" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN visa_sponsorship_status TEXT DEFAULT 'UNKNOWN';")
+        if "term_compatibility" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN term_compatibility INTEGER DEFAULT 1;")
+        if "application_route" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN application_route TEXT DEFAULT 'DIRECT_FACULTY_PI';")
+        if "evidence_sources" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN evidence_sources TEXT;")
+        if "evidence_timestamp" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN evidence_timestamp TEXT;")
+        if "verification_confidence" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN verification_confidence TEXT DEFAULT 'MEDIUM';")
+        if "academic_reply_outcome" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN academic_reply_outcome TEXT;")
+        if "reply_timestamp" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN reply_timestamp TEXT;")
+        if "reply_evidence_snippet" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN reply_evidence_snippet TEXT;")
+        if "reply_evidence_id" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN reply_evidence_id TEXT;")
+        if "professor_id" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN professor_id TEXT;")
         conn.commit()
 
     logger.info(f"Opportunity schema migration applied successfully. Tables verified: {tables}")

@@ -34,6 +34,7 @@ from src.opportunities.adapters.startup import StartupAdapter
 from src.opportunities.adapters.live_ats_discovery import LiveATSDiscoveryAdapter
 from src.opportunities.adapters.frontier_industry import FrontierIndustryAdapter
 from src.opportunities.adapters.institutional_program import InstitutionalProgramAdapter
+from src.opportunities.adapters.academic_lab import AcademicLabAdapter
 from src.opportunities.audit import audit_opportunity
 from src.opportunities.ranking import OpportunityRanker
 from src.opportunities.workbook_sync import OpportunityWorkbookSync
@@ -77,7 +78,8 @@ class RecurringDiscoveryWorker:
             LiveATSDiscoveryAdapter(),
             StartupAdapter(),
             FrontierIndustryAdapter(),
-            InstitutionalProgramAdapter()
+            InstitutionalProgramAdapter(),
+            AcademicLabAdapter()
         ]
 
     def _is_production_outreach_busy(self) -> bool:

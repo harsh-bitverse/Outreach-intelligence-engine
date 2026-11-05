@@ -101,12 +101,14 @@ class OpportunityRepository:
                 hiring_contact_channel, contact_email, contact_name,
                 contact_verification_status, application_url, application_deadline,
                 qualification_score, score_breakdown, priority_tier,
+                portfolio_tier, requisition_type,
                 audit_classification, role_title_type, workplace_type,
-                international_eligibility, compensation_evidence, operational_status,
-                verification_notes, last_verified_at,
+                international_eligibility, compensation_evidence,
+                stipend_amount, travel_support, housing_support, required_documents,
+                operational_status, verification_notes, last_verified_at,
                 discovery_status, application_status, is_confirmed_opening, next_action,
                 created_at, updated_at, last_checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(opportunity_id) DO UPDATE SET
                 title = excluded.title,
                 location = excluded.location,
@@ -130,11 +132,17 @@ class OpportunityRepository:
                 qualification_score = excluded.qualification_score,
                 score_breakdown = excluded.score_breakdown,
                 priority_tier = excluded.priority_tier,
+                portfolio_tier = excluded.portfolio_tier,
+                requisition_type = excluded.requisition_type,
                 audit_classification = excluded.audit_classification,
                 role_title_type = excluded.role_title_type,
                 workplace_type = excluded.workplace_type,
                 international_eligibility = excluded.international_eligibility,
                 compensation_evidence = excluded.compensation_evidence,
+                stipend_amount = excluded.stipend_amount,
+                travel_support = excluded.travel_support,
+                housing_support = excluded.housing_support,
+                required_documents = excluded.required_documents,
                 operational_status = excluded.operational_status,
                 verification_notes = excluded.verification_notes,
                 last_verified_at = excluded.last_verified_at,
@@ -153,9 +161,11 @@ class OpportunityRepository:
             opp.hiring_contact_channel, clean_email_address(opp.contact_email), opp.contact_name,
             opp.contact_verification_status, opp.application_url, opp.application_deadline,
             opp.qualification_score, score_breakdown_json, opp.priority_tier,
+            opp.portfolio_tier, opp.requisition_type,
             opp.audit_classification, opp.role_title_type, opp.workplace_type,
-            opp.international_eligibility, opp.compensation_evidence, opp.operational_status,
-            opp.verification_notes, opp.last_verified_at,
+            opp.international_eligibility, opp.compensation_evidence,
+            opp.stipend_amount, opp.travel_support, opp.housing_support, opp.required_documents,
+            opp.operational_status, opp.verification_notes, opp.last_verified_at,
             opp.discovery_status, opp.application_status, 1 if opp.is_confirmed_opening else 0,
             opp.next_action, opp.created_at or now_iso, now_iso, now_iso
         ))
@@ -341,6 +351,13 @@ class OpportunityRepository:
         verification_notes = row["verification_notes"] if "verification_notes" in row.keys() else None
         last_verified_at = row["last_verified_at"] if "last_verified_at" in row.keys() else None
 
+        portfolio_tier = row["portfolio_tier"] if "portfolio_tier" in row.keys() else "TIER_B_STRONG_MATCH"
+        requisition_type = row["requisition_type"] if "requisition_type" in row.keys() else "PROSPECTIVE_PITCH_TARGET"
+        stipend_amount = row["stipend_amount"] if "stipend_amount" in row.keys() else None
+        travel_support = row["travel_support"] if "travel_support" in row.keys() else None
+        housing_support = row["housing_support"] if "housing_support" in row.keys() else None
+        required_documents = row["required_documents"] if "required_documents" in row.keys() else None
+
         return Opportunity(
             opportunity_id=row["opportunity_id"],
             organization_id=row["organization_id"],
@@ -369,11 +386,17 @@ class OpportunityRepository:
             qualification_score=row["qualification_score"] or 0.0,
             score_breakdown=breakdown,
             priority_tier=priority_tier,
+            portfolio_tier=portfolio_tier,
             audit_classification=audit_classification,
+            requisition_type=requisition_type,
             role_title_type=role_title_type,
             workplace_type=workplace_type,
             international_eligibility=international_eligibility,
             compensation_evidence=compensation_evidence,
+            stipend_amount=stipend_amount,
+            travel_support=travel_support,
+            housing_support=housing_support,
+            required_documents=required_documents,
             operational_status=operational_status,
             verification_notes=verification_notes,
             last_verified_at=last_verified_at,

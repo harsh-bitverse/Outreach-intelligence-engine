@@ -66,11 +66,17 @@ CREATE TABLE IF NOT EXISTS opportunities (
     qualification_score REAL DEFAULT 0.0,
     score_breakdown TEXT, -- JSON dict of category scores
     priority_tier TEXT DEFAULT 'NEEDS_VERIFICATION',
+    portfolio_tier TEXT DEFAULT 'TIER_B_STRONG_MATCH',
     audit_classification TEXT DEFAULT 'NEEDS_VERIFICATION',
+    requisition_type TEXT DEFAULT 'PROSPECTIVE_PITCH_TARGET',
     role_title_type TEXT DEFAULT 'PROPOSED_OUTREACH_FOCUS',
     workplace_type TEXT DEFAULT 'UNKNOWN',
     international_eligibility TEXT DEFAULT 'NEEDS_CONFIRMATION',
     compensation_evidence TEXT DEFAULT 'UNPUBLISHED_BY_EMPLOYER',
+    stipend_amount TEXT,
+    travel_support TEXT,
+    housing_support TEXT,
+    required_documents TEXT,
     operational_status TEXT DEFAULT 'OPERATIONAL',
     verification_notes TEXT,
     last_verified_at TEXT,
@@ -153,6 +159,18 @@ def apply_opportunity_migrations(conn: sqlite3.Connection) -> Dict[str, Any]:
             cursor.execute("ALTER TABLE opportunities ADD COLUMN compensation_evidence TEXT DEFAULT 'UNPUBLISHED_BY_EMPLOYER';")
         if "operational_status" not in columns:
             cursor.execute("ALTER TABLE opportunities ADD COLUMN operational_status TEXT DEFAULT 'OPERATIONAL';")
+        if "portfolio_tier" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN portfolio_tier TEXT DEFAULT 'TIER_B_STRONG_MATCH';")
+        if "requisition_type" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN requisition_type TEXT DEFAULT 'PROSPECTIVE_PITCH_TARGET';")
+        if "stipend_amount" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN stipend_amount TEXT;")
+        if "travel_support" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN travel_support TEXT;")
+        if "housing_support" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN housing_support TEXT;")
+        if "required_documents" not in columns:
+            cursor.execute("ALTER TABLE opportunities ADD COLUMN required_documents TEXT;")
         if "verification_notes" not in columns:
             cursor.execute("ALTER TABLE opportunities ADD COLUMN verification_notes TEXT;")
         if "last_verified_at" not in columns:

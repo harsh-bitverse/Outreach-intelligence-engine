@@ -160,6 +160,186 @@ class DomainAdaptivePersonalizer:
         }
 
     @classmethod
+    def generate_industry_pitch(cls, opp: Opportunity, org: Organization) -> Dict[str, Any]:
+        """
+        Generates a systems-focused engineering pitch for frontier tech companies
+        (e.g., Nvidia, Groq, Cerebras, Red Hat vLLM, ANSYS, Siemens, Tesla, Apple, AWS).
+        Emphasizes low-latency execution, hardware bottlenecks, reproducible benchmarking,
+        and concrete 8-12 week Summer 2027 deliverables.
+        """
+        matched_proj_id = opp.matched_project_id or "LLM Inference Intelligence Engine"
+        proj_info = cls.APPLICANT_PROFILE["verified_projects"].get(
+            matched_proj_id,
+            cls.APPLICANT_PROFILE["verified_projects"]["LLM Inference Intelligence Engine"]
+        )
+
+        recipient_name = opp.contact_name or f"{org.name} Engineering Team"
+        first_name = recipient_name.split()[0] if " " in recipient_name else recipient_name
+        company_name = org.name
+
+        subject = f"Summer 2027 Engineering Internship: Systems contribution for {company_name} ({matched_proj_id})"
+
+        p1 = (
+            f"Hi {first_name},\n\n"
+            f"I am writing to express my strong interest in an engineering internship at {company_name} for Summer 2027 (8–12 weeks). "
+            f"I have closely followed {company_name}'s advancements in {opp.technical_relevance_summary or 'scalable systems infrastructure'}, "
+            f"specifically in {', '.join(opp.technical_domains[:3]) if opp.technical_domains else 'low-latency engineering'}. "
+            f"As an undergraduate at IIT Delhi (Chemical Engineering) specializing in high-performance computing, numerical simulation, and ML systems, "
+            f"I focus on writing clean, reproducible systems software that addresses concrete hardware bottlenecks."
+        )
+
+        p2 = (
+            f"In my independent technical work at IIT Delhi, I built `{matched_proj_id}`—{proj_info['headline']} ({proj_info['stack']}). "
+            f"{proj_info['metrics']} "
+            f"During Summer 2027, I propose to contribute directly to {company_name} by {opp.potential_contribution or 'implementing deterministic performance benchmarks, profiling memory-bandwidth saturation, and optimizing runtime execution'}. "
+            f"I understand the discipline required for production software: rigorous regression testing, latency-tail profiling, and zero-overhead abstractions."
+        )
+
+        p3 = (
+            f"I am fully available for 8–12 weeks between May and August 2027. "
+            f"My complete open-source projects, architecture documentation, and numerical codebases are accessible at {cls.APPLICANT_PROFILE['portfolio_url']}. "
+            f"I would welcome the opportunity to discuss how my systems and numerical background can contribute directly to {company_name}'s engineering roadmap this summer.\n\n"
+            f"Sincerely,\n"
+            f"{cls.APPLICANT_PROFILE['full_name']}\n"
+            f"Undergraduate, {cls.APPLICANT_PROFILE['major']}\n"
+            f"{cls.APPLICANT_PROFILE['institution']}\n"
+            f"Portfolio: {cls.APPLICANT_PROFILE['portfolio_url']}"
+        )
+
+        body = f"{p1}\n\n{p2}\n\n{p3}"
+
+        return {
+            "applicant_name": cls.APPLICANT_PROFILE["full_name"],
+            "category": OpportunityType.FRONTIER_COMPANY.value,
+            "organization_name": company_name,
+            "role_title": opp.title,
+            "recipient_name": recipient_name,
+            "recipient_email": opp.contact_email,
+            "matched_project": matched_proj_id,
+            "project_stack": proj_info["stack"],
+            "proposed_contribution": opp.potential_contribution,
+            "pitch_subject": subject,
+            "pitch_body": body,
+            "tone": "PRODUCTION_ENGINEERING_CONTRIBUTION"
+        }
+
+    @classmethod
+    def generate_industrial_research_pitch(cls, opp: Opportunity, org: Organization) -> Dict[str, Any]:
+        """
+        Generates an academically rigorous pitch for premier industrial research laboratories
+        (e.g., Microsoft Research, Google DeepMind, Meta FAIR, Toyota Research Institute).
+        Emphasizes mathematical formulation, empirical ablation, and scientific investigation.
+        """
+        matched_proj_id = opp.matched_project_id or "PINN Error Estimation term paper"
+        proj_info = cls.APPLICANT_PROFILE["verified_projects"].get(
+            matched_proj_id,
+            cls.APPLICANT_PROFILE["verified_projects"]["PINN Error Estimation term paper"]
+        )
+
+        recipient_name = opp.contact_name or f"{org.name} Research Team"
+        company_name = org.name
+
+        subject = f"Summer 2027 Research Placement: Scientific ML & Systems Investigation at {company_name}"
+
+        p1 = (
+            f"Dear {recipient_name},\n\n"
+            f"I am writing to inquire about research internship opportunities in your group at {company_name} for Summer 2027 (10–12 weeks). "
+            f"I have studied your recent publications in {', '.join(opp.technical_domains[:3]) if opp.technical_domains else 'applied machine learning and computational science'}, "
+            f"and I am deeply interested in your work on {opp.technical_relevance_summary or 'foundation models and physical simulation'}. "
+            f"I am an undergraduate at IIT Delhi in Chemical Engineering with a strong foundation in transport phenomena, numerical PDE solvers, and machine learning."
+        )
+
+        p2 = (
+            f"In my research work at IIT Delhi, I authored `{matched_proj_id}`—{proj_info['headline']} ({proj_info['stack']}). "
+            f"{proj_info['metrics']} "
+            f"At {company_name}, I am eager to collaborate on {opp.potential_contribution or 'investigating neural operator error bounds, loss landscape dynamics, and scalable surrogate modeling for physical systems'}. "
+            f"I approach research with mathematical rigor, reproducible experimental protocols, and thorough empirical ablation studies."
+        )
+
+        p3 = (
+            f"I am available for full-time research from May through August 2027. "
+            f"My technical papers, project code, and mathematical solvers are documented at {cls.APPLICANT_PROFILE['portfolio_url']}. "
+            f"I would appreciate the chance to discuss potential alignment with your group's upcoming summer research agenda.\n\n"
+            f"Best regards,\n"
+            f"{cls.APPLICANT_PROFILE['full_name']}\n"
+            f"Undergraduate, {cls.APPLICANT_PROFILE['major']}\n"
+            f"{cls.APPLICANT_PROFILE['institution']}\n"
+            f"Portfolio: {cls.APPLICANT_PROFILE['portfolio_url']}"
+        )
+
+        body = f"{p1}\n\n{p2}\n\n{p3}"
+
+        return {
+            "applicant_name": cls.APPLICANT_PROFILE["full_name"],
+            "category": "INDUSTRIAL_RESEARCH_LAB",
+            "organization_name": company_name,
+            "role_title": opp.title,
+            "recipient_name": recipient_name,
+            "recipient_email": opp.contact_email,
+            "matched_project": matched_proj_id,
+            "project_stack": proj_info["stack"],
+            "proposed_contribution": opp.potential_contribution,
+            "pitch_subject": subject,
+            "pitch_body": body,
+            "tone": "SCIENTIFIC_RESEARCH_COLLABORATION"
+        }
+
+    @classmethod
+    def generate_institutional_application(cls, opp: Opportunity, org: Organization) -> Dict[str, Any]:
+        """
+        Generates a formal Statement of Purpose and application packet for public research
+        institutions and international fellowships (e.g., CERN openlab, DAAD WISE, Mitacs, RIKEN, ISTA).
+        Directly references eligibility, required documentation, and institutional research objectives.
+        """
+        matched_proj_id = opp.matched_project_id or "Neural Process Twin"
+        proj_info = cls.APPLICANT_PROFILE["verified_projects"].get(
+            matched_proj_id,
+            cls.APPLICANT_PROFILE["verified_projects"]["Neural Process Twin"]
+        )
+
+        sop = (
+            f"STATEMENT OF PURPOSE & RESEARCH PROPOSAL\n"
+            f"Program: {opp.title}\n"
+            f"Institution: {org.name}\n"
+            f"Applicant: {cls.APPLICANT_PROFILE['full_name']}\n"
+            f"Institution: {cls.APPLICANT_PROFILE['institution']} | Major: {cls.APPLICANT_PROFILE['major']}\n"
+            f"Portfolio & Codebases: {cls.APPLICANT_PROFILE['portfolio_url']}\n\n"
+            f"1. Academic Background & Scientific Motivation:\n"
+            f"As an undergraduate in Chemical Engineering at IIT Delhi, my academic training emphasizes numerical analysis, "
+            f"transport phenomena (fluid flow, heat transfer, mass transport), and thermodynamic state modeling. "
+            f"Complementing my formal coursework, I have conducted intensive independent engineering in physics-informed machine learning, "
+            f"C++ systems programming, and high-performance computing.\n\n"
+            f"2. Relevant Technical Research & Verified Implementation:\n"
+            f"In my research project `{matched_proj_id}` ({proj_info['headline']}), I utilized {proj_info['stack']}. "
+            f"{proj_info['metrics']} "
+            f"This work established my capability to independently derive mathematical governing equations, implement robust numerical discretization schemes, "
+            f"and debug optimization instabilities in high-dimensional scientific models.\n\n"
+            f"3. Proposed Fellowship Contribution & Research Alignment:\n"
+            f"During the {opp.internship_duration_weeks}-week tenure of the {opp.title} at {org.name}, my objective is to contribute to {opp.potential_contribution or 'the host laboratory’s ongoing computational and scientific workflows'}. "
+            f"Specifically, I intend to bridge my understanding of physical conservation laws with large-scale computational infrastructure in {', '.join(opp.technical_domains[:3]) if opp.technical_domains else 'computational science'}.\n\n"
+            f"4. Institutional Commitment & Prepared Dossier:\n"
+            f"I meet all eligibility criteria as an enrolled full-time engineering undergraduate. "
+            f"My complete application dossier—including official IIT Delhi transcripts, academic curriculum vitae, faculty reference letters, and verified GitHub implementations—is fully prepared for review. "
+            f"I am available to conduct onsite research for the full duration of Summer 2027."
+        )
+
+        return {
+            "applicant_name": cls.APPLICANT_PROFILE["full_name"],
+            "category": OpportunityType.INSTITUTIONAL_PROGRAM.value,
+            "organization_name": org.name,
+            "program_title": opp.title,
+            "portal_url": opp.application_url,
+            "matched_project": matched_proj_id,
+            "duration_weeks": opp.internship_duration_weeks,
+            "stipend_acknowledged": opp.stipend_amount or opp.compensation_details,
+            "travel_support": opp.travel_support,
+            "housing_support": opp.housing_support,
+            "required_documents": opp.required_documents or "CV, transcripts, faculty references, statement of interest",
+            "statement_of_purpose": sop,
+            "format": "FELLOWSHIP_STATEMENT_OF_PURPOSE"
+        }
+
+    @classmethod
     def generate_ten_verified_startup_pitches(cls) -> List[Dict[str, Any]]:
         """
         Generates exactly ten factually grounded startup-specific pitch examples for distinct companies,

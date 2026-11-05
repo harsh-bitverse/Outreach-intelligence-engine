@@ -82,6 +82,21 @@ class InternationalEligibility(str, Enum):
     NEEDS_CONFIRMATION = "NEEDS_CONFIRMATION"
 
 
+class RequisitionType(str, Enum):
+    UNDERGRADUATE_INTERNSHIP = "UNDERGRADUATE_INTERNSHIP"
+    GENERAL_ENGINEERING_VACANCY = "GENERAL_ENGINEERING_VACANCY"
+    PROSPECTIVE_PITCH_TARGET = "PROSPECTIVE_PITCH_TARGET"
+    FELLOWSHIP_PROGRAM = "FELLOWSHIP_PROGRAM"
+    NEW_GRAD_FULL_TIME = "NEW_GRAD_FULL_TIME"
+    PHD_RESEARCH = "PHD_RESEARCH"
+
+
+class PortfolioTier(str, Enum):
+    TIER_A_ELITE_PRIORITY = "TIER_A_ELITE_PRIORITY"
+    TIER_B_STRONG_MATCH = "TIER_B_STRONG_MATCH"
+    TIER_C_RESEARCH_PIPELINE = "TIER_C_RESEARCH_PIPELINE"
+
+
 class ApplicationStatus(str, Enum):
     NOT_APPLIED = "NOT_APPLIED"
     DRAFTING = "DRAFTING"
@@ -168,11 +183,17 @@ class Opportunity:
     qualification_score: float = 0.0
     score_breakdown: Optional[QualificationBreakdown] = None
     priority_tier: Optional[str] = PriorityTier.NEEDS_VERIFICATION.value
+    portfolio_tier: str = PortfolioTier.TIER_B_STRONG_MATCH.value
     audit_classification: str = OpportunityClassification.NEEDS_VERIFICATION.value
+    requisition_type: str = RequisitionType.PROSPECTIVE_PITCH_TARGET.value
     role_title_type: str = RoleTitleType.PROPOSED_OUTREACH_FOCUS.value
     workplace_type: str = WorkplaceType.UNKNOWN.value
     international_eligibility: str = InternationalEligibility.NEEDS_CONFIRMATION.value
     compensation_evidence: Optional[str] = "UNPUBLISHED_BY_EMPLOYER"
+    stipend_amount: Optional[str] = None
+    travel_support: Optional[str] = None
+    housing_support: Optional[str] = None
+    required_documents: Optional[str] = None
     operational_status: str = "OPERATIONAL"
     verification_notes: Optional[str] = None
     last_verified_at: Optional[str] = None

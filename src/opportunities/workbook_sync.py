@@ -222,6 +222,11 @@ class OpportunityWorkbookSync:
             ws_queue = wb["Unified Outreach Queue"] if "Unified Outreach Queue" in wb.sheetnames else None
             ws_tracker = wb["Application Tracker"] if "Application Tracker" in wb.sheetnames else None
 
+            # Reset data rows (keep header row 1) to prevent duplicate rows on recurring cycles
+            for ws_target in [ws_startups, ws_frontier, ws_inst, ws_queue, ws_tracker]:
+                if ws_target and ws_target.max_row > 1:
+                    ws_target.delete_rows(2, ws_target.max_row - 1)
+
             # Sort opportunities by score descending
             sorted_opps = sorted(opportunities, key=lambda o: o.qualification_score, reverse=True)
 
@@ -239,8 +244,8 @@ class OpportunityWorkbookSync:
                     self._append_frontier_row(ws_frontier, opp, org)
                     counts["Companies & Industrial R&D"] += 1
 
-                # 3. Institutional & National Labs
-                elif opp.opportunity_type == OpportunityType.INSTITUTIONAL_PROGRAM.value and ws_inst:
+                # 3. Institutional & National Labs or Academic Lab visiting fellowships
+                elif opp.opportunity_type in (OpportunityType.INSTITUTIONAL_PROGRAM.value, OpportunityType.ACADEMIC_LAB.value) and ws_inst:
                     self._append_institutional_row(ws_inst, opp, org)
                     counts["Institutional & National Labs"] += 1
 

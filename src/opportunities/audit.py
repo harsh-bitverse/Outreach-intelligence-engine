@@ -18,12 +18,15 @@ from datetime import datetime, timezone
 from src.opportunities.models import (
     Opportunity,
     Organization,
+    OpportunityType,
     OpportunityClassification,
     RoleTitleType,
     WorkplaceType,
     InternationalEligibility,
     CompensationType,
-    ContactChannel
+    ContactChannel,
+    RequisitionType,
+    PortfolioTier
 )
 from src.opportunities.repository import OpportunityRepository
 
@@ -142,7 +145,33 @@ def audit_opportunity(opp: Opportunity, org: Organization) -> Opportunity:
     elif opp.international_eligibility != InternationalEligibility.RESTRICTED_DOMESTIC_ONLY.value:
         opp.international_eligibility = InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value
 
-    # 6. Verification timestamp
+    # 6. Requisition Type determination (distinguish undergraduate internship from general engineering vacancy)
+    title_lower = opp.title.lower()
+    if "fellowship" in title_lower or "program" in title_lower or opp.opportunity_type == OpportunityType.INSTITUTIONAL_PROGRAM.value:
+        opp.requisition_type = RequisitionType.FELLOWSHIP_PROGRAM.value
+    elif "phd" in title_lower or "postdoc" in title_lower:
+        opp.requisition_type = RequisitionType.PHD_RESEARCH.value
+    elif "new grad" in title_lower:
+        opp.requisition_type = RequisitionType.NEW_GRAD_FULL_TIME.value
+    elif "intern" in title_lower or "internship" in title_lower or "summer student" in title_lower:
+        opp.requisition_type = RequisitionType.UNDERGRADUATE_INTERNSHIP.value
+    elif opp.source.startswith("LIVE_ATS"):
+        opp.requisition_type = RequisitionType.GENERAL_ENGINEERING_VACANCY.value
+    else:
+        opp.requisition_type = RequisitionType.PROSPECTIVE_PITCH_TARGET.value
+
+    # 7. Portfolio Tier Assignment (Tier A - Elite Priority, Tier B - Strong Match, Tier C - Research Pipeline)
+    score = opp.qualification_score or 0.0
+    if opp.audit_classification == OpportunityClassification.INELIGIBLE.value:
+        opp.portfolio_tier = PortfolioTier.TIER_C_RESEARCH_PIPELINE.value
+    elif score >= 80.0 and opp.contact_verification_status == "VERIFIED":
+        opp.portfolio_tier = PortfolioTier.TIER_A_ELITE_PRIORITY.value
+    elif score >= 55.0:
+        opp.portfolio_tier = PortfolioTier.TIER_B_STRONG_MATCH.value
+    else:
+        opp.portfolio_tier = PortfolioTier.TIER_C_RESEARCH_PIPELINE.value
+
+    # 8. Verification timestamp
     opp.last_verified_at = now_iso
     opp.last_checked_at = now_iso
 
@@ -186,6 +215,19 @@ def audit_entire_database(db_path: str) -> Dict[str, Any]:
             "EXPLICIT_PUBLISHED_PAID": 0,
             "COMPENSATION_UNKNOWN": 0,
         },
+        "requisition_counts": {
+            RequisitionType.UNDERGRADUATE_INTERNSHIP.value: 0,
+            RequisitionType.GENERAL_ENGINEERING_VACANCY.value: 0,
+            RequisitionType.PROSPECTIVE_PITCH_TARGET.value: 0,
+            RequisitionType.FELLOWSHIP_PROGRAM.value: 0,
+            RequisitionType.NEW_GRAD_FULL_TIME.value: 0,
+            RequisitionType.PHD_RESEARCH.value: 0,
+        },
+        "portfolio_tier_counts": {
+            PortfolioTier.TIER_A_ELITE_PRIORITY.value: 0,
+            PortfolioTier.TIER_B_STRONG_MATCH.value: 0,
+            PortfolioTier.TIER_C_RESEARCH_PIPELINE.value: 0,
+        },
         "eligibility_counts": {
             InternationalEligibility.ELIGIBLE_DOMESTIC.value: 0,
             InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value: 0,
@@ -223,6 +265,12 @@ def audit_entire_database(db_path: str) -> Dict[str, Any]:
 
         stats["eligibility_counts"][audited_opp.international_eligibility] = (
             stats["eligibility_counts"].get(audited_opp.international_eligibility, 0) + 1
+        )
+        stats["requisition_counts"][audited_opp.requisition_type] = (
+            stats["requisition_counts"].get(audited_opp.requisition_type, 0) + 1
+        )
+        stats["portfolio_tier_counts"][audited_opp.portfolio_tier] = (
+            stats["portfolio_tier_counts"].get(audited_opp.portfolio_tier, 0) + 1
         )
         stats["workplace_counts"][audited_opp.workplace_type] = (
             stats["workplace_counts"].get(audited_opp.workplace_type, 0) + 1

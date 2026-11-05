@@ -32,6 +32,8 @@ from src.opportunities.repository import OpportunityRepository
 from src.opportunities.adapters.base import BaseOpportunityAdapter
 from src.opportunities.adapters.startup import StartupAdapter
 from src.opportunities.adapters.live_ats_discovery import LiveATSDiscoveryAdapter
+from src.opportunities.adapters.frontier_industry import FrontierIndustryAdapter
+from src.opportunities.adapters.institutional_program import InstitutionalProgramAdapter
 from src.opportunities.audit import audit_opportunity
 from src.opportunities.ranking import OpportunityRanker
 from src.opportunities.workbook_sync import OpportunityWorkbookSync
@@ -73,7 +75,9 @@ class RecurringDiscoveryWorker:
 
         self.adapters: List[BaseOpportunityAdapter] = [
             LiveATSDiscoveryAdapter(),
-            StartupAdapter()
+            StartupAdapter(),
+            FrontierIndustryAdapter(),
+            InstitutionalProgramAdapter()
         ]
 
     def _is_production_outreach_busy(self) -> bool:
@@ -200,7 +204,7 @@ class RecurringDiscoveryWorker:
                         repo.save_checkpoint(chk)
 
             # Re-evaluate all opportunities in database for Excel synchronization
-            all_opps = repo.list_opportunities(min_score=40.0, limit=250)
+            all_opps = repo.list_opportunities(min_score=40.0, limit=500)
             summary["total_qualified"] = len(all_opps)
 
             orgs_by_id: Dict[str, Organization] = {}

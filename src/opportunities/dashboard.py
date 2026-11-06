@@ -191,7 +191,7 @@ class PortfolioDashboard:
                 SUM(CASE WHEN academic_classification = 'INSTITUTION_POLICY_UNVERIFIED' OR institution_visiting_policy = 'POLICY_UNVERIFIED' THEN 1 ELSE 0 END) as eligibility_unknown,
                 SUM(CASE WHEN academic_classification = 'INELIGIBLE' OR audit_classification = 'INELIGIBLE' THEN 1 ELSE 0 END) as confirmed_ineligible,
                 SUM(CASE WHEN academic_classification = 'CONFIRMED_UNAVAILABLE_2027' OR summer_2027_hosting_availability = 'CONFIRMED_UNAVAILABLE' THEN 1 ELSE 0 END) as confirmed_unavailable,
-                SUM(CASE WHEN funding_availability = 'CONFIRMED_FUNDED' OR compensation_type IN ('PAID', 'STIPEND') THEN 1 ELSE 0 END) as funded,
+                SUM(CASE WHEN funding_availability IN ('CONFIRMED_FUNDED', 'FELLOWSHIP_STIPEND_AVAILABLE') OR compensation_type IN ('PAID', 'STIPEND') THEN 1 ELSE 0 END) as funded,
                 SUM(CASE WHEN funding_availability = 'CONFIRMED_UNFUNDED' THEN 1 ELSE 0 END) as unfunded,
                 SUM(CASE WHEN funding_availability = 'EXTERNAL_SCHOLARSHIP_REQUIRED' THEN 1 ELSE 0 END) as external_scholarship_required,
                 SUM(CASE WHEN funding_availability = 'UNKNOWN' AND compensation_type = 'UNKNOWN' THEN 1 ELSE 0 END) as funding_unknown,

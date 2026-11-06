@@ -16,8 +16,10 @@ from src.scheduler.queue_runner import AutonomousQueueRunner
 
 
 @pytest.fixture
-def isolated_ai_env():
+def isolated_ai_env(monkeypatch):
     with tempfile.TemporaryDirectory() as td:
+        lock_path = Path(td) / "test_scheduler.lock"
+        monkeypatch.setattr("src.scheduler.queue_runner.SCHEDULER_LOCK_PATH", lock_path)
         db_path = Path(td) / "test_ai_drafts.db"
         initialize_database(db_path)
         with get_db(db_path) as conn:

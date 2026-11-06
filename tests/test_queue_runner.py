@@ -23,9 +23,11 @@ from src.scheduler.queue_runner import (
 
 
 @pytest.fixture
-def queue_test_env():
+def queue_test_env(monkeypatch):
     """Create an isolated test SQLite DB and repository."""
     with tempfile.TemporaryDirectory() as tmp_dir:
+        lock_path = Path(tmp_dir) / "test_scheduler.lock"
+        monkeypatch.setattr("src.scheduler.queue_runner.SCHEDULER_LOCK_PATH", lock_path)
         db_path = Path(tmp_dir) / "test_queue.db"
         initialize_database(db_path)
         with get_db(db_path) as conn:

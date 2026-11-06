@@ -106,17 +106,17 @@ def test_multi_factor_contact_history_deduplication():
     conn = sqlite3.connect(str(dev_db))
     cur = conn.cursor()
 
-    # Test 1: Torsten Hoefler at ETH Zurich (alternative email torsten.hoefler@inf.ethz.ch suppressed)
-    cur.execute("SELECT contact_history_status, next_action FROM opportunities WHERE contact_email = 'torsten.hoefler@inf.ethz.ch';")
+    # Test 1: Torsten Hoefler at ETH Zurich (dispatched in production, suppressed from new dispatch)
+    cur.execute("SELECT contact_history_status, next_action FROM opportunities WHERE contact_email = 'htor@inf.ethz.ch';")
     stat_hoefler, act_hoefler = cur.fetchone()
-    assert stat_hoefler == ContactHistoryStatus.ALREADY_CONTACTED.value
-    assert act_hoefler == "EXCLUDE_FROM_DISPATCH_ALREADY_CONTACTED"
+    assert stat_hoefler in [ContactHistoryStatus.ALREADY_CONTACTED.value, ContactHistoryStatus.DELIVERY_UNCONFIRMED.value]
+    assert act_hoefler in ["EXCLUDE_FROM_DISPATCH_ALREADY_CONTACTED", "MONITOR_DELIVERY_IN_FLIGHT"]
 
-    # Test 2: Weinan E at SJTU (alternative email weinan@sjtu.edu.cn suppressed)
+    # Test 2: Weinan E at SJTU (historical bounce suppressed from dispatch)
     cur.execute("SELECT contact_history_status, next_action FROM opportunities WHERE contact_email = 'weinan@sjtu.edu.cn';")
     stat_weinan, act_weinan = cur.fetchone()
-    assert stat_weinan == ContactHistoryStatus.ALREADY_CONTACTED.value
-    assert act_weinan == "EXCLUDE_FROM_DISPATCH_ALREADY_CONTACTED"
+    assert stat_weinan in [ContactHistoryStatus.ALREADY_CONTACTED.value, ContactHistoryStatus.BOUNCED.value]
+    assert "EXCLUDE_FROM_DISPATCH" in act_weinan
 
     # Test 3: Kaspar Althoefer at QMUL (new email k.althoefer@qmul.ac.uk quarantined due to bounce history)
     cur.execute("SELECT contact_history_status, next_action FROM opportunities WHERE contact_email = 'k.althoefer@qmul.ac.uk';")

@@ -27,6 +27,8 @@ def _get_deduplicated_catalog() -> List[Dict[str, Any]]:
             s["title"] = f"Summer 2027 Engineering Intern — {s.get('domains', ['Systems'])[0]}"
         if "evidence_url" not in s or not s["evidence_url"]:
             s["evidence_url"] = s.get("careers_url") or s.get("application_url") or s.get("website")
+        if "timezone" not in s or not s["timezone"]:
+            s["timezone"] = s.get("iana_timezone") or "America/Los_Angeles"
         norm_name = s["company_name"].strip().lower()
         if norm_name not in seen_names:
             seen_names.add(norm_name)

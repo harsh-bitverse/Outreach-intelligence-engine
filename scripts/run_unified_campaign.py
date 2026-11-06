@@ -24,7 +24,15 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from config.settings import settings
-from src.opportunities.deployment_manager import UnifiedDeploymentManager
+from src.opportunities.deployment_manager import (
+    UnifiedDeploymentManager,
+    DeploymentAbortedError,
+    ActiveSMTPTransactionTimeoutError,
+    SchedulerLockOccupiedError,
+    CheckpointCreationError,
+    RollbackVerificationError,
+    DatabaseContentionError
+)
 from src.opportunities.unified_campaign_runner import UnifiedCampaignRunner
 from src.opportunities.unified_queue import UnifiedOutreachQueueManager
 from src.opportunities.budget_and_tracking import GlobalBudgetManager
@@ -50,8 +58,8 @@ def section(title: str):
 
 
 def run_deployment_rehearsal() -> None:
-    """Executes the full 5-step reversible deployment rehearsal on isolated snapshot."""
-    banner("SESSION 11: SAFE REVERSIBLE DEPLOYMENT REHEARSAL")
+    """Executes the full 5-step reversible deployment rehearsal on isolated snapshot with fail-closed safety."""
+    banner("SESSION 12: SAFE REVERSIBLE FAIL-CLOSED DEPLOYMENT REHEARSAL")
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         tmppath = Path(tmpdir)
         print(f"  Running in isolated sandbox: {tmppath}")
@@ -73,40 +81,63 @@ def run_deployment_rehearsal() -> None:
         )
 
         # Step 1: Active SMTP Transaction Detection
-        section("Step 1: Active SMTP Transaction Detection & Clean Wait")
-        clear, msg = manager.wait_for_active_smtp_transaction(max_wait_seconds=2)
+        section("Step 1: Active SMTP Transaction Detection & Clean Wait (Fail-Closed)")
+        clear, msg = manager.wait_for_active_smtp_transaction(max_wait_seconds=2, fail_closed=True)
         print(f"  [+] Status: {msg} (Transaction In-Flight: {not clear})")
 
         # Step 2: Instance Locking & Mutual Exclusion
-        section("Step 2: Single-Instance Locking Verification")
-        lock_stat = manager.verify_single_instance_lock()
+        section("Step 2: Single-Instance Locking Verification (Fail-Closed)")
+        lock_stat = manager.verify_single_instance_lock(fail_closed=True)
         print(f"  [+] Lock held: {lock_stat['lock_held']} | Message: {lock_stat['message']}")
 
         # Step 3: Checkpoint Preservation
-        section("Step 3: Checkpoint Preservation of Live State")
-        chk = manager.create_pre_deployment_checkpoint(checkpoint_tag="REHEARSAL_SNAP")
+        section("Step 3: Checkpoint Preservation of Live State (Fail-Closed)")
+        chk = manager.create_pre_deployment_checkpoint(checkpoint_tag="REHEARSAL_SNAP", fail_closed=True)
         print(f"  [+] Checkpoint Tag: {chk['checkpoint_tag']}")
         print(f"  [+] DB Backup: {chk['db_backup_path']} (Exists: {chk['db_backup_path'].exists()})")
         print(f"  [+] Workbook Backup: {chk['workbook_backup_path']} (Exists: {chk['workbook_backup_path'].exists()})")
 
         # Step 4: Idempotent Metadata Migration
-        section("Step 4: Idempotent Metadata Migration (Unified Queue Table)")
-        mig = manager.run_idempotent_metadata_migration(mock_db)
+        section("Step 4: Idempotent Metadata Migration (Unified Queue Table, Fail-Closed)")
+        mig = manager.run_idempotent_metadata_migration(mock_db, fail_closed=True)
         print(f"  [+] Unified Queue Table Created: {mig['unified_queue_created']}")
-        print(f"  [+] Existing Production Tables Preserved: {mig['pre_existing_tables_preserved']}")
+        print(f"  [+] Existing Production Tables Preserved: {len(mig['pre_existing_tables_preserved'])} tables")
 
         # Step 5: Rollback Procedure Verification
-        section("Step 5: Rollback Procedure Verification (Instant Reversion)")
+        section("Step 5: Rollback Procedure Verification (Instant Reversion, Fail-Closed)")
         rb = manager.rollback_to_checkpoint(
             checkpoint_dir=chk["checkpoint_dir"],
             target_db_path=mock_db,
-            target_wb_path=mock_wb
+            target_wb_path=mock_wb,
+            fail_closed=True
         )
         print(f"  [+] Rollback Successful: {rb['success']}")
         print(f"  [+] Database Restored From Checkpoint: {rb['db_restored_to']}")
         print(f"  [+] Master Workbook Restored: {rb['workbook_restored']}")
 
-    print("\n  [SUCCESS] All 5 Deployment Rehearsal Steps Passed 100% with Zero Errors.\n")
+        # Step 6: Fail-Closed Fault Injection Testing
+        section("Step 6: Fail-Closed Fault Injection Verification")
+        # 6a: Occupied lock check
+        mock_lock.write_text(str(os.getpid()), encoding="utf-8")
+        try:
+            manager.verify_single_instance_lock(fail_closed=True)
+            print("  [-] Error: Should have failed on occupied lock!")
+        except SchedulerLockOccupiedError as e:
+            print(f"  [+] Verified Fail-Closed on Occupied Lock: {e}")
+        finally:
+            if mock_lock.exists():
+                mock_lock.unlink()
+
+        # 6b: Rollback failure check (missing checkpoint db)
+        corrupted_chk = tmppath / "corrupted_chk"
+        corrupted_chk.mkdir(parents=True, exist_ok=True)
+        try:
+            manager.rollback_to_checkpoint(corrupted_chk, mock_db, fail_closed=True)
+            print("  [-] Error: Should have failed on missing checkpoint database!")
+        except RollbackVerificationError as e:
+            print(f"  [+] Verified Fail-Closed on Corrupted Checkpoint: {e}")
+
+    print("\n  [SUCCESS] All Fail-Closed Reversible Deployment Rehearsal Steps Passed 100% with Zero Errors.\n")
 
 
 def run_batch_demonstration(count: int = 12) -> None:

@@ -49,13 +49,15 @@ def temp_db(monkeypatch):
 
 
 @pytest.fixture
-def isolated_loop(temp_workbook, temp_db):
+def isolated_loop(temp_workbook, temp_db, tmp_path):
     """Instantiate AutonomousCampaignLoop with an isolated workbook and DynamicWorkbookSync."""
     sync = DynamicWorkbookSync(workbook_path=temp_workbook)
+    lock_file = tmp_path / "test_scheduler.lock"
     loop = AutonomousCampaignLoop(
         workbook_path=temp_workbook,
         sync=sync,
-        cli_drafter=MagicMock()
+        cli_drafter=MagicMock(),
+        lock_path=lock_file
     )
     return loop
 
@@ -558,9 +560,9 @@ def test_suppression_of_previously_sent_professors(isolated_loop):
     for c in b1_candidates:
         assert c["email"].lower() not in sent_emails, f"Candidate {c['email']} was already sent but returned by find_eligible_professors_in_block"
 
-    # An uncontacted block (BLOCK_04): verified sent are suppressed; unsent candidates returned
-    b4_candidates = isolated_loop.find_eligible_professors_in_block(block_id="BLOCK_04", limit=10)
-    assert len(b4_candidates) > 0
-    for c in b4_candidates:
+    # An uncontacted / pending block (BLOCK_10): verified sent are suppressed; unsent candidates returned
+    b10_candidates = isolated_loop.find_eligible_professors_in_block(block_id="BLOCK_10", limit=10)
+    assert len(b10_candidates) > 0
+    for c in b10_candidates:
         assert c["email"].lower() not in sent_emails, f"Candidate {c['email']} was already sent but returned by find_eligible_professors_in_block"
 

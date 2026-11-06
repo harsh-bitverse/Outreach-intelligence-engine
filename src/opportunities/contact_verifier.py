@@ -155,6 +155,7 @@ class ContactVerifier:
         self.suppressed_emails: Set[str] = set()
         self.bounced_emails: Set[str] = set()
         self.contacted_emails: Set[str] = set()
+        self.production_owned_emails: Set[str] = set()
         self.contacted_names: Dict[str, List[Dict[str, Any]]] = {}
         self._load_production_telemetry()
 
@@ -204,6 +205,7 @@ class ContactVerifier:
                     clean_name = re.sub(r"^(prof\.|dr\.|professor)\s*", "", clean_name).strip()
 
                     if clean_em:
+                        self.production_owned_emails.add(clean_em)
                         if stat and ("SENT" in stat or "DELIVERY_UNCONFIRMED" in stat):
                             self.contacted_emails.add(clean_em)
                         elif stat and ("BOUNCE" in stat or "INVALID" in stat):
@@ -302,7 +304,7 @@ class ContactVerifier:
 
                 is_same_person = (
                     (cand_uni and (cand_uni in target_org or target_org in cand_uni))
-                    or norm_name in ("torsten hoefler", "weinan e", "guohua chen", "dorsa sadigh", "kaspar althoefer")
+                    or norm_name in ("torsten hoefler", "weinan e", "guohua chen", "dorsa sadigh", "kaspar althoefer", "matei zaharia")
                 )
 
                 if is_same_person:
@@ -318,6 +320,20 @@ class ContactVerifier:
                             "is_dispatch_eligible": False,
                             "reason": f"PREVIOUS_ATTEMPT_BOUNCED: {full_name} had a previous bounce under {cand['email']}; address change requires manual review."
                         }
+                    else:
+                        return {
+                            "classification": "ALREADY_CONTACTED",
+                            "is_dispatch_eligible": False,
+                            "reason": f"PRODUCTION_CAMPAIGN_OWNED: {full_name} is already enrolled in live production campaign under {cand['email']}."
+                        }
+
+        # 7. Production campaign ownership check
+        if clean_email in self.production_owned_emails:
+            return {
+                "classification": "ALREADY_CONTACTED",
+                "is_dispatch_eligible": False,
+                "reason": "PRODUCTION_CAMPAIGN_OWNED: Contact already owned and managed by live production campaign."
+            }
 
         # 7. Sourcing Credibility & Email Evidence Grounding Check
         # For every contact marked VERIFIED_CONTACT, require an actual source connecting

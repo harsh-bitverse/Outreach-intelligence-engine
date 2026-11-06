@@ -7,6 +7,8 @@ directly from official public ATS job boards (Ashby, Greenhouse).
 import json
 import logging
 import urllib.request
+import time
+import re
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 
@@ -23,7 +25,8 @@ from src.opportunities.models import (
     ContactChannel,
     VerificationStatus,
     DiscoveryCheckpoint,
-    PriorityTier
+    PriorityTier,
+    ContactHistoryStatus
 )
 from src.opportunities.registry import (
     canonicalize_url,
@@ -201,6 +204,111 @@ UNCATALOGUED_ATS_TARGETS = [
         "relevance": "Frontier AI systems infrastructure, high-throughput model serving, and distributed GPU clusters.",
         "potential_contribution": "Benchmarking inference kernel operational intensity and evaluating token latency under speculative decoding.",
         "matched_project": "LLM Inference Intelligence Engine"
+    },
+    {
+        "name": "Etched",
+        "website": "https://www.etched.com",
+        "city": "Cupertino",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["AI Hardware", "Transformer ASICs", "Inference Acceleration", "Custom Silicon"],
+        "funding_stage": "SERIES_A",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "etched",
+        "relevance": "Custom ASIC hardware designed specifically for transformer inference and high-throughput attention.",
+        "potential_contribution": "Formulating Roofline model operational intensity benchmarks and low-level hardware verification pipelines.",
+        "matched_project": "LLM Inference Intelligence Engine"
+    },
+    {
+        "name": "Cognition AI",
+        "website": "https://www.cognition.ai",
+        "city": "San Francisco",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["AI Software Engineering", "Autonomous Agents", "Code Intelligence", "Reasoning Models"],
+        "funding_stage": "SERIES_A",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "cognition",
+        "relevance": "Autonomous coding intelligence, sandbox environment evaluation, and agentic reasoning.",
+        "potential_contribution": "Benchmarking autonomous sandbox task execution and trace observability.",
+        "matched_project": "Agentic Industrial AI Workbench"
+    },
+    {
+        "name": "Sierra",
+        "website": "https://sierra.ai",
+        "city": "San Francisco",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["Enterprise Conversational AI", "Agentic Systems", "Real-Time Serving", "Reliability"],
+        "funding_stage": "SERIES_B",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "sierra",
+        "relevance": "Deterministic agentic dialogue workflows, high-availability customer intelligence, and safety guardrails.",
+        "potential_contribution": "Profiling token generation latency and designing structured output validation schemas.",
+        "matched_project": "LLM Inference Intelligence Engine"
+    },
+    {
+        "name": "Figure AI",
+        "website": "https://www.figure.ai",
+        "city": "Sunnyvale",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["Humanoid Robotics", "Embodied AI", "Real-Time Control", "Low-Latency Systems"],
+        "funding_stage": "SERIES_B",
+        "tier": "TIER_1",
+        "kind": "greenhouse",
+        "board_id": "figureai",
+        "relevance": "General-purpose humanoid robot architecture, real-time sensory perception, and low-latency motor control.",
+        "potential_contribution": "Profiling real-time control loop jitter and benchmarking vision-language-action inference latencies.",
+        "matched_project": "Autonomous Precision Flight Controller"
+    },
+    {
+        "name": "Physical Intelligence",
+        "website": "https://www.physicalintelligence.company",
+        "city": "San Francisco",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["Robot Foundation Models", "Embodied Intelligence", "Manipulation", "Physical AI"],
+        "funding_stage": "SEED",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "physicalintelligence",
+        "relevance": "General-purpose foundation models for robotics and physical world manipulation.",
+        "potential_contribution": "Evaluating multi-task robot policy latency and profiling edge inference memory limits.",
+        "matched_project": "Autonomous Precision Flight Controller"
+    },
+    {
+        "name": "Cursor",
+        "website": "https://www.cursor.com",
+        "city": "San Francisco",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["Code Intelligence", "Developer Tools", "LLM Inference", "Fast Context Caching"],
+        "funding_stage": "SERIES_A",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "cursor",
+        "relevance": "AI-native code generation, multi-file context indexing, and ultra-low latency token streaming.",
+        "potential_contribution": "Benchmarking prefix-cache hit rates and optimizing speculative token generation for code completion.",
+        "matched_project": "LLM Inference Intelligence Engine"
+    },
+    {
+        "name": "Modal",
+        "website": "https://modal.com",
+        "city": "New York",
+        "country": "United States",
+        "timezone": "America/New_York",
+        "domains": ["Serverless GPU Infrastructure", "Distributed Systems", "Cloud Runtimes", "Container Virtualization"],
+        "funding_stage": "SERIES_A",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "modal",
+        "relevance": "Sub-second cold-start serverless GPU execution, distributed filesystem caching, and Linux microVM scheduling.",
+        "potential_contribution": "Benchmarking container cold-start memory footprints and profiling distributed GPU memory-bandwidth utilization.",
+        "matched_project": "High-Performance CFD Grid Solver"
     }
 ]
 
@@ -253,12 +361,12 @@ class LiveATSDiscoveryAdapter(BaseOpportunityAdapter):
 
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
-                with urllib.request.urlopen(req, timeout=5) as res:
+                with urllib.request.urlopen(req, timeout=6) as res:
                     data = json.loads(res.read().decode("utf-8"))
                     jobs = data.get("jobs", [])
 
                 # Filter for technical, engineering, ML, systems, research, or intern roles
-                keywords = ["engineer", "systems", "infrastructure", "ml", "software", "research", "intern", "platform", "dataflow", "compiler"]
+                keywords = ["engineer", "systems", "infrastructure", "ml", "software", "research", "intern", "platform", "dataflow", "compiler", "robotics", "hardware"]
                 tech_jobs = [
                     j for j in jobs
                     if any(k in (j.get("title") or j.get("text") or "").lower() for k in keywords)
@@ -273,6 +381,8 @@ class LiveATSDiscoveryAdapter(BaseOpportunityAdapter):
                     })
                     if len(raw_items) >= limit:
                         break
+
+                time.sleep(0.5)  # Polite rate limiting between targets
 
             except Exception as e:
                 logger.warning(f"LiveATSDiscoveryAdapter could not fetch {target['name']} ({url}): {e}")
@@ -322,7 +432,7 @@ class LiveATSDiscoveryAdapter(BaseOpportunityAdapter):
         elif "hybrid" in loc_str.lower():
             workplace = WorkplaceType.HYBRID.value
 
-        # Compensation evidence
+        # Compensation evidence & statutory pay transparency disclosure (e.g. California SB 1162)
         comp_type = CompensationType.UNKNOWN.value
         comp_det = None
         comp_ev = "UNPUBLISHED_BY_EMPLOYER"
@@ -330,6 +440,21 @@ class LiveATSDiscoveryAdapter(BaseOpportunityAdapter):
             comp_type = CompensationType.PAID.value
             comp_det = str(job_raw["compensation"])
             comp_ev = "STATUTORY_PAY_TRANSPARENCY_DISCLOSURE"
+        else:
+            desc_text = job_raw.get("descriptionPlain") or job_raw.get("descriptionHtml") or ""
+            # Regex match salary disclosures like $160,000 - $220,000
+            salary_match = re.search(
+                r"(?:salary|compensation|base pay|pay range|annual salary)[\s\w:]*\$([\d,]+)\s*(?:-|to)\s*\$([\d,]+)",
+                desc_text,
+                re.IGNORECASE
+            )
+            if not salary_match:
+                salary_match = re.search(r"\$([\d,]{5,})\s*(?:-|to)\s*\$([\d,]{5,})", desc_text)
+
+            if salary_match:
+                comp_type = CompensationType.PAID.value
+                comp_det = f"${salary_match.group(1)} - ${salary_match.group(2)} (California SB 1162 / Statutory Disclosure)"
+                comp_ev = "STATUTORY_PAY_TRANSPARENCY_DISCLOSURE"
 
         opp = Opportunity(
             opportunity_id=opp_id,
@@ -352,6 +477,7 @@ class LiveATSDiscoveryAdapter(BaseOpportunityAdapter):
             official_evidence_urls=[job_url],
             freshness_timestamp=now_iso,
             hiring_contact_channel=ContactChannel.APPLICATION_PORTAL.value,
+            contact_history_status=ContactHistoryStatus.PORTAL_APPLICATION.value,
             contact_email=None,
             contact_name=f"{company_name} Recruiting Team",
             contact_verification_status=VerificationStatus.VERIFIED.value,

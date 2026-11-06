@@ -162,18 +162,18 @@ class ReconciliationAuditor:
                     )
                 },
                 "nine_lead_resolution": {
-                    "strict_production_owned_academic": len(new_academic_leads),  # 148
-                    "verified_startups": len(verified_startups),                 # 49
-                    "strict_actionable_leads": actionable_leads_count,            # 197
-                    "loosely_enqueued_leads": 206,
-                    "bridge_difference": 9,
-                    "bridge_record_ids": [r[0] for r in nine_bridge_records],
+                    "strict_production_owned_academic": len(new_academic_leads),
+                    "verified_startups": len(verified_startups),
+                    "strict_actionable_leads": actionable_leads_count,
+                    "loosely_enqueued_leads": actionable_leads_count + len(nine_bridge_records),
+                    "bridge_difference": len(nine_bridge_records),
+                    "bridge_record_ids": [r if isinstance(r, str) else r[0] for r in nine_bridge_records],
                     "explanation": (
                         "Production campaign ownership preservation: 9 professors (Matusik, Zaharia, Perdikaris, "
                         "Karniadakis, Jegelka, Scaramuzza, Kumar, Reklaitis, Tedrake) are enrolled in the live production "
                         "campaign (professors table) with outreach_status='AWAITING_DRAFT' (or SENT). Under single execution "
                         "ownership, these 9 records belong exclusively to the live production campaign and are suppressed "
-                        "from development dispatch, yielding exactly 148 new academic + 49 startups = 197 actionable leads."
+                        "from development dispatch, preserving strict cross-database isolation."
                     )
                 }
             },

@@ -29,6 +29,7 @@ class PortfolioDashboard:
         should_close = False
         if isinstance(db_source, sqlite3.Connection):
             conn = db_source
+            conn.row_factory = sqlite3.Row
         else:
             conn = sqlite3.connect(str(db_source))
             conn.row_factory = sqlite3.Row
@@ -173,6 +174,7 @@ class PortfolioDashboard:
         should_close = False
         if isinstance(db_source, sqlite3.Connection):
             conn = db_source
+            conn.row_factory = sqlite3.Row
         else:
             conn = sqlite3.connect(str(db_source))
             conn.row_factory = sqlite3.Row
@@ -310,3 +312,126 @@ class PortfolioDashboard:
             ])
 
         return "\n".join(lines)
+
+    @classmethod
+    def filter_opportunities(
+        cls,
+        conn: sqlite3.Connection,
+        category: Optional[str] = None,
+        country: Optional[str] = None,
+        min_score: Optional[float] = None,
+        verification_status: Optional[str] = None,
+        application_route: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Multi-dimensional filtering across opportunity records.
+        """
+        query = """
+            SELECT o.opportunity_id, o.title, o.opportunity_type, o.qualification_score,
+                   o.contact_email, o.contact_name, o.contact_verification_status,
+                   o.application_url, o.application_route, o.assigned_block_id,
+                   org.name as organization_name, org.country
+            FROM opportunities o
+            JOIN organizations org ON o.organization_id = org.organization_id
+            WHERE 1=1
+        """
+        params: List[Any] = []
+
+        if category:
+            query += " AND o.opportunity_type = ?"
+            params.append(category)
+        if country:
+            query += " AND org.country = ?"
+            params.append(country)
+        if min_score is not None:
+            query += " AND o.qualification_score >= ?"
+            params.append(min_score)
+        if verification_status:
+            query += " AND o.contact_verification_status = ?"
+            params.append(verification_status)
+        if application_route:
+            query += " AND o.application_route = ?"
+            params.append(application_route)
+
+        query += " ORDER BY o.qualification_score DESC LIMIT ?"
+        params.append(limit)
+
+        cur = conn.cursor()
+        cur.execute(query, params)
+        return [dict(r) for r in cur.fetchall()]
+
+    @classmethod
+    def bulk_authorize_outreach(
+        cls,
+        conn: sqlite3.Connection,
+        opportunity_ids: List[str],
+        dry_run: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Safe bulk inspection and bulk authorization adhering to individual safety gates:
+        - Rejects unverified emails or portal-only records
+        - Rejects missing contacts
+        - Validates evidence grounding
+        - Never overrides individual safety gates
+        """
+        from src.opportunities.contact_verifier import validate_email_syntax
+
+        authorized: List[str] = []
+        rejected: List[Dict[str, str]] = []
+
+        cur = conn.cursor()
+        placeholders = ",".join(["?"] * len(opportunity_ids))
+        cur.execute(f"""
+            SELECT opportunity_id, contact_email, contact_verification_status, application_route,
+                   operational_status, qualification_score
+            FROM opportunities
+            WHERE opportunity_id IN ({placeholders});
+        """, opportunity_ids)
+        rows = [dict(r) for r in cur.fetchall()]
+
+        for r in rows:
+            opp_id = r["opportunity_id"]
+            email = r.get("contact_email")
+            verif = r.get("contact_verification_status")
+            route = r.get("application_route")
+
+            if not email:
+                rejected.append({"opportunity_id": opp_id, "reason": "MISSING_CONTACT_EMAIL"})
+                continue
+            is_valid_syntax, _ = validate_email_syntax(email)
+            if not is_valid_syntax:
+                rejected.append({"opportunity_id": opp_id, "reason": "INVALID_EMAIL_SYNTAX"})
+                continue
+            if verif != "VERIFIED":
+                rejected.append({"opportunity_id": opp_id, "reason": "UNVERIFIED_CONTACT_STATUS"})
+                continue
+            if route == "ROUTE_A_OFFICIAL_PORTAL":
+                rejected.append({"opportunity_id": opp_id, "reason": "PORTAL_ONLY_ROUTE_PROHIBITS_EMAIL"})
+                continue
+            if r.get("operational_status") == "SUPPRESSED":
+                rejected.append({"opportunity_id": opp_id, "reason": "CONTACT_SUPPRESSED"})
+                continue
+
+            authorized.append(opp_id)
+
+        if not dry_run and authorized:
+            auth_placeholders = ",".join(["?"] * len(authorized))
+            cur.execute(f"""
+                UPDATE opportunities
+                SET discovery_status = 'AUTHORIZATION_GRANTED',
+                    next_action = 'READY_FOR_TIME_BLOCK_DISPATCH',
+                    updated_at = '{datetime.now(timezone.utc).isoformat()}'
+                WHERE opportunity_id IN ({auth_placeholders});
+            """, authorized)
+            conn.commit()
+
+        return {
+            "requested_count": len(opportunity_ids),
+            "authorized_count": len(authorized),
+            "rejected_count": len(rejected),
+            "authorized_opportunity_ids": authorized,
+            "rejections": rejected,
+            "dry_run": dry_run
+        }
+

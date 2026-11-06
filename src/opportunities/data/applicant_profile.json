@@ -1,0 +1,201 @@
+{
+  "schema_version": "1.0.0",
+  "last_audited": "2026-11-06T18:50:00Z",
+  "audit_source": "Harshith_N_Research_CV_Summer2027.pdf, Harshith_N_Research_Interests_Summer2027.pdf, Git Commit History",
+  "candidate": {
+    "full_name": "Harshith N",
+    "entry_number": "2025CH11635",
+    "institution": "Indian Institute of Technology Delhi (IIT Delhi)",
+    "department": "Department of Chemical Engineering",
+    "degree": "B.Tech in Chemical Engineering (2025-2029)",
+    "email": "ch1251635@iitd.ac.in",
+    "cgpa": "8.7/10",
+    "jee_main": "99.79 percentile (Top 0.21%, AIR 3,152)",
+    "jee_advanced": "Top 0.16% (AIR 2,409)",
+    "cbse_class_xii": "94%",
+    "codeforces_rating": "1100+",
+    "target_term": "Summer 2027 (10-12 weeks, May - July 2027)"
+  },
+  "canonical_projects": {
+    "neural-process-twin": {
+      "canonical_title": "Neural Process Twin (SciML / 2D Heat Conduction / PINNs)",
+      "short_name": "Neural Process Twin",
+      "domain": "Scientific Machine Learning / Neural Operators / Surrogate Simulation",
+      "evidence_source": "Harshith_N_Research_CV_Summer2027.pdf (Page 1, Selected Projects)",
+      "implementation_status": "IMPLEMENTED_AND_TESTED",
+      "exact_technical_scope": "Built a learned-simulation workflow in PyTorch using data from conventional numerical simulations to approximate 2D steady-state physical fields (temperature, velocity, concentration). Implemented model training and inference, compared predicted fields with numerical-solver outputs across changes in resolution and parameters, and evaluated physical consistency and surrogate generalization.",
+      "measured_results": [
+        "Faster inference speedup compared to standard finite-difference solvers on 2D steady-state heat equation",
+        "Evaluated prediction error and physical consistency under parameter and resolution variations"
+      ],
+      "allowed_phrasing": [
+        "learned surrogate simulator for physical fields (temperature distributions) using PyTorch",
+        "comparing surrogate predictions against conventional numerical solver outputs across resolutions",
+        "investigating physical consistency and surrogate generalization limits beyond training conditions"
+      ],
+      "prohibited_phrasing": [
+        "production 3D CFD Navier-Stokes solver",
+        "multi-phase turbulent combustion digital twin",
+        "real-time hardware plant digital twin",
+        "custom CUDA/Triton FNO kernel",
+        "100x faster",
+        "10x faster"
+      ]
+    },
+    "llm-inference-engine": {
+      "canonical_title": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)",
+      "short_name": "LLM Inference Intelligence Engine",
+      "domain": "AI Systems / Performance Engineering / Inference Diagnostics",
+      "evidence_source": "Harshith_N_Research_CV_Summer2027.pdf (Page 1, AI Systems and Product Engineering)",
+      "implementation_status": "IMPLEMENTED_AND_TESTED",
+      "exact_technical_scope": "Built an end-to-end tool for evaluating LLM inference configurations under different hardware and workload constraints, treating model size, serving configuration, and workload as coupled design choices. Structured evaluation around time to first token (TTFT), inter-token latency (TPOT/ITL), generated-token throughput, and peak memory across CPU and GPU configurations. Compared quantization, batch size, context length, and inference backends (ONNX Runtime, PyTorch). Implemented Roofline model diagnostics isolating compute bounds from memory-bandwidth bottlenecks.",
+      "measured_results": [
+        "Empirical measurement of TTFT, TPOT, and memory across quantization, batch sizes, and context lengths",
+        "Roofline model diagnostics isolating memory-bandwidth saturation versus compute bounds"
+      ],
+      "allowed_phrasing": [
+        "measurement-driven LLM inference benchmarking tool",
+        "profiling TTFT, inter-token latency, throughput, and memory across batch sizes and quantization levels",
+        "Roofline model diagnostics isolating compute bounds from memory-bandwidth bottlenecks",
+        "empirical trade-off analysis across ONNX Runtime and PyTorch backends"
+      ],
+      "prohibited_phrasing": [
+        "custom speculative decoding algorithm",
+        "custom PagedAttention kernel",
+        "custom Triton/CUDA kernel engineering",
+        "distributed multi-GPU cluster optimization",
+        "vLLM core maintainer",
+        "100x faster",
+        "10x faster"
+      ]
+    },
+    "thermo-cpp-solver": {
+      "canonical_title": "Peng-Robinson Real-Gas Cubic Equation of State Solver (C++17)",
+      "short_name": "Peng-Robinson C++ EOS Solver",
+      "domain": "Computational Thermodynamics / Process Systems Engineering / C++ Systems",
+      "evidence_source": "Harshith_N_Research_CV_Summer2027.pdf (Page 1, Completed CHL2002 Project)",
+      "implementation_status": "COMPLETED_CHL2002_PROJECT",
+      "exact_technical_scope": "Developed modular C++17 software for real-gas pressure-volume-temperature (PVT) calculations using the Peng-Robinson (PR-1976) cubic equation of state. Solved cubic polynomials in compressibility factor Z, discarding unphysical roots (Z <= B). Evaluated analytical derivative (dP/dv)_T for thermodynamic mechanical stability classification. Computed enthalpy and entropy departure functions using ideal-gas property contributions and real-gas departure integrals, alongside pure-component fugacity calculations.",
+      "measured_results": [
+        "Verified root classification (Z > B) for vapor and liquid states",
+        "Analytic derivative (dP/dv)_T evaluated for mechanical stability identification",
+        "Enthalpy, entropy departure functions and pure-component fugacity matching reference standards"
+      ],
+      "allowed_phrasing": [
+        "modular C++17 real-gas PVT calculations using Peng-Robinson cubic equation of state",
+        "analytical (dP/dv)_T derivatives for thermodynamic mechanical stability classification",
+        "enthalpy and entropy departure functions and pure-component fugacity calculations"
+      ],
+      "prohibited_phrasing": [
+        "multiphase vapor-liquid equilibrium (VLE) flash algorithms",
+        "Rachford-Rice flash solver",
+        "multi-component chemical distillation column flash simulations",
+        "refinery dynamic flash unit optimization"
+      ]
+    },
+    "pinn-error-estimation": {
+      "canonical_title": "PINN Error Estimation & Grid-Resolution Study (Krasowski et al. Reproduction)",
+      "short_name": "PINN Error Estimation Term Paper",
+      "domain": "Scientific Computing / Numerical Analysis / Applied Mathematics",
+      "evidence_source": "Harshith_N_Research_CV_Summer2027.pdf (Page 1, Completed Research Term Paper)",
+      "implementation_status": "COMPLETED_RESEARCH_TERM_PAPER",
+      "exact_technical_scope": "Audited a finite-difference error-estimation workflow for physics-informed neural networks (PINNs), tracing the norm formulation, baseline implementation, and experiment outputs. Ran a controlled grid-resolution study comparing estimated discrepancies with reference-solution errors on 1D Heat Equation benchmarks. Extended analysis to soft boundary constraints and pointwise defect propagation without analytical solutions.",
+      "measured_results": [
+        "Observed residual-based discrepancy decrease from 8.53e-5 to 2.95e-7 as spatial grid Nx increased from 8 to 256",
+        "Fine-grid empirical convergence order was approximately 2.01 in the tested setup"
+      ],
+      "allowed_phrasing": [
+        "controlled grid-resolution study on finite-difference error estimation for PINNs",
+        "audited Krasowski et al. (arXiv:2603.15526) on 1D heat equation benchmarks",
+        "observed discrepancy decrease from 8.53e-5 to 2.95e-7 with empirical convergence order of ~2.01",
+        "analyzing defect propagation under soft boundary constraints"
+      ],
+      "prohibited_phrasing": [
+        "novel global theoretical proof of PINN convergence",
+        "solved high-dimensional chaotic Navier-Stokes PINNs",
+        "invented new neural network architecture"
+      ]
+    },
+    "sovereign-agentic-workbench": {
+      "canonical_title": "Sovereign Industrial Agentic AI Workbench (SIH 2026 / MRPL)",
+      "short_name": "Sovereign Agentic AI Workbench",
+      "domain": "AI Systems / Agentic Systems / Industrial Workflow Orchestration",
+      "evidence_source": "Harshith_N_Research_CV_Summer2027.pdf (Page 2, MRPL, SIH 2026)",
+      "implementation_status": "COMPLETED_SIX_PERSON_TEAM_PROJECT",
+      "exact_technical_scope": "Completed a six-person team project designing an on-premise agentic AI workbench for confidential industrial workflows using open-weight multimodal language models and local control of sensitive data. Led system architecture and integration across model engineering, multimodal processing, retrieval, tool sandboxing, security, infrastructure, orchestration, and UI workstreams. Contributed to orchestration and authentication/security design.",
+      "measured_results": [
+        "Functional team prototype integrating task planning, knowledge retrieval, and sandboxed tool execution on-premise"
+      ],
+      "allowed_phrasing": [
+        "led system architecture in a 6-person team for an on-premise industrial agentic AI workbench (SIH 2026)",
+        "designed orchestration, component boundaries, and security-aware tool sandboxing for open-weight multimodal LLMs",
+        "confidential on-premise industrial workflow coordination"
+      ],
+      "prohibited_phrasing": [
+        "solely built entire MRPL enterprise software single-handedly",
+        "deployed live in MRPL commercial refinery operations",
+        "invented custom multimodal foundation model from scratch"
+      ]
+    },
+    "surge-microdrone-autonomy": {
+      "canonical_title": "SuRGE Microdrone Autonomy & 3D Environment Mapping (Research Exposure)",
+      "short_name": "SuRGE Microdrone Research Exposure",
+      "domain": "Autonomous Systems / Aerial Robotics / State Estimation",
+      "evidence_source": "Harshith_N_Research_CV_Summer2027.pdf (Page 1, SuRGE, Summer 2026)",
+      "implementation_status": "SELECTED_RESEARCH_PROGRAM_EXPOSURE",
+      "exact_technical_scope": "Selected for the competitive SuRGE research programme under Prof. Amartansh Dubey (Electrical Engineering, IIT Delhi). Studied linear algebra, probability, optimization, and matrix methods for autonomous systems, alongside microelectronics concepts. Explored a microdrone autonomy problem centred on 3D environment mapping and path following, connecting the problem to environment representation, navigation, and trajectory tracking under limited sensing and uncertainty.",
+      "measured_results": [
+        "Theoretical study and mathematical modeling of state estimation, planning, and control interactions under sensing uncertainty"
+      ],
+      "allowed_phrasing": [
+        "selected for competitive SuRGE research programme under Prof. Amartansh Dubey (Electrical Engineering, IIT Delhi)",
+        "researched microdrone autonomy, 3D environment mapping, and path following under sensing uncertainty",
+        "studied mathematical foundations (optimization, state estimation) for aerial robotics"
+      ],
+      "prohibited_phrasing": [
+        "built, soldered, and flight-tested physical autonomous drone hardware",
+        "deployed ROS/ROS2 flight-stack onto physical quadrotor in real-world flight",
+        "designed custom embedded flight controller PCB",
+        "invented custom visual odometry SLAM algorithm"
+      ]
+    },
+    "opportunity-intelligence-engine": {
+      "canonical_title": "Opportunity Intelligence / Outreach Intelligence Engine",
+      "short_name": "Opportunity Intelligence Engine",
+      "domain": "Software Systems / Workflow Automation / Applied AI",
+      "evidence_source": "Harshith_N_Research_CV_Summer2027.pdf (Page 2, OPVI), Git Repository Codebase",
+      "implementation_status": "OPERATIONAL_SOFTWARE_SYSTEM",
+      "exact_technical_scope": "Engineered an autonomous opportunity discovery, verification, and scheduling engine managing over 1,800 opportunities across 13 global regional time blocks. Implemented fail-closed deployment preflight gates, multi-factor contact deduplication against live production history, statutory pay transparency parsing, and delivery tracking.",
+      "measured_results": [
+        "Maintained 1,390 production campaign contacts with 0 double-dispatch events",
+        "Automated multi-sheet Excel and SQLite synchronization across 6 worksheets"
+      ],
+      "allowed_phrasing": [
+        "engineered operational opportunity intelligence engine and workflow automation system",
+        "implemented timezone-aware scheduling across 13 global blocks, deduplication against production history, and fail-closed deployment verification"
+      ],
+      "prohibited_phrasing": [
+        "commercial AI unicorn platform with millions of users",
+        "autonomous email blaster with zero human supervision"
+      ]
+    }
+  },
+  "global_prohibited_phrases": [
+    "CUDA kernel",
+    "Triton kernel",
+    "speculative decoding",
+    "PagedAttention",
+    "flash calculation",
+    "Rachford-Rice",
+    "ROS flight",
+    "physical hardware microdrone",
+    "flight-tested quadrotor",
+    "multi-GPU cluster",
+    "100x",
+    "10x faster",
+    "40% reduction",
+    "guaranteed admission",
+    "demanding stipend",
+    "demanding open position"
+  ]
+}

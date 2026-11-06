@@ -424,7 +424,7 @@ class DomainAdaptivePersonalizer:
                 "relevance": "fast inference engines and structured output decoding",
                 "matched_proj": "LLM Inference Intelligence Engine",
                 "problem": "structured JSON decoding introduces runtime overheads that degrade first-token latency",
-                "proposed": "benchmarking ONNX Runtime and serving execution bottlenecks to help validate speculative decoding pipelines"
+                "proposed": "benchmarking ONNX Runtime and serving execution bottlenecks to evaluate latency trade-offs under dynamic batching"
             },
             {
                 "company": "PhysicsX",

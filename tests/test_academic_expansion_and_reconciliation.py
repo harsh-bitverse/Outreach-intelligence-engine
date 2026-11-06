@@ -106,12 +106,12 @@ def test_orthogonal_feasibility_evaluation_and_unknown_availability():
     """
     catalog = GLOBAL_ACADEMIC_EXPANSION_CATALOG
     verified_projects = {
-        "Autonomous Multi-Agent Opportunity Intelligence Engine",
-        "C++ Peng-Robinson EOS Flash Algorithm / Thermodynamics",
-        "Distributed Systems / GPU Kernel Optimization / HPC",
-        "LLM Inference Engine (vLLM / Speculative Decoding / PagedAttention)",
+        "Opportunity Intelligence / Outreach Intelligence Engine",
+        "Peng-Robinson Real-Gas Cubic Equation of State Solver (C++17)",
+        "PINN Error Estimation & Grid-Resolution Study (Krasowski et al. Reproduction)",
+        "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)",
         "Neural Process Twin (SciML / 2D Heat Conduction / PINNs)",
-        "SuRGE Microdrone (Visual Odometry / Autonomy / Embedded Kinematic Control)"
+        "SuRGE Microdrone Autonomy & 3D Environment Mapping (Research Exposure)"
     }
 
     for item in catalog:

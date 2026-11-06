@@ -579,7 +579,7 @@ class AcademicLabAdapter(BaseOpportunityAdapter):
                 "country": "United States",
                 "city": "West Lafayette, IN",
                 "timezone": "America/Indiana/Indianapolis",
-                "title": "Summer 2027 Prospective Research Scholar — Real-Gas Thermodynamics & Flash Algorithms",
+                "title": "Summer 2027 Prospective Research Scholar — Real-Gas Thermodynamics & Cubic Equations of State",
                 "domains": ["Chemical Engineering", "Thermodynamics", "Process Systems Engineering", "C++"],
                 "relevance": "Direct technical synergy with C++ Peng-Robinson cubic equation of state solver.",
                 "potential_contribution": "Formulating high-pressure phase equilibria root solvers for process flowsheet simulation.",

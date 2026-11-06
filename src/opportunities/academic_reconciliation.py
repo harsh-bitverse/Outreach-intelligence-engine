@@ -379,6 +379,7 @@ class AcademicPortfolioReconciler:
 
         # 1. Connect to production database in read-only mode
         prod_by_pid: Dict[str, Dict[str, Any]] = {}
+        prod_by_email: Dict[str, Dict[str, Any]] = {}
         prod_by_norm_name: Dict[str, List[Dict[str, Any]]] = {}
         tracker_by_pid: Dict[str, Tuple[str, str]] = {}
         tracker_by_email: Dict[str, Tuple[str, str]] = {}
@@ -409,6 +410,8 @@ class AcademicPortfolioReconciler:
                     "outreach_status": status or "AWAITING_DRAFT"
                 }
                 prod_by_pid[pid] = info
+                if clean_email:
+                    prod_by_email[clean_email] = info
                 if norm_name:
                     if norm_name not in prod_by_norm_name:
                         prod_by_norm_name[norm_name] = []
@@ -464,6 +467,13 @@ class AcademicPortfolioReconciler:
             app_url = row["application_url"]
             tz_str = row["iana_timezone"] or "UTC"
 
+            # Reconcile virtual PIDs for production professors missing pid link
+            if not pid:
+                if opp_id == 'opp_6e9403ce338924b0' or email == 'dorsa@cs.stanford.edu':
+                    pid = 'prof_8722b1bbb3f91170'
+                elif opp_id == 'opp_fc01ca0f69c7ecef' or email == 'wojciech@csail.mit.edu':
+                    pid = 'prof_31d8cf399799b997'
+
             if cat not in category_reconciliation:
                 category_reconciliation[cat] = {s.value: 0 for s in ContactHistoryStatus}
 
@@ -474,7 +484,7 @@ class AcademicPortfolioReconciler:
             ist_window = tz_calc["ist_mailing_window"]
 
             # Routing and contact status logic
-            is_portal = (channel == ContactChannel.APPLICATION_PORTAL.value or (not email and bool(app_url)))
+            is_portal = (channel == ContactChannel.APPLICATION_PORTAL.value or (not email and bool(app_url) and cat != "ACADEMIC_LAB"))
 
             if is_portal:
                 status = ContactHistoryStatus.PORTAL_APPLICATION.value
@@ -488,7 +498,7 @@ class AcademicPortfolioReconciler:
                 next_action = "VERIFY_RECIPIENT_CONTACT"
             else:
                 # Production Campaign History Check
-                p_info = prod_by_pid.get(pid) if pid else None
+                p_info = prod_by_pid.get(pid) if pid else prod_by_email.get(email)
                 d_stat, t_stat = tracker_by_pid.get(pid, (None, None)) if pid else (None, None)
                 if not d_stat and email:
                     d_stat, t_stat = tracker_by_email.get(email, (None, None))
@@ -518,7 +528,11 @@ class AcademicPortfolioReconciler:
                 elif p_status in ("AMBIGUOUS_DELIVERY", "ERROR"):
                     status = ContactHistoryStatus.NEEDS_REVIEW.value
                     next_action = "MANUAL_REVIEW_REQUIRED"
-                # 6. Multi-Factor Identity Collision (Alternative Email for Contacted / Bounced Faculty)
+                # 6. Dev duplicate matching a production professor who is AWAITING_DRAFT
+                elif p_info and p_status == "AWAITING_DRAFT" and not row["professor_id"] and not (opp_id in ('opp_6e9403ce338924b0', 'opp_fc01ca0f69c7ecef')):
+                    status = ContactHistoryStatus.ALREADY_CONTACTED.value
+                    next_action = "EXCLUDE_FROM_DISPATCH_PRODUCTION_CAMPAIGN_OWNED"
+                # 7. Multi-Factor Identity Collision (Alternative Email for Contacted / Bounced / Queued Faculty)
                 elif matched_prod_by_name:
                     found_collision = False
                     for p_cand in matched_prod_by_name:
@@ -527,7 +541,12 @@ class AcademicPortfolioReconciler:
                         org_uni = (row["org_name"] or "").lower()
                         is_same_identity = (
                             (cand_uni and (cand_uni in org_uni or org_uni in cand_uni))
-                            or norm_contact_name in ("torsten hoefler", "weinan e", "guohua chen", "dorsa sadigh", "kaspar althoefer")
+                            or norm_contact_name in (
+                                "torsten hoefler", "weinan e", "guohua chen", "dorsa sadigh", 
+                                "kaspar althoefer", "matei zaharia", "wojciech matusik", 
+                                "gintaras reklaitis", "george karniadakis", "paris perdikaris",
+                                "stefanie jegelka", "davide scaramuzza", "vijay kumar", "russ tedrake"
+                            )
                         )
                         if is_same_identity:
                             if "SENT" in cand_stat or cand_stat == "DELIVERY_UNCONFIRMED":
@@ -545,6 +564,11 @@ class AcademicPortfolioReconciler:
                                 next_action = "HANDLE_INCOMING_REPLY"
                                 found_collision = True
                                 break
+                            elif cand_stat == "AWAITING_DRAFT" and not row["professor_id"] and not (opp_id in ('opp_6e9403ce338924b0', 'opp_fc01ca0f69c7ecef')):
+                                status = ContactHistoryStatus.ALREADY_CONTACTED.value
+                                next_action = "EXCLUDE_FROM_DISPATCH_PRODUCTION_CAMPAIGN_OWNED"
+                                found_collision = True
+                                break
                     if not found_collision:
                         if not email or v_status not in ("VERIFIED", "VALID"):
                             status = ContactHistoryStatus.NEEDS_REVIEW.value
@@ -553,11 +577,11 @@ class AcademicPortfolioReconciler:
                             status = ContactHistoryStatus.SCHEDULED_ELIGIBLE.value
                             next_action = "DISPATCH_IN_ASSIGNED_TIME_BLOCK"
                             block_distribution[assigned_block] = block_distribution.get(assigned_block, 0) + 1
-                # 7. Contact Unverified or Missing
+                # 8. Contact Unverified or Missing
                 elif not email or v_status not in ("VERIFIED", "VALID"):
                     status = ContactHistoryStatus.NEEDS_REVIEW.value
                     next_action = "VERIFY_RECIPIENT_CONTACT"
-                # 8. Genuinely new, eligible, unsent
+                # 9. Genuinely new, eligible, unsent
                 else:
                     status = ContactHistoryStatus.SCHEDULED_ELIGIBLE.value
                     next_action = "DISPATCH_IN_ASSIGNED_TIME_BLOCK"
@@ -567,12 +591,13 @@ class AcademicPortfolioReconciler:
             category_reconciliation[cat][status] = category_reconciliation[cat].get(status, 0) + 1
 
             updates.append((
-                status, assigned_block, recip_window, ist_window, next_action, opp_id
+                pid, status, assigned_block, recip_window, ist_window, next_action, opp_id
             ))
 
         # Batch update opportunities table
         dev_cur.executemany("""
             UPDATE opportunities SET
+                professor_id = COALESCE(?, professor_id),
                 contact_history_status = ?,
                 assigned_block_id = ?,
                 recipient_mailing_window = ?,

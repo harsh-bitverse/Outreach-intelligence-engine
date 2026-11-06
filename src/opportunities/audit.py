@@ -96,7 +96,28 @@ def audit_opportunity(opp: Opportunity, org: Organization) -> Opportunity:
     opp.operational_status = "OPERATIONAL"
 
     # 2. Evidence-grounded classification & role title type
-    if company_name in RESTRICTED_ITAR_COMPANIES and "defense" in (opp.eligibility_criteria or "").lower():
+    if opp.audit_classification in (
+        OpportunityClassification.CONFIRMED_SUMMER_2027_INTERNSHIP.value,
+        OpportunityClassification.CURRENT_INTERNSHIP_UNSPECIFIED_SUMMER.value,
+        OpportunityClassification.GENERAL_ENGINEERING_VACANCY.value,
+        OpportunityClassification.PROSPECTIVE_ENGINEERING_OUTREACH.value,
+        OpportunityClassification.FORMAL_INSTITUTIONAL_PROGRAM.value,
+        OpportunityClassification.FUTURE_APPLICATION_CYCLE.value,
+    ):
+        # Already canonically classified by live adapter; preserve classification
+        if opp.audit_classification == OpportunityClassification.GENERAL_ENGINEERING_VACANCY.value:
+            opp.is_confirmed_opening = False
+            opp.internship_duration_weeks = None
+            opp.role_title_type = RoleTitleType.EXACT.value
+            opp.requisition_type = RequisitionType.GENERAL_ENGINEERING_VACANCY.value
+        elif opp.audit_classification in (
+            OpportunityClassification.CONFIRMED_SUMMER_2027_INTERNSHIP.value,
+            OpportunityClassification.CURRENT_INTERNSHIP_UNSPECIFIED_SUMMER.value
+        ):
+            opp.is_confirmed_opening = True
+            opp.role_title_type = RoleTitleType.EXACT.value
+            opp.requisition_type = RequisitionType.UNDERGRADUATE_INTERNSHIP.value
+    elif company_name in RESTRICTED_ITAR_COMPANIES and "defense" in (opp.eligibility_criteria or "").lower():
         opp.audit_classification = OpportunityClassification.INELIGIBLE.value
         opp.role_title_type = RoleTitleType.INFERRED.value
         opp.international_eligibility = InternationalEligibility.RESTRICTED_DOMESTIC_ONLY.value
@@ -130,6 +151,8 @@ def audit_opportunity(opp: Opportunity, org: Organization) -> Opportunity:
         opp.compensation_type = comp_type
         opp.compensation_details = comp_det
         opp.compensation_evidence = comp_ev
+    elif opp.compensation_evidence == "STATUTORY_PAY_TRANSPARENCY_DISCLOSURE" and opp.compensation_details:
+        pass  # Preserved from live adapter with verified statutory pay disclosure
     else:
         # Strictly mark as UNKNOWN when not supported by explicit evidence
         opp.compensation_type = CompensationType.UNKNOWN.value

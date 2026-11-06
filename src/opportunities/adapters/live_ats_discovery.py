@@ -53,7 +53,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "perplexity",
         "relevance": "Direct intersection with LLM Inference Intelligence Engine and low-latency token streaming.",
         "potential_contribution": "Optimizing multi-tenant inference latency and distributed search index retrieval pipelines.",
-        "matched_project": "LLM Inference Intelligence Engine"
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
     },
     {
         "name": "Cartesia",
@@ -68,7 +68,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "cartesia",
         "relevance": "Real-time state space model (SSM) architecture and sub-100ms audio generation inference.",
         "potential_contribution": "Benchmarking memory-bandwidth bottlenecks for continuous streaming audio models.",
-        "matched_project": "LLM Inference Intelligence Engine"
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
     },
     {
         "name": "Neon",
@@ -83,7 +83,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "neon",
         "relevance": "Serverless Postgres storage architecture, memory-page cache management, and compute separation.",
         "potential_contribution": "Benchmarking page cache eviction bounds and asynchronous storage pipeline throughput.",
-        "matched_project": "Agentic Industrial AI Workbench"
+        "matched_project": "Sovereign Industrial Agentic AI Workbench (SIH 2026 / MRPL)"
     },
     {
         "name": "Braintrust",
@@ -98,7 +98,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "braintrust",
         "relevance": "LLM proxy tracing, deterministic benchmark evaluations, and AI service observability.",
         "potential_contribution": "Designing automated regression evaluation suites and tracing latency breakdown across model providers.",
-        "matched_project": "Agentic Industrial AI Workbench"
+        "matched_project": "Sovereign Industrial Agentic AI Workbench (SIH 2026 / MRPL)"
     },
     {
         "name": "Abridge",
@@ -113,22 +113,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "abridge",
         "relevance": "Speech-to-text foundation models and medical conversation summarization under strict latency SLAs.",
         "potential_contribution": "Profiling speech model inference latency on GPU clusters and building automated evaluation harnesses.",
-        "matched_project": "LLM Inference Intelligence Engine"
-    },
-    {
-        "name": "Reka AI",
-        "website": "https://www.reka.ai",
-        "city": "San Francisco",
-        "country": "United States",
-        "timezone": "America/Los_Angeles",
-        "domains": ["Multimodal AI", "Foundation Models", "Inference Optimization"],
-        "funding_stage": "SERIES_A",
-        "tier": "TIER_1",
-        "kind": "ashby",
-        "board_id": "reka",
-        "relevance": "Multimodal language/vision/audio model serving and speculative decoding algorithms.",
-        "potential_contribution": "Optimizing memory-bandwidth utilization during multi-modal context ingestion.",
-        "matched_project": "LLM Inference Intelligence Engine"
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
     },
     {
         "name": "Scale AI",
@@ -143,7 +128,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "scaleai",
         "relevance": "Frontier model benchmarking, RLHF pipelines, and automated test harnesses.",
         "potential_contribution": "Building automated model evaluation harnesses and synthetic benchmark datasets.",
-        "matched_project": "Agentic Industrial AI Workbench"
+        "matched_project": "Sovereign Industrial Agentic AI Workbench (SIH 2026 / MRPL)"
     },
     {
         "name": "SambaNova Systems",
@@ -158,7 +143,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "sambanovasystems",
         "relevance": "Dataflow accelerator architecture, high-throughput inference chips, and spatial compilers.",
         "potential_contribution": "Formulating Roofline intensity benchmarks and profiling memory bandwidth on custom dataflow hardware.",
-        "matched_project": "LLM Inference Intelligence Engine"
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
     },
     {
         "name": "Glean",
@@ -173,22 +158,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "gleanwork",
         "relevance": "Enterprise graph search, distributed embeddings, and autonomous retrieval agents.",
         "potential_contribution": "Benchmarking embedding retrieval latency and optimizing vector search ranking pipelines.",
-        "matched_project": "Agentic Industrial AI Workbench"
-    },
-    {
-        "name": "Tldraw",
-        "website": "https://tldraw.com",
-        "city": "London",
-        "country": "United Kingdom",
-        "timezone": "Europe/London",
-        "domains": ["Developer Tools", "Agentic Interfaces", "Canvas Computing"],
-        "funding_stage": "SEED",
-        "tier": "STANDARD",
-        "kind": "ashby",
-        "board_id": "tldraw",
-        "relevance": "Infinite spatial canvas architectures, multi-user CRDT synchronization, and visual agent tooling.",
-        "potential_contribution": "Implementing deterministic canvas state snapshotting and agent tool integration hooks.",
-        "matched_project": "Agentic Industrial AI Workbench"
+        "matched_project": "Sovereign Industrial Agentic AI Workbench (SIH 2026 / MRPL)"
     },
     {
         "name": "Anthropic",
@@ -202,8 +172,8 @@ UNCATALOGUED_ATS_TARGETS = [
         "kind": "greenhouse",
         "board_id": "anthropic",
         "relevance": "Frontier AI systems infrastructure, high-throughput model serving, and distributed GPU clusters.",
-        "potential_contribution": "Benchmarking inference kernel operational intensity and evaluating token latency under speculative decoding.",
-        "matched_project": "LLM Inference Intelligence Engine"
+        "potential_contribution": "Benchmarking inference kernel operational intensity and evaluating token latency and memory bandwidth across serving configurations.",
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
     },
     {
         "name": "Etched",
@@ -218,7 +188,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "etched",
         "relevance": "Custom ASIC hardware designed specifically for transformer inference and high-throughput attention.",
         "potential_contribution": "Formulating Roofline model operational intensity benchmarks and low-level hardware verification pipelines.",
-        "matched_project": "LLM Inference Intelligence Engine"
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
     },
     {
         "name": "Cognition AI",
@@ -233,7 +203,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "cognition",
         "relevance": "Autonomous coding intelligence, sandbox environment evaluation, and agentic reasoning.",
         "potential_contribution": "Benchmarking autonomous sandbox task execution and trace observability.",
-        "matched_project": "Agentic Industrial AI Workbench"
+        "matched_project": "Sovereign Industrial Agentic AI Workbench (SIH 2026 / MRPL)"
     },
     {
         "name": "Sierra",
@@ -248,7 +218,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "sierra",
         "relevance": "Deterministic agentic dialogue workflows, high-availability customer intelligence, and safety guardrails.",
         "potential_contribution": "Profiling token generation latency and designing structured output validation schemas.",
-        "matched_project": "LLM Inference Intelligence Engine"
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
     },
     {
         "name": "Figure AI",
@@ -263,7 +233,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "figureai",
         "relevance": "General-purpose humanoid robot architecture, real-time sensory perception, and low-latency motor control.",
         "potential_contribution": "Profiling real-time control loop jitter and benchmarking vision-language-action inference latencies.",
-        "matched_project": "Autonomous Precision Flight Controller"
+        "matched_project": "SuRGE Microdrone Autonomy & 3D Environment Mapping (Research Exposure)"
     },
     {
         "name": "Physical Intelligence",
@@ -278,7 +248,7 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "physicalintelligence",
         "relevance": "General-purpose foundation models for robotics and physical world manipulation.",
         "potential_contribution": "Evaluating multi-task robot policy latency and profiling edge inference memory limits.",
-        "matched_project": "Autonomous Precision Flight Controller"
+        "matched_project": "SuRGE Microdrone Autonomy & 3D Environment Mapping (Research Exposure)"
     },
     {
         "name": "Cursor",
@@ -292,8 +262,8 @@ UNCATALOGUED_ATS_TARGETS = [
         "kind": "ashby",
         "board_id": "cursor",
         "relevance": "AI-native code generation, multi-file context indexing, and ultra-low latency token streaming.",
-        "potential_contribution": "Benchmarking prefix-cache hit rates and optimizing speculative token generation for code completion.",
-        "matched_project": "LLM Inference Intelligence Engine"
+        "potential_contribution": "Benchmarking prefix-cache hit rates and evaluating context caching latency for code completion.",
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
     },
     {
         "name": "Modal",
@@ -308,7 +278,97 @@ UNCATALOGUED_ATS_TARGETS = [
         "board_id": "modal",
         "relevance": "Sub-second cold-start serverless GPU execution, distributed filesystem caching, and Linux microVM scheduling.",
         "potential_contribution": "Benchmarking container cold-start memory footprints and profiling distributed GPU memory-bandwidth utilization.",
-        "matched_project": "High-Performance CFD Grid Solver"
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
+    },
+    {
+        "name": "Wayve",
+        "website": "https://wayve.ai",
+        "city": "London",
+        "country": "United Kingdom",
+        "timezone": "Europe/London",
+        "domains": ["Autonomous Driving", "Embodied AI", "End-to-End Robotics", "World Models"],
+        "funding_stage": "SERIES_C",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "wayve",
+        "relevance": "End-to-end embodied AI foundation models for real-world autonomous navigation.",
+        "potential_contribution": "Benchmarking world-model policy inference latency and sensor fusion pipeline profiling.",
+        "matched_project": "SuRGE Microdrone Autonomy & 3D Environment Mapping (Research Exposure)"
+    },
+    {
+        "name": "Together AI",
+        "website": "https://www.together.ai",
+        "city": "San Francisco",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["Distributed Training", "Inference Acceleration", "Cloud Clusters", "Flash Attention"],
+        "funding_stage": "SERIES_A",
+        "tier": "TIER_1",
+        "kind": "greenhouse",
+        "board_id": "togetherai",
+        "relevance": "Distributed inference engines, custom cloud GPU infrastructure, and open model serving.",
+        "potential_contribution": "Profiling memory bandwidth ceilings and benchmark execution latencies for transformer model inference.",
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
+    },
+    {
+        "name": "LangChain",
+        "website": "https://www.langchain.com",
+        "city": "San Francisco",
+        "country": "United States",
+        "timezone": "America/Los_Angeles",
+        "domains": ["Agentic Architectures", "LLM Orchestration", "Evaluations", "LangSmith Tracing"],
+        "funding_stage": "SERIES_A",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "langchain",
+        "relevance": "Agentic control loops, deterministic workflow evaluation, and production LLM observability.",
+        "potential_contribution": "Developing automated agent evaluation benchmarks and structured execution trace assertions.",
+        "matched_project": "Sovereign Industrial Agentic AI Workbench (SIH 2026 / MRPL)"
+    },
+    {
+        "name": "DeepL",
+        "website": "https://www.deepl.com",
+        "city": "Cologne",
+        "country": "Germany",
+        "timezone": "Europe/Berlin",
+        "domains": ["Neural Machine Translation", "HPC Inference", "Language Models", "High-Throughput Serving"],
+        "funding_stage": "SERIES_B",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "deepl",
+        "relevance": "High-efficiency neural translation architectures and European sovereign AI infrastructure.",
+        "potential_contribution": "Benchmarking translation model serving latency and profiling GPU memory saturation under batch loads.",
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
+    },
+    {
+        "name": "ElevenLabs",
+        "website": "https://elevenlabs.io",
+        "city": "London",
+        "country": "United Kingdom",
+        "timezone": "Europe/London",
+        "domains": ["Voice AI", "Audio Foundation Models", "Real-Time Streaming", "Edge Speech"],
+        "funding_stage": "SERIES_B",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "elevenlabs",
+        "relevance": "Ultra-low-latency streaming voice generation models and real-time audio inference.",
+        "potential_contribution": "Profiling streaming audio chunk latency and benchmarking memory-bandwidth utilization.",
+        "matched_project": "LLM Inference Intelligence Engine (Hardware Profiling & Roofline Diagnostics)"
+    },
+    {
+        "name": "Synthesia",
+        "website": "https://www.synthesia.io",
+        "city": "London",
+        "country": "United Kingdom",
+        "timezone": "Europe/London",
+        "domains": ["Generative Video", "Neural Avatars", "Real-Time Rendering", "Vision AI"],
+        "funding_stage": "SERIES_C",
+        "tier": "TIER_1",
+        "kind": "ashby",
+        "board_id": "synthesia",
+        "relevance": "Neural rendering pipelines, video generation foundation models, and European AI engineering.",
+        "potential_contribution": "Benchmarking video frame synthesis latency and optimizing memory throughput across rendering clusters.",
+        "matched_project": "Neural Process Twin (SciML / 2D Heat Conduction / PINNs)"
     }
 ]
 
@@ -432,29 +492,50 @@ class LiveATSDiscoveryAdapter(BaseOpportunityAdapter):
         elif "hybrid" in loc_str.lower():
             workplace = WorkplaceType.HYBRID.value
 
-        # Compensation evidence & statutory pay transparency disclosure (e.g. California SB 1162)
-        comp_type = CompensationType.UNKNOWN.value
-        comp_det = None
-        comp_ev = "UNPUBLISHED_BY_EMPLOYER"
+        # Classification: distinguish internship vs general engineering vacancy
+        desc_text = job_raw.get("descriptionPlain") or job_raw.get("descriptionHtml") or ""
+        lower_title = title.lower()
+        lower_desc = desc_text.lower()
+        combined_text = f"{lower_title} {lower_desc}"
+
+        is_intern = ("intern" in lower_title or "internship" in lower_title or "intern" in lower_desc[:200])
+
         if kind == "ashby" and job_raw.get("compensation"):
             comp_type = CompensationType.PAID.value
             comp_det = str(job_raw["compensation"])
             comp_ev = "STATUTORY_PAY_TRANSPARENCY_DISCLOSURE"
-        else:
-            desc_text = job_raw.get("descriptionPlain") or job_raw.get("descriptionHtml") or ""
-            # Regex match salary disclosures like $160,000 - $220,000
-            salary_match = re.search(
-                r"(?:salary|compensation|base pay|pay range|annual salary)[\s\w:]*\$([\d,]+)\s*(?:-|to)\s*\$([\d,]+)",
-                desc_text,
-                re.IGNORECASE
+            classification = OpportunityClassification.CONFIRMED_OPENING.value if not is_intern else (
+                OpportunityClassification.CONFIRMED_SUMMER_2027_INTERNSHIP.value if "2027" in combined_text
+                else OpportunityClassification.CURRENT_INTERNSHIP_UNSPECIFIED_SUMMER.value
             )
-            if not salary_match:
-                salary_match = re.search(r"\$([\d,]{5,})\s*(?:-|to)\s*\$([\d,]{5,})", desc_text)
+            is_confirmed = True
+            duration_weeks = 12 if is_intern else None
+        elif is_intern:
+            if "summer 2027" in combined_text or "2027" in combined_text:
+                classification = OpportunityClassification.CONFIRMED_SUMMER_2027_INTERNSHIP.value
+            else:
+                classification = OpportunityClassification.CURRENT_INTERNSHIP_UNSPECIFIED_SUMMER.value
+            is_confirmed = True
+            duration_weeks = 12
 
-            if salary_match:
+            # Check for hourly / intern-specific stipend pay disclosures
+            hourly_match = re.search(r"\$([\d,]+(?:\.\d+)?)\s*(?:-|to)\s*\$([\d,]+(?:\.\d+)?)\s*(?:/|\s*per\s*)(?:hr|hour)", desc_text, re.IGNORECASE)
+            if hourly_match:
                 comp_type = CompensationType.PAID.value
-                comp_det = f"${salary_match.group(1)} - ${salary_match.group(2)} (California SB 1162 / Statutory Disclosure)"
+                comp_det = f"${hourly_match.group(1)} - ${hourly_match.group(2)} / hr (Statutory Intern Disclosure)"
                 comp_ev = "STATUTORY_PAY_TRANSPARENCY_DISCLOSURE"
+            else:
+                comp_type = CompensationType.PAID.value
+                comp_det = "Paid student engineering internship"
+                comp_ev = "INTERNSHIP_COMPENSATION_POLICY"
+        else:
+            classification = OpportunityClassification.GENERAL_ENGINEERING_VACANCY.value
+            is_confirmed = False
+            duration_weeks = None
+            # STRICT RULE: Never transfer full-time annual salaries into internship compensation fields
+            comp_type = CompensationType.UNKNOWN.value
+            comp_det = None
+            comp_ev = "FULL_TIME_STATUTORY_DISCLOSURE_NOT_TRANSFERRED_TO_INTERNSHIP"
 
         opp = Opportunity(
             opportunity_id=opp_id,
@@ -469,7 +550,7 @@ class LiveATSDiscoveryAdapter(BaseOpportunityAdapter):
             potential_contribution=target.get("potential_contribution"),
             matched_project_id=target.get("matched_project"),
             eligibility_criteria="Undergraduate / graduate engineering students; systems proficiency required.",
-            internship_duration_weeks=12,
+            internship_duration_weeks=duration_weeks,
             target_term="Summer 2027",
             compensation_type=comp_type,
             compensation_details=comp_det,
@@ -483,13 +564,13 @@ class LiveATSDiscoveryAdapter(BaseOpportunityAdapter):
             contact_verification_status=VerificationStatus.VERIFIED.value,
             application_url=job_url,
             application_deadline="Rolling",
-            audit_classification=OpportunityClassification.CONFIRMED_OPENING.value,
+            audit_classification=classification,
             role_title_type=RoleTitleType.EXACT.value,
             workplace_type=workplace,
             international_eligibility=InternationalEligibility.SPONSORED_OR_J1_REQUIRED.value,
             operational_status="OPERATIONAL",
-            verification_notes=f"Discovered live via official public {kind.title()} ATS job board ({job_url}).",
-            is_confirmed_opening=True,
+            verification_notes=f"Discovered live via official public {kind.title()} ATS job board ({job_url}). Classification: {classification}.",
+            is_confirmed_opening=is_confirmed,
             next_action="PREPARE_STARTUP_PORTAL_APPLICATION",
             created_at=now_iso,
             updated_at=now_iso,

@@ -38,6 +38,11 @@ class PortalType(str, Enum):
     CUSTOM = "CUSTOM"
 
 
+class PortalCompatibilityTier(str, Enum):
+    BROWSER_TESTED_COMPATIBLE = "BROWSER_TESTED_COMPATIBLE"
+    MOCK_ONLY_SUPPORT = "MOCK_ONLY_SUPPORT"
+
+
 class ApplicationStage(str, Enum):
     STAGE_1_DISCOVERY = "STAGE_1_DISCOVERY"
     STAGE_2_PREPARATION = "STAGE_2_PREPARATION"
@@ -51,6 +56,7 @@ class PortalSubmissionStatus(str, Enum):
     AWAITING_MANUAL_ACTION = "AWAITING_MANUAL_ACTION"
     READY_FOR_SUBMISSION = "READY_FOR_SUBMISSION"
     SUBMISSION_AUTHORIZED = "SUBMISSION_AUTHORIZED"
+    MOCK_SIMULATED_NOT_SUBMITTED = "MOCK_SIMULATED_NOT_SUBMITTED"
     SUBMITTED_CONFIRMED = "SUBMITTED_CONFIRMED"
     SUBMISSION_OUTCOME_UNKNOWN = "SUBMISSION_OUTCOME_UNKNOWN"
     APPLICATION_ACKNOWLEDGED = "APPLICATION_ACKNOWLEDGED"
@@ -63,8 +69,10 @@ class BlockingReason(str, Enum):
     CUSTOM_DECLARATION = "CUSTOM_DECLARATION"
     LEGAL_AGREEMENT = "LEGAL_AGREEMENT"
     DOCUMENT_SIGNATURE_REQUIRED = "DOCUMENT_SIGNATURE_REQUIRED"
-    UNMAPPED_CUSTOM_FIELD = "UNMAPPED_CUSTOM_FIELD"
+    UNAVAILABLE_DOCUMENTS = "UNAVAILABLE_DOCUMENTS"
     UNVERIFIED_WORK_AUTHORIZATION = "UNVERIFIED_WORK_AUTHORIZATION"
+    UNCERTAIN_ELIGIBILITY = "UNCERTAIN_ELIGIBILITY"
+    UNMAPPED_CUSTOM_FIELD = "UNMAPPED_CUSTOM_FIELD"
 
 
 @dataclass
@@ -99,6 +107,114 @@ class PortalApplicationState:
     updated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class RealPortalFormInspector:
+    """
+    Inspects real applicant-facing forms across Greenhouse, Ashby, Lever, Workday, and custom portals.
+    Distinguishes BROWSER_TESTED_COMPATIBLE from MOCK_ONLY_SUPPORT.
+    Enforces safety stops for all 8 blocking reasons before human checkpoint handoff.
+    """
+
+    COMPATIBLE_PATTERNS = {
+        PortalType.GREENHOUSE: [r"greenhouse\.io", r"boards\.greenhouse\.io"],
+        PortalType.ASHBY: [r"ashbyhq\.com", r"jobs\.ashbyhq\.com"],
+        PortalType.LEVER: [r"lever\.co", r"jobs\.lever\.co"]
+    }
+
+    @classmethod
+    def get_compatibility_tier(cls, url_or_portal_type: Any) -> PortalCompatibilityTier:
+        """
+        Distinguishes BROWSER_TESTED_COMPATIBLE (Greenhouse, Ashby, Lever)
+        from MOCK_ONLY_SUPPORT (Workday, Institutional, Custom).
+        """
+        val = str(url_or_portal_type).lower()
+        if any(pt.value.lower() in val for pt in [PortalType.GREENHOUSE, PortalType.ASHBY, PortalType.LEVER]):
+            return PortalCompatibilityTier.BROWSER_TESTED_COMPATIBLE
+        if any(kw in val for kw in ["greenhouse.io", "ashbyhq.com", "lever.co"]):
+            return PortalCompatibilityTier.BROWSER_TESTED_COMPATIBLE
+        return PortalCompatibilityTier.MOCK_ONLY_SUPPORT
+
+    @classmethod
+    def evaluate_safety_stops(cls, form_fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Evaluates the 8 mandatory safety stops.
+        Returns dictionary with details if blocked, or None if safe to proceed.
+        """
+        # 1. CAPTCHA
+        if form_fields.get("has_captcha") or form_fields.get("cf_challenge") or form_fields.get("recaptcha_required"):
+            return {
+                "blocking_reason": BlockingReason.CAPTCHA_REQUIRED,
+                "field_name": "g-recaptcha-response",
+                "prompt": "Cloudflare Turnstile / reCAPTCHA challenge detected on portal form.",
+                "resume_instructions": "Solve CAPTCHA in browser window, obtain validation token, and resume."
+            }
+
+        # 2. MFA
+        if form_fields.get("requires_mfa") or form_fields.get("mfa_required") or form_fields.get("otp_required"):
+            return {
+                "blocking_reason": BlockingReason.MFA_REQUIRED,
+                "field_name": "mfa_verification_code",
+                "prompt": "One-time email or SMS verification code required by application portal.",
+                "resume_instructions": "Retrieve code from applicant inbox or device, provide code, and resume."
+            }
+
+        # 3. Custom Declaration
+        if form_fields.get("custom_declaration_required") or form_fields.get("applicant_declaration"):
+            return {
+                "blocking_reason": BlockingReason.CUSTOM_DECLARATION,
+                "field_name": form_fields.get("custom_declaration_name", "custom_declaration"),
+                "prompt": form_fields.get("custom_declaration_prompt", "Applicant declaration confirmation required."),
+                "resume_instructions": "Review declaration text, provide explicit approval, and resume."
+            }
+
+        # 4. Legal Agreement
+        if form_fields.get("requires_legal_agreement") or form_fields.get("legal_agreement_required"):
+            return {
+                "blocking_reason": BlockingReason.LEGAL_AGREEMENT,
+                "field_name": form_fields.get("legal_agreement_name", "legal_terms_agreement"),
+                "prompt": form_fields.get("legal_agreement_prompt", "Binding legal terms or arbitration agreement requires operator review."),
+                "resume_instructions": "Review legal terms, confirm applicant consent, and resume."
+            }
+
+        # 5. Unavailable Documents / Signature
+        if form_fields.get("unavailable_documents_required") or form_fields.get("document_signature_required"):
+            return {
+                "blocking_reason": BlockingReason.UNAVAILABLE_DOCUMENTS,
+                "field_name": form_fields.get("missing_document_name", "official_transcript_or_signature"),
+                "prompt": form_fields.get("document_prompt", "Official transcript, portfolio piece, or physical signature required."),
+                "resume_instructions": "Upload required missing document to documents repository and resume."
+            }
+
+        # 6. Unverified Work Authorization
+        if form_fields.get("unverified_work_auth") or form_fields.get("sponsorship_unconfirmed"):
+            return {
+                "blocking_reason": BlockingReason.UNVERIFIED_WORK_AUTHORIZATION,
+                "field_name": "work_authorization_sponsorship",
+                "prompt": "Applicant visa sponsorship question requires verification for this jurisdiction.",
+                "resume_instructions": "Verify candidate work authorization disclosure for this entity and resume."
+            }
+
+        # 7. Uncertain Eligibility
+        if form_fields.get("uncertain_eligibility") or form_fields.get("graduation_year_conflict"):
+            return {
+                "blocking_reason": BlockingReason.UNCERTAIN_ELIGIBILITY,
+                "field_name": "eligibility_criteria_check",
+                "prompt": form_fields.get("eligibility_prompt", "Candidate graduation year (2029) or enrollment criteria requires review."),
+                "resume_instructions": "Confirm position accepts 2029 graduates or ongoing undergraduate researchers and resume."
+            }
+
+        # 8. Unmapped Custom Field
+        if form_fields.get("unknown_unmapped_field") or form_fields.get("unmapped_custom_field"):
+            field_name = form_fields.get("unknown_field_name") or form_fields.get("unmapped_field_name", "custom_field")
+            return {
+                "blocking_reason": BlockingReason.UNMAPPED_CUSTOM_FIELD,
+                "field_name": field_name,
+                "prompt": f"Unmapped field '{field_name}' requires human applicant input.",
+                "resume_instructions": "Provide required answer value for unmapped field."
+            }
+
+        return None
+
+
 class PortalApplicationDriver:
     """
     Reusable application automation driver for applicant-facing web forms.
@@ -111,6 +227,7 @@ class PortalApplicationDriver:
         )
         self.applicant_data = self._load_applicant_data()
         self.active_checkpoints: Dict[str, ManualActionCheckpoint] = {}
+        self.inspector = RealPortalFormInspector()
 
     def _load_applicant_data(self) -> Dict[str, Any]:
         if self.profile_path.exists():
@@ -221,35 +338,12 @@ class PortalApplicationDriver:
             "work_auth_inquiry": materials["work_authorization"]
         }
 
-        # Check for blocking conditions
-        blocking_field = None
-        blocking_reason = None
-        blocking_prompt = None
-        resume_inst = None
-
-        if form_fields.get("has_captcha"):
-            blocking_reason = BlockingReason.CAPTCHA_REQUIRED
-            blocking_field = "g-recaptcha-response"
-            blocking_prompt = "Cloudflare / reCAPTCHA challenge detected on portal form."
-            resume_inst = "Open the portal URL in an interactive browser window, solve the CAPTCHA, and click 'Resume Application'."
-
-        elif form_fields.get("requires_mfa"):
-            blocking_reason = BlockingReason.MFA_REQUIRED
-            blocking_field = "mfa_verification_code"
-            blocking_prompt = "One-time email or SMS verification code required by application portal."
-            resume_inst = "Check applicant inbox for verification code, input the code, and click 'Resume Application'."
-
-        elif form_fields.get("custom_declaration_required"):
-            blocking_reason = BlockingReason.CUSTOM_DECLARATION
-            blocking_field = form_fields.get("custom_declaration_name", "custom_declaration")
-            blocking_prompt = form_fields.get("custom_declaration_prompt", "Applicant declaration confirmation required.")
-            resume_inst = "Confirm declaration text and grant explicit authorization to proceed."
-
-        elif form_fields.get("unknown_unmapped_field"):
-            blocking_reason = BlockingReason.UNMAPPED_CUSTOM_FIELD
-            blocking_field = form_fields.get("unknown_field_name", "custom_field")
-            blocking_prompt = f"Unmapped field '{blocking_field}' requires human applicant input."
-            resume_inst = "Provide required answer value for unmapped field."
+        # Check for blocking conditions using RealPortalFormInspector
+        stop = self.inspector.evaluate_safety_stops(form_fields)
+        blocking_reason = stop["blocking_reason"] if stop else None
+        blocking_field = stop["field_name"] if stop else None
+        blocking_prompt = stop["prompt"] if stop else None
+        resume_inst = stop["resume_instructions"] if stop else None
 
         now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -313,6 +407,7 @@ class PortalApplicationDriver:
         2. Form payload schema is 100% complete and validated.
         3. Simulates receipt generation and verification.
         4. If operator authorization is NOT granted, fails closed.
+        5. Explicitly tags rehearsal outcome as MOCK_SIMULATED_NOT_SUBMITTED with 0 submissions.
         """
         if not operator_authorization_granted:
             return {
@@ -331,20 +426,26 @@ class PortalApplicationDriver:
         # Simulated DOM verification and non-submitting receipt check
         simulated_confirmation_id = f"CONF-{app_state.portal_type.value[:3]}-{app_state.opportunity_id[:6].upper()}-2027"
         now_iso = datetime.now(timezone.utc).isoformat()
+        compat_tier = self.inspector.get_compatibility_tier(app_state.portal_url or app_state.portal_type.value).value
 
         app_state.stage = ApplicationStage.STAGE_4_SUBMISSION_READY
         app_state.submission_status = PortalSubmissionStatus.SUBMISSION_AUTHORIZED
         app_state.confirmation_evidence = {
-            "mode": "CONTROLLED_SIMULATION_REHEARSAL",
+            "mode": "MOCK_SIMULATED_NOT_SUBMITTED",
+            "submission_tag": "MOCK_SIMULATED_NOT_SUBMITTED",
+            "submitted_count_incremented": 0,
             "confirmation_id": simulated_confirmation_id,
             "timestamp": now_iso,
             "dom_verification": "SUCCESS_RECEIPT_DETECTED",
-            "real_external_submission": False
+            "real_external_submission": False,
+            "compatibility_tier": compat_tier
         }
         app_state.updated_at = now_iso
 
         return {
             "status": "REHEARSAL_SUCCESS",
+            "submission_tag": "MOCK_SIMULATED_NOT_SUBMITTED",
+            "submitted_count_incremented": 0,
             "simulated_confirmation_id": simulated_confirmation_id,
             "verified_fields_count": len(app_state.form_data),
             "real_submission_executed": False,
@@ -369,14 +470,19 @@ class PortalApplicationDriver:
         # Update partial form state
         updated_form = dict(chk.partial_form_state)
         updated_form[chk.blocking_field_name] = user_resolution_value
-        if "has_captcha" in updated_form:
-            updated_form["has_captcha"] = False
-        if "requires_mfa" in updated_form:
-            updated_form["requires_mfa"] = False
-        if "custom_declaration_required" in updated_form:
-            updated_form["custom_declaration_required"] = False
-        if "unknown_unmapped_field" in updated_form:
-            updated_form["unknown_unmapped_field"] = False
+        # Reset all 8 safety stop flags
+        for key in [
+            "has_captcha", "cf_challenge", "recaptcha_required",
+            "requires_mfa", "mfa_required", "otp_required",
+            "custom_declaration_required", "applicant_declaration",
+            "requires_legal_agreement", "legal_agreement_required",
+            "unavailable_documents_required", "document_signature_required",
+            "unverified_work_auth", "sponsorship_unconfirmed",
+            "uncertain_eligibility", "graduation_year_conflict",
+            "unknown_unmapped_field", "unmapped_custom_field"
+        ]:
+            if key in updated_form:
+                updated_form[key] = False
 
         app_id = f"app_{chk.opportunity_id[:8]}"
         state = PortalApplicationState(

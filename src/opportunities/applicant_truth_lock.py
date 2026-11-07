@@ -144,5 +144,15 @@ class ApplicantTruthLock:
     # Convenience alias
     validate_draft = assert_evidence_grounded
 
+    @classmethod
+    def validate_draft_claims(cls, text: str, project_key: Optional[str] = None) -> Tuple[bool, Optional[str]]:
+        """
+        Validates draft claims and returns (is_valid, violation_details_or_None).
+        Non-raising validator for clean inspection and test assertions.
+        """
+        is_valid, violations = cls.validate_text(text, project_key=project_key)
+        violation_str = "; ".join(violations) if violations else None
+        return is_valid, violation_str
+
 
 truth_lock = ApplicantTruthLock

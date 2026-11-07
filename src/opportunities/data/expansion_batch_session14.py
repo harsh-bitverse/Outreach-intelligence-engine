@@ -80,7 +80,8 @@ NEW_ACADEMIC_FACULTY_SESSION14: List[Dict[str, Any]] = [
         "potential_contribution": "Assist in empirical Roofline benchmarking and performance profiling across CPU/GPU memory hierarchies and inference runtimes.",
         "iana_timezone": "Europe/Zurich",
         "time_block": "BLOCK_06",
-        "discovery_status": "NEW_UNIQUE_FACULTY",
+        "discovery_status": "HISTORICAL_CONTACT_ALIAS",
+        "matched_production_id": "prof_e7e94b9e290c5f8f",
         "academic_classification": "PROSPECTIVE_INQUIRY",
         "visiting_policy": "FORMAL_VISITING_STUDENT_PROGRAM",
         "summer_2027_hosting_availability": "UNKNOWN"
@@ -102,7 +103,8 @@ NEW_ACADEMIC_FACULTY_SESSION14: List[Dict[str, Any]] = [
         "potential_contribution": "Benchmark TTFT and inter-token latency trade-offs in learned serving structures under constrained hardware resources.",
         "iana_timezone": "America/New_York",
         "time_block": "BLOCK_08",
-        "discovery_status": "NEW_UNIQUE_FACULTY",
+        "discovery_status": "EXISTING_PRODUCTION_PROFESSOR",
+        "matched_production_id": "prof_a7353c48d4555ca5",
         "academic_classification": "PROSPECTIVE_INQUIRY",
         "visiting_policy": "INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED",
         "summer_2027_hosting_availability": "UNKNOWN"
@@ -150,7 +152,8 @@ NEW_ACADEMIC_FACULTY_SESSION14: List[Dict[str, Any]] = [
         "potential_contribution": "Assist in data-driven surrogate evaluation and trajectory evaluation pipelines for robotic physical manipulation.",
         "iana_timezone": "America/Los_Angeles",
         "time_block": "BLOCK_13",
-        "discovery_status": "NEW_UNIQUE_FACULTY",
+        "discovery_status": "EXISTING_PRODUCTION_PROFESSOR",
+        "matched_production_id": "prof_94d36016749ab11b",
         "academic_classification": "PROSPECTIVE_INQUIRY",
         "visiting_policy": "INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED",
         "summer_2027_hosting_availability": "UNKNOWN"
@@ -196,7 +199,8 @@ NEW_ACADEMIC_FACULTY_SESSION14: List[Dict[str, Any]] = [
         "potential_contribution": "Profile INT4/INT8 quantization trade-offs and memory bandwidth limitations on constrained execution backends.",
         "iana_timezone": "America/New_York",
         "time_block": "BLOCK_08",
-        "discovery_status": "NEW_UNIQUE_FACULTY",
+        "discovery_status": "EXISTING_PRODUCTION_PROFESSOR",
+        "matched_production_id": "prof_6dd24caef44a81b5",
         "academic_classification": "PROSPECTIVE_INQUIRY",
         "visiting_policy": "INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED",
         "summer_2027_hosting_availability": "UNKNOWN"
@@ -220,7 +224,8 @@ NEW_ACADEMIC_FACULTY_SESSION14: List[Dict[str, Any]] = [
         "potential_contribution": "Implement and benchmark surrogate error bounds and physical residual loss formulations across 2D transport equations.",
         "iana_timezone": "America/New_York",
         "time_block": "BLOCK_08",
-        "discovery_status": "NEW_UNIQUE_FACULTY",
+        "discovery_status": "EXISTING_PRODUCTION_PROFESSOR",
+        "matched_production_id": "prof_0f4b2c99fdd40e1e",
         "academic_classification": "PROSPECTIVE_INQUIRY",
         "visiting_policy": "INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED",
         "summer_2027_hosting_availability": "UNKNOWN"
@@ -242,7 +247,8 @@ NEW_ACADEMIC_FACULTY_SESSION14: List[Dict[str, Any]] = [
         "potential_contribution": "Analyze resolution invariance and empirical spectral error distributions in learned neural operators for heat and transport equations.",
         "iana_timezone": "America/Los_Angeles",
         "time_block": "BLOCK_13",
-        "discovery_status": "NEW_UNIQUE_FACULTY",
+        "discovery_status": "EXISTING_PRODUCTION_PROFESSOR",
+        "matched_production_id": "prof_cf3cb9224c77209c",
         "academic_classification": "PROSPECTIVE_INQUIRY",
         "visiting_policy": "FORMAL_VISITING_STUDENT_PROGRAM",
         "summer_2027_hosting_availability": "UNKNOWN"
@@ -266,7 +272,8 @@ NEW_ACADEMIC_FACULTY_SESSION14: List[Dict[str, Any]] = [
         "potential_contribution": "Bring thermodynamic property evaluation routines (Peng-Robinson C++17) into reaction transport simulation workflows.",
         "iana_timezone": "America/New_York",
         "time_block": "BLOCK_08",
-        "discovery_status": "NEW_UNIQUE_FACULTY",
+        "discovery_status": "EXISTING_PRODUCTION_PROFESSOR",
+        "matched_production_id": "prof_d3ec89f70401d4d0",
         "academic_classification": "PROSPECTIVE_INQUIRY",
         "visiting_policy": "INDEPENDENT_RESEARCH_SCHOLAR_PERMITTED",
         "summer_2027_hosting_availability": "UNKNOWN"
@@ -288,7 +295,8 @@ NEW_ACADEMIC_FACULTY_SESSION14: List[Dict[str, Any]] = [
         "potential_contribution": "Assist in integrating thermodynamic mechanical stability calculations and fast C++ equation-of-state routines with molecular screening pipelines.",
         "iana_timezone": "America/Toronto",
         "time_block": "BLOCK_08",
-        "discovery_status": "NEW_UNIQUE_FACULTY",
+        "discovery_status": "EXISTING_PRODUCTION_PROFESSOR",
+        "matched_production_id": "prof_829639da4c958f1f",
         "academic_classification": "PROSPECTIVE_INQUIRY",
         "visiting_policy": "FORMAL_VISITING_STUDENT_PROGRAM",
         "summer_2027_hosting_availability": "UNKNOWN"

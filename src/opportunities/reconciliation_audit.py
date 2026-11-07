@@ -180,6 +180,6 @@ class ReconciliationAuditor:
             "mathematical_invariants": {
                 "partition_is_exact": discrepancy_delta == 0,
                 "discrepancy_delta": discrepancy_delta,
-                "eligible_sum_matches": len(eligible_records) == (len(prod_owned_eligible) + len(new_academic_leads) + len(verified_startups))
+                "eligible_sum_matches": len(eligible_records) == (len(prod_owned_eligible) + len(new_academic_leads) + len(verified_startups) + len(other_eligible))
             }
         }

@@ -30,6 +30,8 @@ Implements:
 
 import re
 import logging
+import sqlite3
+from pathlib import Path
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -415,3 +417,135 @@ class ResponseIntelligenceEngine:
             "derived_status": "APPLICATION_ACKNOWLEDGED",
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
+
+
+class ProductionOutcomeReconciler:
+    """
+    Connects to the production database in READ-ONLY mode and reconciles real recorded
+    IMAP outreach events, replies, and bounces against the Response Intelligence Engine.
+    Guarantees zero mutation of production reply states.
+    """
+
+    def __init__(self, prod_db_path: Optional[Path] = None):
+        self.prod_db_path = prod_db_path or (
+            Path(__file__).parent.parent.parent / "data" / "outreach_engine.db"
+        )
+        self.classifier = ResponseIntelligenceEngine()
+        self.checkpoint_timestamp: Optional[str] = None
+
+    def reconcile_production_outcomes(self) -> Dict[str, Any]:
+        """
+        Executes read-only reconciliation of production outbound delivery tracker and inbound messages.
+        Returns classified summary of positive replies, interviews, bounces, and exceptions.
+        """
+        if not self.prod_db_path.exists():
+            raise FileNotFoundError(f"Production database not found at {self.prod_db_path}")
+
+        conn = sqlite3.connect(f"file:{self.prod_db_path.resolve()}?mode=ro", uri=True)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        # 1. Inspect outbound delivery tracker replies
+        cur.execute("""
+            SELECT id, professor_id, university_name, recipient_email, delivery_status,
+                   tracking_status, bounce_diagnostic, updated_at
+            FROM outbound_delivery_tracker
+            WHERE delivery_status = 'REPLIED';
+        """)
+        replied_tracker_rows = [dict(r) for r in cur.fetchall()]
+
+        # 2. Inspect recorded inbound messages
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='email_messages';")
+        has_msg_table = bool(cur.fetchone())
+
+        inbound_messages = []
+        if has_msg_table:
+            cur.execute("""
+                SELECT message_id, thread_id, professor_id, direction, sender,
+                       recipient, subject, body, sent_received_at
+                FROM email_messages
+                WHERE direction = 'INBOUND';
+            """)
+            inbound_messages = [dict(r) for r in cur.fetchall()]
+
+        # 3. Inspect bounces
+        cur.execute("""
+            SELECT id, professor_id, university_name, recipient_email, delivery_status,
+                   bounce_category, bounce_diagnostic
+            FROM outbound_delivery_tracker
+            WHERE delivery_status LIKE '%BOUNCE%';
+        """)
+        bounce_rows = [dict(r) for r in cur.fetchall()]
+
+        conn.close()
+
+        # Classify all inbound messages
+        classified_replies = []
+        high_priority_items = []
+        exceptions_for_review = []
+
+        for msg in inbound_messages:
+            res = self.classifier.classify_reply(
+                subject=msg.get("subject", ""),
+                body=msg.get("body", ""),
+                sender_email=msg.get("sender")
+            )
+            item = {
+                "message_id": msg.get("message_id"),
+                "sender": msg.get("sender"),
+                "professor_id": msg.get("professor_id"),
+                "subject": msg.get("subject"),
+                "classification": res.classification.value,
+                "confidence": res.confidence,
+                "is_high_priority": res.is_high_priority,
+                "action_required": res.action_required,
+                "snippet": (msg.get("body") or "")[:200]
+            }
+            classified_replies.append(item)
+            if res.is_high_priority:
+                high_priority_items.append(item)
+            if res.confidence < 0.70 or res.classification == ReplyIntent.AMBIGUOUS_NEEDS_REVIEW:
+                exceptions_for_review.append(item)
+
+        # Map tracker replied rows
+        tracker_classified = []
+        for tr in replied_tracker_rows:
+            # Match with inbound message if available
+            matching_inbound = next(
+                (m for m in inbound_messages if m.get("sender", "").strip().lower() == tr["recipient_email"].strip().lower()),
+                None
+            )
+            if matching_inbound:
+                tr_intent = next(
+                    (c["classification"] for c in classified_replies if c["message_id"] == matching_inbound["message_id"]),
+                    "POSITIVE_INTEREST"
+                )
+            else:
+                # Default confirmed reply from tracker telemetry
+                tr_intent = "CONFIRMED_REPLY_RECEIVED"
+
+            tracker_classified.append({
+                "tracker_id": tr["id"],
+                "professor_id": tr["professor_id"],
+                "university": tr["university_name"],
+                "recipient_email": tr["recipient_email"],
+                "intent": tr_intent,
+                "has_inbound_body": bool(matching_inbound),
+                "resolved_at": tr["updated_at"]
+            })
+
+        self.checkpoint_timestamp = datetime.now(timezone.utc).isoformat()
+
+        return {
+            "status": "RECONCILIATION_SUCCESS",
+            "production_read_only_verified": True,
+            "total_tracker_replies": len(replied_tracker_rows),
+            "total_inbound_messages_classified": len(inbound_messages),
+            "total_bounces_monitored": len(bounce_rows),
+            "high_priority_positive_signals_count": len(high_priority_items),
+            "high_priority_items": high_priority_items,
+            "exceptions_requiring_review": exceptions_for_review,
+            "tracker_classified_replies": tracker_classified,
+            "checkpoint_timestamp": self.checkpoint_timestamp
+        }
+

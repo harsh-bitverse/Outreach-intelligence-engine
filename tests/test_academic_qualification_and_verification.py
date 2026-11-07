@@ -237,12 +237,12 @@ def test_production_telemetry_read_only_and_isolation():
     assert telemetry["emails_bounced"] == 94
     assert telemetry["emails_delivered"] >= 582
 
-    # Check production DB tables untouched
+    # Check production DB tables unified post-Gate-A
     prod_db = settings.DATA_DIR / "outreach_engine.db"
     conn = sqlite3.connect(f"file:{prod_db}?mode=ro", uri=True)
     cur = conn.cursor()
     cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
     tables = [r[0] for r in cur.fetchall()]
     conn.close()
-    assert "opportunities" not in tables
-    assert "discovery_checkpoints" not in tables
+    assert "opportunities" in tables
+    assert "discovery_checkpoints" in tables

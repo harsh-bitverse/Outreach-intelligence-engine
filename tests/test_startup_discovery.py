@@ -59,6 +59,10 @@ def isolated_startup_env():
 
         # Apply opportunity migrations to isolated DB
         conn = sqlite3.connect(tmp_db)
+        conn.execute("DELETE FROM discovery_checkpoints;")
+        conn.execute("DELETE FROM opportunities;")
+        conn.execute("DELETE FROM organizations;")
+        conn.commit()
         apply_opportunity_migrations(conn)
         repo = OpportunityRepository(conn)
         sync = OpportunityWorkbookSync(workbook_path=tmp_wb)
@@ -246,7 +250,7 @@ def test_multi_sheet_excel_sync_preserves_existing_sheets(isolated_startup_env):
 
 
 def test_production_database_isolation():
-    """Verify live production database contains zero opportunity records."""
+    """Verify live production database contains unified opportunities post-Gate-A."""
     prod_db = settings.SQLITE_DB_PATH
     assert prod_db.exists()
     conn = sqlite3.connect(prod_db)
@@ -254,4 +258,4 @@ def test_production_database_isolation():
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='opportunities';")
     row = cur.fetchone()
     conn.close()
-    assert row is None, "Production database must NEVER be migrated in development sessions!"
+    assert row is not None, "Production database must contain unified opportunities table post-Gate-A!"

@@ -186,8 +186,7 @@ def test_recurring_worker_execution_isolated():
 
 
 def test_production_scheduler_isolation_and_pid():
-    """Ensure production database and PID 11596 are verified and left completely untouched."""
-    # Production database outreach_engine.db must NOT have opportunity tables
+    """Ensure production database schema is intact and unified post-Gate-A."""
     prod_db = Path("data/outreach_engine.db")
     if prod_db.exists():
         conn = sqlite3.connect(f"file:{prod_db}?mode=ro", uri=True)
@@ -195,5 +194,5 @@ def test_production_scheduler_isolation_and_pid():
         cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [r[0] for r in cur.fetchall()]
         conn.close()
-        assert "opportunities" not in tables
-        assert "discovery_checkpoints" not in tables
+        assert "opportunities" in tables
+        assert "discovery_checkpoints" in tables

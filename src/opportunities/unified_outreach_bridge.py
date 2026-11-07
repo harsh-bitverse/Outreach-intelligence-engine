@@ -66,7 +66,7 @@ class UnifiedOutreachBridge:
     ):
         self.repo = repo
         self.wb_sync = workbook_sync or OpportunityWorkbookSync(
-            Path(settings.DATA_DIR / "development" / "Summer_2027_Opportunity_Workbook.xlsx")
+            Path(settings.MASTER_WORKBOOK_PATH) if Path(settings.MASTER_WORKBOOK_PATH).exists() else Path(settings.DATA_DIR / "development" / "Summer_2027_Opportunity_Workbook.xlsx")
         )
         self.ist_tz = ZoneInfo("Asia/Kolkata")
 

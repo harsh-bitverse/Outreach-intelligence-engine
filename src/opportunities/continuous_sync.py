@@ -127,7 +127,7 @@ class ContinuousDiscoverySynchronizer:
         prod_db_path: Optional[Path] = None
     ):
         self.gate_manager = gate_manager or ActivationGateManager()
-        self.db_path = db_path or (settings.DATA_DIR / "development" / "opportunity_dev.db")
+        self.db_path = db_path or settings.SQLITE_DB_PATH
         self.workbook_path = workbook_path or settings.MASTER_WORKBOOK_PATH
         self.prod_db_path = prod_db_path or settings.SQLITE_DB_PATH
 

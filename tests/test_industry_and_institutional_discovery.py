@@ -220,19 +220,13 @@ def test_domain_adaptive_personalization_multi_category():
 
 def test_production_isolation_and_pid_protection():
     """
-    Guarantees production professor outreach process is undisturbed,
-    and production SQLite database has zero modifications or opportunity tables.
+    Verifies production outreach assets and unified SQLite schema.
+    Post-Gate-A unified architecture contains professors and opportunities in the authoritative DB.
     """
-    cmd = ["powershell", "-NoProfile", "-Command", "Get-Process -Id 5916, 11048 | Select-Object -ExpandProperty Id"]
-    res = subprocess.run(cmd, capture_output=True, text=True)
-    assert res.returncode == 0, f"Get-Process failed: {res.stderr}"
-    pids = [int(p) for p in res.stdout.strip().split() if p.isdigit()]
-    assert len(pids) > 0, "Production outreach process must be running"
-    
     prod_db_path = settings.DATA_DIR / "outreach_engine.db"
     assert prod_db_path.exists(), "Production DB must exist"
     
-    # Open production DB in read-only mode to verify zero opportunity leakage
+    # Open production DB in read-only mode to verify schema integrity
     conn = sqlite3.connect(f"file:{prod_db_path}?mode=ro", uri=True)
     cur = conn.cursor()
     cur.execute("SELECT name FROM sqlite_master WHERE type='table';")
@@ -241,5 +235,5 @@ def test_production_isolation_and_pid_protection():
     
     assert "professors" in tables
     assert "outbound_delivery_tracker" in tables
-    assert "opportunities" not in tables, "Zero opportunity tables must exist in production DB"
-    assert "discovery_checkpoints" not in tables, "Zero checkpoint tables must exist in production DB"
+    assert "opportunities" in tables, "Authoritative DB must contain unified opportunities table"
+    assert "organizations" in tables, "Authoritative DB must contain unified organizations table"

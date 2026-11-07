@@ -26,8 +26,8 @@ def main():
     parser.add_argument("--once", action="store_true", help="Execute a single discovery sweep and exit")
     parser.add_argument("--daemon", action="store_true", help="Run continuously in the background")
     parser.add_argument("--interval", type=int, default=3600, help="Interval in seconds between discovery cycles")
-    parser.add_argument("--db-path", type=str, default="data/development/opportunity_dev.db", help="Path to development SQLite")
-    parser.add_argument("--workbook-path", type=str, default="data/development/Summer_2027_Opportunity_Workbook.xlsx", help="Path to development workbook")
+    parser.add_argument("--db-path", type=str, default="data/outreach_engine.db", help="Path to authoritative SQLite database")
+    parser.add_argument("--workbook-path", type=str, default="data/private/Summer_2027_Professor_Database_WITH_TIME_BLOCKS_EXPORT.xlsx", help="Path to authoritative master workbook")
 
     args = parser.parse_args()
 

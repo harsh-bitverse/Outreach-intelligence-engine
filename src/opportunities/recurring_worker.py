@@ -71,8 +71,8 @@ class RecurringDiscoveryWorker:
         workbook_path: Optional[str] = None,
         interval_seconds: int = 3600
     ):
-        self.db_path = db_path or str(settings.DATA_DIR / "development" / "opportunity_dev.db")
-        self.workbook_path = workbook_path or str(settings.DATA_DIR / "development" / "Summer_2027_Opportunity_Workbook.xlsx")
+        self.db_path = db_path or str(settings.SQLITE_DB_PATH)
+        self.workbook_path = workbook_path or str(settings.MASTER_WORKBOOK_PATH)
         self.interval_seconds = interval_seconds
         self.running = False
 

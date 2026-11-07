@@ -258,7 +258,7 @@ class OpportunityRanker:
 
         # Duration & Summer 2027 timeline
         duration = opp.internship_duration_weeks
-        if 8 <= duration <= 14 or "summer 2027" in (opp.target_term or "").lower():
+        if (duration is not None and 8 <= duration <= 14) or "summer 2027" in (opp.target_term or "").lower():
             score += 5.0
         else:
             score += 2.0

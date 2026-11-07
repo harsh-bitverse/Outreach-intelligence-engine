@@ -67,6 +67,7 @@ class AuthoritativeWorkbookMigrationPackage:
         )
         self.prod_db_path = prod_db_path or settings.SQLITE_DB_PATH
         self.dev_db_path = dev_db_path or (settings.DATA_DIR / "development" / "opportunity_dev.db")
+        self.scheduler_lock_path = settings.DATA_DIR / "scheduler.lock"
         self.backup_dir = backup_dir or (settings.DATA_DIR / "development" / "backups")
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
@@ -203,8 +204,8 @@ class AuthoritativeWorkbookMigrationPackage:
         rb_wb.close()
 
         rollback_verified = (
-            len(rb_sheets) == len(self.PRODUCTION_BASELINE_SHEETS) and
-            all(s in rb_sheets for s in self.PRODUCTION_BASELINE_SHEETS)
+            all(s in rb_sheets for s in self.PRODUCTION_BASELINE_SHEETS) and
+            self.compute_sha256(rollback_test_target) == self.compute_sha256(backup_snapshot)
         )
 
         # Cleanup rollback test file
@@ -670,7 +671,7 @@ class AuthoritativeWorkbookMigrationPackage:
         # 2. Quiescence & Drainage Check
         if not skip_quiescence_check:
             quiescence_mgr = SchedulerQuiescenceManager(
-                scheduler_lock_path=self.lock_path,
+                scheduler_lock_path=self.scheduler_lock_path,
                 master_workbook_path=self.prod_workbook_path,
                 db_path=self.prod_db_path
             )

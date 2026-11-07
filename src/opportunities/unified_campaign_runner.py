@@ -62,7 +62,10 @@ class UnifiedCampaignRunner:
         lock_file_path: Optional[Path] = None,
         budget_manager: Optional[GlobalBudgetManager] = None
     ):
-        self.dev_db_path = dev_db_path or (settings.DATA_DIR / "development" / "opportunity_dev.db")
+        if dev_db_path is None:
+            self.dev_db_path = settings.SQLITE_DB_PATH if settings.SQLITE_DB_PATH.exists() else (settings.DATA_DIR / "development" / "opportunity_dev.db")
+        else:
+            self.dev_db_path = dev_db_path
         self.prod_db_path = prod_db_path or settings.SQLITE_DB_PATH
         self.lock_file_path = lock_file_path or (settings.DATA_DIR / "scheduler.lock")
         self.ist_tz = ZoneInfo("Asia/Kolkata")

@@ -857,6 +857,21 @@ class InboundMessageIndexer:
         raw_items = injected_messages or []
 
         # If live client provided or importable, inspect mailbox in read-only EXAMINE mode
+        created_client = False
+        if not injected_messages and not client:
+            try:
+                import imaplib
+                from config.settings import settings
+                from src.mail.credentials import CredentialManager
+                cm = CredentialManager()
+                u, p = cm.get_credentials()
+                if u and p:
+                    client = imaplib.IMAP4_SSL(settings.IITD_IMAP_SERVER, settings.IITD_IMAP_PORT, timeout=10)
+                    client.login(u, p)
+                    created_client = True
+            except Exception as conn_err:
+                logger.warning(f"Could not initialize live IMAP client: {conn_err}")
+
         if not injected_messages and client:
             try:
                 # EXAMINE mode
@@ -892,6 +907,13 @@ class InboundMessageIndexer:
                                 })
             except Exception as e:
                 logger.warning(f"Live IMAP EXAMINE retrieval error: {e}")
+            finally:
+                if created_client:
+                    try:
+                        client.close()
+                        client.logout()
+                    except Exception:
+                        pass
 
         for item in raw_items:
             uid = item.get("uid", highest_seen_uid + 1)

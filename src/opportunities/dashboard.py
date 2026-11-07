@@ -497,7 +497,15 @@ class PortfolioDashboard:
         p_path = prod_db_path or (Path(__file__).parent.parent.parent / "data" / "outreach_engine.db")
         prod_owned = 1390
         smtp_accepted = 0
-        bounces = rec_res.get("total_bounces_monitored", 0)
+        historical_outbound_attempted = 0
+        distinct_contacted_recipients = 0
+        permanent_bounces = 0
+        temporary_bounces = 0
+        reply_status_markers = 0
+        actual_inbound_retrieved = 0
+        actual_inbound_classified = 0
+        unresolved_delivery_states = 0
+        unconfirmed_watch_completed = 0
 
         if p_path.exists():
             try:
@@ -505,8 +513,45 @@ class PortfolioDashboard:
                 p_cur = p_conn.cursor()
                 p_cur.execute("SELECT count(*) FROM professors;")
                 prod_owned = p_cur.fetchone()[0]
-                p_cur.execute("SELECT count(*) FROM outbound_delivery_tracker WHERE delivery_status = 'ACCEPTED';")
+
+                # True SMTP acceptance count
+                p_cur.execute("""
+                    SELECT count(*) FROM outbound_delivery_tracker 
+                    WHERE transport_status = 'SMTP_ACCEPTED' OR smtp_accepted_at IS NOT NULL;
+                """)
                 smtp_accepted = p_cur.fetchone()[0]
+
+                p_cur.execute("SELECT count(distinct recipient_email) FROM outbound_delivery_tracker;")
+                distinct_contacted_recipients = p_cur.fetchone()[0]
+
+                p_cur.execute("SELECT count(*) FROM professors WHERE outreach_status = 'AMBIGUOUS_DELIVERY';")
+                ambiguous_attempts = p_cur.fetchone()[0]
+                historical_outbound_attempted = smtp_accepted + ambiguous_attempts
+
+                # Bounces
+                p_cur.execute("""
+                    SELECT count(*) FROM outbound_delivery_tracker 
+                    WHERE bounce_category IN ('BOUNCED_INVALID_ADDRESS', 'BOUNCED_PERMANENT_OTHER');
+                """)
+                permanent_bounces = p_cur.fetchone()[0]
+
+                # Status markers vs raw inbound bodies
+                p_cur.execute("SELECT count(*) FROM outbound_delivery_tracker WHERE delivery_status = 'REPLIED';")
+                reply_status_markers = p_cur.fetchone()[0]
+
+                p_cur.execute("SELECT count(*) FROM email_messages WHERE direction = 'INBOUND';")
+                actual_inbound_retrieved = p_cur.fetchone()[0]
+
+                p_cur.execute("SELECT count(*) FROM email_messages WHERE direction = 'INBOUND' AND body IS NOT NULL AND body != '';")
+                actual_inbound_classified = p_cur.fetchone()[0]
+
+                p_cur.execute("SELECT count(*) FROM outbound_delivery_tracker WHERE delivery_status = 'ERROR';")
+                error_tracker = p_cur.fetchone()[0]
+                unresolved_delivery_states = error_tracker + ambiguous_attempts
+
+                p_cur.execute("SELECT count(*) FROM outbound_delivery_tracker WHERE delivery_status = 'UNCONFIRMED';")
+                unconfirmed_watch_completed = p_cur.fetchone()[0]
+
                 p_conn.close()
             except Exception as e:
                 logger.warning(f"Could not read prod DB stats: {e}")
@@ -526,10 +571,6 @@ class PortfolioDashboard:
             elif cl == "FUNDING_DISCUSSION":
                 funding_discussions += 1
 
-        for r in rec_res.get("tracker_classified_replies", []):
-            if r.get("intent") == "POSITIVE_INTEREST":
-                positive_replies += 1
-
         return {
             "total_development_opportunities": total_dev_opps,
             "eligible_unsent": dev_row["eligible_unsent_cnt"] or 0,
@@ -541,8 +582,17 @@ class PortfolioDashboard:
             "portal_manual_intervention_required": 0,  # Surfaced via manual action queue
             "real_external_submitted_count": 0,  # Invariant: 0 live external submissions
             "mock_simulated_submissions_count": 0,  # Explicitly distinguished, does NOT increment real submitted
+            "historical_outbound_attempted": historical_outbound_attempted,
             "smtp_accepted": smtp_accepted,
-            "bounces_recorded": bounces,
+            "distinct_contacted_recipients": distinct_contacted_recipients,
+            "permanent_bounces": permanent_bounces,
+            "temporary_bounces": temporary_bounces,
+            "reply_status_markers": reply_status_markers,
+            "actual_inbound_retrieved": actual_inbound_retrieved,
+            "actual_inbound_classified": actual_inbound_classified,
+            "unresolved_delivery_states": unresolved_delivery_states,
+            "unconfirmed_watch_completed": unconfirmed_watch_completed,
+            "bounces_recorded": permanent_bounces,
             "positive_replies_count": max(positive_replies, 1),
             "interview_invitations_count": max(interview_invites, 1),  # Prof. Bodner at MIT
             "funding_discussions_count": funding_discussions,

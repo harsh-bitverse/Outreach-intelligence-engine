@@ -478,13 +478,19 @@ class AutonomousCampaignLoop:
         Gracefully falls back to substantiated deterministic generator if CLI is unavailable or fails validation.
         """
         if prefer_cli and self.cli_drafter.is_available():
-            cli_draft = self.cli_drafter.generate_draft(prof_row)
-            if not cli_draft:
-                raise CLIDraftGenerationError(f"Antigravity CLI returned empty draft for {prof_row.get('email')}")
-            is_valid, val_errs = self.validate_draft(cli_draft, prof_row)
-            if not is_valid:
-                raise DraftValidationError(f"Draft validation failed for {prof_row.get('email')}: {val_errs}")
-            return cli_draft
+            try:
+                cli_draft = self.cli_drafter.generate_draft(prof_row)
+                if cli_draft:
+                    is_valid, val_errs = self.validate_draft(cli_draft, prof_row)
+                    wc = cli_draft.get("content_word_count", 0)
+                    if is_valid and (130 <= wc <= 180):
+                        return cli_draft
+                    logger.warning(
+                        f"CLI draft failed validation or strict word gate (wc={wc}, errs={val_errs}); "
+                        f"falling back to deterministic generator for {prof_row.get('email')}"
+                    )
+            except Exception as e:
+                logger.warning(f"CLI drafting failed ({e}); falling back to deterministic generator for {prof_row.get('email')}")
 
         full_name = prof_row["full_name"]
         last_name = full_name.split()[-1] if full_name else "Professor"

@@ -19,17 +19,27 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 
 logger = logging.getLogger(__name__)
+
+# Strict policy: Automated outbound replies to professors and recruiters are permanently prohibited.
+AUTOMATED_REPLY_TRANSMISSION_PROHIBITED: bool = True
+
+
+def is_automated_reply_permitted() -> bool:
+    """Always returns False: Automated outbound reply sending is permanently prohibited."""
+    return False
 
 
 class GateID(str, Enum):
     GATE_A_MASTER_WORKBOOK_MUTATION = "GATE_A_MASTER_WORKBOOK_MUTATION"
+    GATE_A_UNIFIED_WORKBOOK_INTEGRATION = "GATE_A_UNIFIED_WORKBOOK_INTEGRATION"
     GATE_B_ACADEMIC_EXPANSION_DISPATCH = "GATE_B_ACADEMIC_EXPANSION_DISPATCH"
     GATE_C_NON_ACADEMIC_DISPATCH = "GATE_C_NON_ACADEMIC_DISPATCH"
     GATE_D_LIVE_PORTAL_SUBMISSION = "GATE_D_LIVE_PORTAL_SUBMISSION"
-    GATE_E_AUTOMATED_REPLY_DISPATCH = "GATE_E_AUTOMATED_REPLY_DISPATCH"
+    GATE_E_CONTINUOUS_DISCOVERY_SYNC = "GATE_E_CONTINUOUS_DISCOVERY_SYNC"
+    GATE_E_AUTOMATED_REPLY_DISPATCH = "GATE_E_AUTOMATED_REPLY_DISPATCH"  # Deprecated legacy alias
 
 
 class GateClosedError(RuntimeError):
@@ -65,6 +75,12 @@ class ActivationGateManager:
             "env_var": "ENABLE_PRODUCTION_WORKBOOK_MUTATION",
             "risk_level": "CRITICAL_INTEGRITY",
         },
+        GateID.GATE_A_UNIFIED_WORKBOOK_INTEGRATION: {
+            "name": "Gate A: Unified Authoritative Workbook & Database Integration",
+            "description": "Authorizes authoritative single-workbook integration and SQLite transactional synchronization. Never activates email sending.",
+            "env_var": "ENABLE_PRODUCTION_WORKBOOK_MUTATION",
+            "risk_level": "CRITICAL_INTEGRITY",
+        },
         GateID.GATE_B_ACADEMIC_EXPANSION_DISPATCH: {
             "name": "Gate B: Academic Expansion Faculty Dispatch",
             "description": "Allows live SMTP dispatching to net-new academic faculty discovered in development.",
@@ -83,17 +99,24 @@ class ActivationGateManager:
             "env_var": "ENABLE_LIVE_PORTAL_SUBMISSIONS",
             "risk_level": "CRITICAL_EXTERNAL_MUTATION",
         },
+        GateID.GATE_E_CONTINUOUS_DISCOVERY_SYNC: {
+            "name": "Gate E: Continuous Production Discovery Synchronization",
+            "description": "Allows continuous synchronization of verified opportunities and permitted workflow metadata into production data stores. Does NOT activate email sending (B, C) or portal submissions (D).",
+            "env_var": "ENABLE_CONTINUOUS_DISCOVERY_SYNC",
+            "risk_level": "MEDIUM_DATA_SYNC",
+        },
         GateID.GATE_E_AUTOMATED_REPLY_DISPATCH: {
-            "name": "Gate E: Automated Inbound Reply Dispatching",
-            "description": "Allows automated transmission of outbound emails in response to inbound professor/company replies.",
+            "name": "Gate E: Automated Inbound Reply Dispatching (Legacy)",
+            "description": "Automated outbound reply dispatching is permanently disabled.",
             "env_var": "ENABLE_AUTOMATED_REPLY_SENDING",
-            "risk_level": "CRITICAL_COMMUNICATION",
+            "risk_level": "PROHIBITED_CAPABILITY",
         },
     }
 
     def __init__(self):
         # Explicit in-memory override registry (for authorized programmatic control)
         self._manual_overrides: Dict[GateID, Dict[str, Any]] = {}
+        self.activation_audit_trail: List[Dict[str, Any]] = []
 
     def _resolve_gate_id(self, gate: Union[GateID, str]) -> GateID:
         if isinstance(gate, GateID):
@@ -103,7 +126,15 @@ class ActivationGateManager:
         except ValueError:
             # Match by shorthand (e.g. "A", "GATE_A")
             gate_upper = str(gate).upper()
-            for gid in GateID:
+            for gid in [
+                GateID.GATE_A_UNIFIED_WORKBOOK_INTEGRATION,
+                GateID.GATE_A_MASTER_WORKBOOK_MUTATION,
+                GateID.GATE_B_ACADEMIC_EXPANSION_DISPATCH,
+                GateID.GATE_C_NON_ACADEMIC_DISPATCH,
+                GateID.GATE_D_LIVE_PORTAL_SUBMISSION,
+                GateID.GATE_E_CONTINUOUS_DISCOVERY_SYNC,
+                GateID.GATE_E_AUTOMATED_REPLY_DISPATCH
+            ]:
                 if gid.value.startswith(gate_upper) or gate_upper in gid.value:
                     return gid
             raise ValueError(f"Unknown gate identifier: {gate}")
@@ -191,16 +222,47 @@ class ActivationGateManager:
             "authorized_by": authorized_by,
             "activated_at": now_iso
         }
+        audit_entry = {
+            "event_type": "ACTIVATION_GATE_OPENED",
+            "gate_id": gid.value,
+            "authorized_by": authorized_by,
+            "timestamp": now_iso
+        }
+        self.activation_audit_trail.append(audit_entry)
+        try:
+            from src.security.audit_logger import audit_logger
+            audit_logger.log_event("ACTIVATION_GATE_OPENED", {
+                "gate_id": gid.value,
+                "authorized_by": authorized_by,
+                "timestamp": now_iso
+            })
+        except Exception:
+            pass
         logger.warning(f"ACTIVATION GATE OPENED: {gid.value} authorized by {authorized_by} at {now_iso}")
 
     def disable_gate(self, gate: Union[GateID, str]) -> None:
         """Closes a specific gate immediately."""
         gid = self._resolve_gate_id(gate)
+        now_iso = datetime.now(timezone.utc).isoformat()
         self._manual_overrides[gid] = {
             "is_open": False,
             "authorized_by": None,
             "activated_at": None
         }
+        audit_entry = {
+            "event_type": "ACTIVATION_GATE_CLOSED",
+            "gate_id": gid.value,
+            "timestamp": now_iso
+        }
+        self.activation_audit_trail.append(audit_entry)
+        try:
+            from src.security.audit_logger import audit_logger
+            audit_logger.log_event("ACTIVATION_GATE_CLOSED", {
+                "gate_id": gid.value,
+                "timestamp": now_iso
+            })
+        except Exception:
+            pass
         logger.info(f"Activation gate closed: {gid.value}")
 
     def disable_all_gates(self) -> None:

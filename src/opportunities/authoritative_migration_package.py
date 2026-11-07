@@ -20,6 +20,7 @@ import shutil
 import sqlite3
 import hashlib
 import logging
+import tempfile
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
@@ -85,8 +86,9 @@ class AuthoritativeWorkbookMigrationPackage:
 
         logger.info(f"Starting migration rehearsal on isolated snapshot: {target_path}")
 
-        # Step 1: Create isolated copy of production master workbook
-        shutil.copy2(str(self.prod_workbook_path), str(target_path))
+        # Step 1: Create isolated copy of production master workbook if not already operating on target
+        if Path(self.prod_workbook_path).resolve() != Path(target_path).resolve():
+            shutil.copy2(str(self.prod_workbook_path), str(target_path))
 
         # Capture pre-migration baseline stats
         pre_wb = openpyxl.load_workbook(str(target_path), read_only=True)

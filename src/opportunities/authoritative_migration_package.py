@@ -36,6 +36,11 @@ from src.scheduler.queue_runner import is_process_running
 logger = logging.getLogger(__name__)
 
 
+class ConcurrentWriterActiveError(Exception):
+    """Raised when an active writer lock or competing process is detected."""
+    pass
+
+
 class AuthoritativeWorkbookMigrationPackage:
     """
     Manages the dry-run rehearsal, atomic execution, parity validation,
@@ -388,18 +393,43 @@ class AuthoritativeWorkbookMigrationPackage:
         shutil.copy2(str(self.prod_workbook_path), str(wb_backup_path))
         wb_backup_hash = self.compute_sha256(wb_backup_path)
 
+        # 3. Capture exact row counts for DB tables and workbook sheets
+        table_counts = {}
+        try:
+            conn = sqlite3.connect(f"file:{self.prod_db_path.as_posix()}?mode=ro", uri=True)
+            for tbl in ["professors", "outreach_drafts", "outreach_queue", "outbound_delivery_tracker", "email_messages", "audit_events"]:
+                try:
+                    cur = conn.cursor()
+                    cur.execute(f"SELECT COUNT(*) FROM {tbl};")
+                    table_counts[tbl] = cur.fetchone()[0]
+                except Exception:
+                    pass
+            conn.close()
+        except Exception as e:
+            logger.debug(f"Could not read table counts: {e}")
+
+        sheet_counts = {}
+        try:
+            wb = openpyxl.load_workbook(str(self.prod_workbook_path), read_only=True)
+            sheet_counts = {s: wb[s].max_row for s in wb.sheetnames}
+            wb.close()
+        except Exception as e:
+            logger.debug(f"Could not read sheet counts: {e}")
+
         manifest = {
             "backup_id": backup_id,
             "created_at_utc": datetime.now(timezone.utc).isoformat(),
             "source_workbook_path": str(self.prod_workbook_path.resolve()),
             "source_workbook_sha256": src_wb_hash,
             "source_workbook_bytes": self.prod_workbook_path.stat().st_size,
+            "source_workbook_sheets": sheet_counts,
             "backup_workbook_path": str(wb_backup_path.resolve()),
             "backup_workbook_sha256": wb_backup_hash,
             "backup_workbook_bytes": wb_backup_path.stat().st_size,
             "source_db_path": str(self.prod_db_path.resolve()),
             "source_db_sha256": src_db_hash,
             "source_db_bytes": self.prod_db_path.stat().st_size,
+            "source_db_tables": table_counts,
             "backup_db_path": str(db_backup_path.resolve()),
             "backup_db_sha256": db_backup_hash,
             "backup_db_bytes": db_backup_path.stat().st_size,
@@ -609,6 +639,94 @@ class AuthoritativeWorkbookMigrationPackage:
             "production_isolation_maintained": True
         }
 
+    def execute_production_cutover_gate_a(
+        self,
+        operator_id: str = "OPERATOR",
+        skip_quiescence_check: bool = False
+    ) -> Dict[str, Any]:
+        """
+        Executes atomic live production cutover for Gate A.
+        Invariants:
+        1. Fail-closed: Gate A must be OPEN (ENABLE_PRODUCTION_WORKBOOK_MUTATION=1).
+        2. Writer coordination: zero writer locks (.lock, .opp_lock, scheduler.lock).
+        3. Fresh dual backup created and verified immediately before file modification.
+        4. Staging copy built and all 18 sheets + baseline rows verified before swap.
+        5. Atomic replacement via shutil.move().
+        6. Emits tamper-evident audit log event with fresh backup_id.
+        """
+        from src.opportunities.activation_gates import ActivationGateManager, GateID
+        from src.scheduler.quiescence_controller import SchedulerQuiescenceManager
+        from src.security.audit_logger import audit_logger
+
+        gate_mgr = ActivationGateManager()
+        if not gate_mgr.is_gate_open(GateID.GATE_A_UNIFIED_WORKBOOK_INTEGRATION):
+            raise PermissionError("Gate A (ENABLE_PRODUCTION_WORKBOOK_MUTATION) is not open.")
+
+        # 1. Lock & Writer Coordination Check
+        coord = self.check_writer_coordination()
+        if not coord["can_proceed_safely"]:
+            raise ConcurrentWriterActiveError(f"Cannot proceed: Active locks detected: {coord['active_locks']}")
+
+        # 2. Quiescence & Drainage Check
+        if not skip_quiescence_check:
+            quiescence_mgr = SchedulerQuiescenceManager(
+                scheduler_lock_path=self.lock_path,
+                master_workbook_path=self.prod_workbook_path,
+                db_path=self.prod_db_path
+            )
+            preflight = quiescence_mgr.verify_quiescence_preflight()
+            if not preflight["can_proceed_safely"]:
+                raise RuntimeError(f"Quiescence preflight failed: {preflight['refusal_reasons']}")
+
+        # 3. Create FRESH Consistent Dual-Backup Immediately Before Mutation
+        logger.info("Creating fresh preflight backup package...")
+        backup_meta = self.create_consistent_preflight_backup_package()
+        if not backup_meta["integrity_verified"]:
+            raise RuntimeError("Fresh backup integrity verification failed. Aborting cutover.")
+        fresh_backup_id = backup_meta["backup_id"]
+
+        # 4. Build staging copy
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        staging_path = self.prod_workbook_path.parent / f".tmp_gate_a_cutover_{timestamp}.xlsx"
+        try:
+            logger.info(f"Generating 18-sheet consolidation on temporary staging file: {staging_path}")
+            rehearsal_res = self.execute_isolated_rehearsal(staging_output_path=staging_path)
+            if rehearsal_res["status"] != "REHEARSAL_SUCCESS" or not rehearsal_res["all_18_sheets_present"]:
+                raise RuntimeError(f"Staging rehearsal failed: {rehearsal_res}")
+
+            # 5. Atomic replacement
+            logger.info(f"Atomically replacing production workbook: {self.prod_workbook_path}")
+            shutil.move(str(staging_path), str(self.prod_workbook_path))
+            new_sha256 = self.compute_sha256(self.prod_workbook_path)
+
+            audit_logger.log_event(
+                event_type="GATE_A_PRODUCTION_CUTOVER_SUCCESSFUL",
+                actor=operator_id,
+                entity_type="PRODUCTION_WORKBOOK",
+                entity_id=str(self.prod_workbook_path),
+                details={
+                    "fresh_backup_id": fresh_backup_id,
+                    "new_sha256": new_sha256,
+                    "bytes": self.prod_workbook_path.stat().st_size,
+                    "rehearsal_metrics": rehearsal_res["baseline_stats"]
+                }
+            )
+
+            return {
+                "status": "GATE_A_CUTOVER_SUCCESSFUL",
+                "fresh_backup_id": fresh_backup_id,
+                "manifest_path": backup_meta["manifest_path"],
+                "workbook_path": str(self.prod_workbook_path),
+                "workbook_sha256": new_sha256,
+                "workbook_bytes": self.prod_workbook_path.stat().st_size,
+                "all_18_sheets_verified": True,
+                "rehearsal_metrics": rehearsal_res
+            }
+        except Exception as e:
+            if staging_path.exists():
+                staging_path.unlink()
+            raise e
+
 
 def main():
     import argparse
@@ -689,7 +807,15 @@ def main():
             print(f"\n[FAIL-CLOSED STOP] Execution refused: Active writer locks detected: {coord['active_locks']}.")
             return
 
-        print("Authorization verified. (Production cutover placeholder).")
+        print("Authorization verified. Executing production Gate A cutover with fresh backup...")
+        res = pkg.execute_production_cutover_gate_a()
+        print("\n=== GATE A PRODUCTION CUTOVER SUCCESSFUL ===")
+        print(f"  Fresh Backup ID: {res['fresh_backup_id']}")
+        print(f"  Manifest: {res['manifest_path']}")
+        print(f"  Workbook: {res['workbook_path']} ({res['workbook_sha256'][:16]}...)")
+        print(f"  Bytes: {res['workbook_bytes']:,}")
+        print(f"  All 18 sheets verified: {res['all_18_sheets_verified']}")
+        print("\n[OK] Single authoritative workbook migration complete.")
         return
 
     parser.print_help()

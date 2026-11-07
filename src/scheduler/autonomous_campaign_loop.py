@@ -236,7 +236,8 @@ class AutonomousCampaignLoop:
         smtp: Optional[IITDSmtpClient] = None,
         cli_drafter: Optional[AntigravityCLIDrafter] = None,
         ist_tz: Optional[ZoneInfo] = None,
-        lock_path: Optional[Path] = None
+        lock_path: Optional[Path] = None,
+        quiescence_flag_path: Optional[Path] = None
     ):
         self.workbook_path = Path(workbook_path or settings.MASTER_WORKBOOK_PATH)
         self.sync = sync or DynamicWorkbookSync(self.workbook_path)
@@ -245,12 +246,47 @@ class AutonomousCampaignLoop:
         self.cli_drafter = cli_drafter or AntigravityCLIDrafter()
         self.ist_tz = ist_tz or ZoneInfo("Asia/Kolkata")
         self.lock_path = lock_path or SCHEDULER_LOCK_PATH
+        self.quiescence_flag_path = Path(quiescence_flag_path or (settings.DATA_DIR / "maintenance_quiesce.flag"))
+        self._shutdown_requested = False
         self.last_bounce_check: float = 0.0
         self.last_fast_watch_check: float = 0.0
         from src.mail.bounce_monitor import IMAPBounceMonitor
         self.bounce_monitor = IMAPBounceMonitor(workbook_path=self.workbook_path)
         from src.mail.delivery_tracker import OutboundDeliveryTracker
         self.delivery_tracker = OutboundDeliveryTracker()
+
+    def register_quiescence_signal_handlers(self) -> None:
+        """Register graceful signal handlers for SIGINT and SIGBREAK."""
+        import signal
+        def _handler(signum, frame):
+            logger.info(f"Signal {signum} received; requesting graceful campaign quiescence...")
+            self._shutdown_requested = True
+        try:
+            signal.signal(signal.SIGINT, _handler)
+        except (ValueError, AttributeError):
+            pass
+        if hasattr(signal, "SIGBREAK"):
+            try:
+                signal.signal(signal.SIGBREAK, _handler)
+            except (ValueError, AttributeError):
+                pass
+
+    def is_quiescence_requested(self) -> bool:
+        """Check if graceful maintenance quiescence is requested via flag or signal."""
+        if self._shutdown_requested:
+            return True
+        if self.quiescence_flag_path and self.quiescence_flag_path.exists():
+            return True
+        return False
+
+    def _sleep_interruptible(self, duration_seconds: float) -> bool:
+        """Sleep in small increments, returning True early if quiescence is requested."""
+        deadline = time.time() + duration_seconds
+        while time.time() < deadline:
+            if self.is_quiescence_requested():
+                return True
+            time.sleep(min(0.5, max(0.01, deadline - time.time())))
+        return False
 
     # --------------------------------------------------------------------------
     # 1. Lock Management & Single-Instance Safety
@@ -1278,6 +1314,7 @@ class AutonomousCampaignLoop:
         10. Resumes automatically on next eligible block window.
         """
         self.acquire_scheduler_lock()
+        self.register_quiescence_signal_handlers()
         try:
             print("=" * 80)
             print("  AUTONOMOUS PROFESSOR OUTREACH CAMPAIGN LOOP ACTIVE")
@@ -1291,6 +1328,18 @@ class AutonomousCampaignLoop:
             current_block_id = None
 
             while True:
+                # Quiescence check
+                if self.is_quiescence_requested():
+                    print(f"\n[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] Graceful maintenance quiescence requested. Exiting campaign loop cleanly...")
+                    audit_logger.log_event(
+                        event_type="SCHEDULER_GRACEFUL_QUIESCENCE",
+                        actor="OPERATOR_MAINTENANCE",
+                        entity_type="SCHEDULER",
+                        entity_id=str(os.getpid()),
+                        details={"status": "QUIESCED_CLEANLY"}
+                    )
+                    break
+
                 now_ist = datetime.now(self.ist_tz)
 
                 # 0a. Concurrent Fast 60s Delivery Watch Evaluation
@@ -1326,9 +1375,8 @@ class AutonomousCampaignLoop:
                 daily_sent = self.get_daily_sent_count(today_ist=now_ist.date(), include_simulated=dry_run)
                 if daily_sent >= settings.DAILY_MAX_OUTREACH:
                     print(f"[{now_ist.strftime('%H:%M:%S IST')}] Daily ceiling of {settings.DAILY_MAX_OUTREACH} reached ({daily_sent} sent today). Pausing until Midnight IST.")
-                    if stop_on_idle:
+                    if stop_on_idle or self._sleep_interruptible(poll_interval_seconds):
                         break
-                    time.sleep(poll_interval_seconds)
                     continue
 
                 # 2. Check active time block
@@ -1339,9 +1387,8 @@ class AutonomousCampaignLoop:
                         batch_count = 0
                         current_block_id = None
                     print(f"[{now_ist.strftime('%H:%M:%S IST')}] No active IST block. Waiting for next window...")
-                    if stop_on_idle:
+                    if stop_on_idle or self._sleep_interruptible(poll_interval_seconds):
                         break
-                    time.sleep(poll_interval_seconds)
                     continue
 
                 block_id, block_info = active
@@ -1354,10 +1401,13 @@ class AutonomousCampaignLoop:
                 candidates = self.find_eligible_professors_in_block(block_id=block_id, limit=1)
                 if not candidates:
                     print(f"[{now_ist.strftime('%H:%M:%S IST')}] All eligible candidates in {block_id} have been contacted. Waiting for next block.")
-                    if stop_on_idle:
+                    if stop_on_idle or self._sleep_interruptible(poll_interval_seconds):
                         break
-                    time.sleep(poll_interval_seconds)
                     continue
+
+                if self.is_quiescence_requested():
+                    print(f"[{now_ist.strftime('%H:%M:%S IST')}] Quiescence requested. Holding before candidate dispatch.")
+                    break
 
                 prof = candidates[0]
 
@@ -1365,7 +1415,8 @@ class AutonomousCampaignLoop:
                 is_workday, details = self.is_local_working_day(prof.get("iana_timezone", "UTC"), now_ist)
                 if not is_workday:
                     print(f"[{now_ist.strftime('%H:%M:%S IST')}] Candidate {prof['full_name']} outside local working window: {details}. Holding...")
-                    time.sleep(poll_interval_seconds)
+                    if self._sleep_interruptible(poll_interval_seconds):
+                        break
                     continue
 
                 # 5. Process candidate with maximum-three-attempt retry policy
@@ -1571,13 +1622,16 @@ class AutonomousCampaignLoop:
                     # Check batch cooling break (after every BATCH_SIZE messages)
                     if batch_count >= settings.BATCH_SIZE:
                         print(f"[{datetime.now(self.ist_tz).strftime('%H:%M:%S IST')}] Batch of {settings.BATCH_SIZE} complete. Enforcing mandatory {settings.COOLING_BREAK_SECONDS}-second cooling break...")
-                        time.sleep(settings.COOLING_BREAK_SECONDS)
+                        if self._sleep_interruptible(settings.COOLING_BREAK_SECONDS):
+                            break
                         batch_count = 0
                     else:
-                        time.sleep(settings.MIN_INTERVAL_SECONDS_BETWEEN_EMAILS)
+                        if self._sleep_interruptible(settings.MIN_INTERVAL_SECONDS_BETWEEN_EMAILS):
+                            break
                 elif candidate_completed:
                     # Candidate failed (ERROR or AMBIGUOUS_DELIVERY), continue immediately to the next candidate
-                    time.sleep(1)
+                    if self._sleep_interruptible(1):
+                        break
         finally:
             self.release_scheduler_lock()
 

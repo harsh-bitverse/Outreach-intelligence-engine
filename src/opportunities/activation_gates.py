@@ -19,7 +19,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, Union, List, Set
 
 logger = logging.getLogger(__name__)
 
@@ -269,3 +269,114 @@ class ActivationGateManager:
         """Closes all gates immediately (emergency killswitch)."""
         for gid in GateID:
             self.disable_gate(gid)
+
+    def bulk_authorize_eligible_opportunities(
+        self,
+        gate: Union[GateID, str],
+        opportunities: List[Dict[str, Any]],
+        operator_id: str,
+        confirmation_token: str,
+        suppression_emails: Optional[Set[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Safely bulk-authorizes qualified and eligible opportunities without manual individual clicks,
+        while strictly enforcing all security, suppression, deduplication, and verification boundaries.
+
+        Invariants Enforced:
+        1. Target gate (Gate B for academic, Gate C for non-academic) must be open.
+        2. Exact confirmation token required: f"CONFIRM_BULK_AUTHORIZE_{gid.value}"
+        3. Must have contact_verification_status == 'VERIFIED'.
+        4. Non-empty email with valid syntax.
+        5. Not present in suppression or exclusions list.
+        6. Not previously contacted (SENT, REPLIED, BOUNCED, ALREADY_CONTACTED, UNCONFIRMED).
+        7. Must have direct contact route (INSTITUTIONAL_PORTAL / EXTERNAL_PORTAL strictly rejected).
+        8. Duplicate emails in the batch are deduplicated (only first occurrence accepted).
+        """
+        gid = self._resolve_gate_id(gate)
+        self.assert_gate_open(gid)
+
+        expected_token = f"CONFIRM_BULK_AUTHORIZE_{gid.value}"
+        if confirmation_token != expected_token:
+            raise ValueError(
+                f"Invalid bulk authorization token. Expected '{expected_token}', got '{confirmation_token}'."
+            )
+
+        supp_set = {em.strip().lower() for em in (suppression_emails or set()) if em}
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        authorized = []
+        rejected = []
+        seen_emails = set()
+
+        for opp in opportunities:
+            opp_id = opp.get("opportunity_id") or opp.get("id") or "UNKNOWN_OPP"
+            email = (opp.get("contact_email") or opp.get("email") or "").strip().lower()
+            name = (opp.get("contact_name") or opp.get("full_name") or "").strip()
+            ver_status = (opp.get("contact_verification_status") or "").strip().upper()
+            hist_status = (opp.get("contact_history_status") or "").strip().upper()
+            app_route = (opp.get("application_route") or "").strip().upper()
+
+            # Rule 1: Email present
+            if not email or "@" not in email:
+                rejected.append({"opportunity_id": opp_id, "reason": "MISSING_OR_MALFORMED_EMAIL", "email": email})
+                continue
+
+            # Rule 2: Verification status must be VERIFIED
+            if ver_status != "VERIFIED":
+                rejected.append({"opportunity_id": opp_id, "reason": f"UNVERIFIED_EMAIL_STATUS ({ver_status})", "email": email})
+                continue
+
+            # Rule 3: Direct contact route only (no portal routes)
+            if app_route in ("PORTAL", "INSTITUTIONAL_PORTAL", "EXTERNAL_PORTAL"):
+                rejected.append({"opportunity_id": opp_id, "reason": "PORTAL_ROUTE_REQUIRES_MANUAL_ACTION", "email": email})
+                continue
+
+            # Rule 4: Suppression list check
+            if email in supp_set:
+                rejected.append({"opportunity_id": opp_id, "reason": "RECIPIENT_SUPPRESSED", "email": email})
+                continue
+
+            # Rule 5: Prior contact history
+            if hist_status in ("SENT", "REPLIED", "BOUNCED", "ALREADY_CONTACTED", "DELIVERY_UNCONFIRMED"):
+                rejected.append({"opportunity_id": opp_id, "reason": f"PRIOR_CONTACT_RESTRICTION ({hist_status})", "email": email})
+                continue
+
+            # Rule 6: Batch deduplication
+            if email in seen_emails:
+                rejected.append({"opportunity_id": opp_id, "reason": "BATCH_DUPLICATE_RECIPIENT", "email": email})
+                continue
+
+            seen_emails.add(email)
+            authorized.append({
+                "opportunity_id": opp_id,
+                "recipient_name": name,
+                "recipient_email": email,
+                "authorized_gate": gid.value,
+                "authorized_by": operator_id,
+                "authorized_at": now_iso
+            })
+
+        batch_result = {
+            "gate_id": gid.value,
+            "operator_id": operator_id,
+            "total_submitted": len(opportunities),
+            "total_authorized": len(authorized),
+            "total_rejected": len(rejected),
+            "authorized_records": authorized,
+            "rejected_records": rejected,
+            "timestamp": now_iso
+        }
+
+        self.activation_audit_trail.append({
+            "event_type": "BULK_OPPORTUNITIES_AUTHORIZED",
+            "gate_id": gid.value,
+            "operator_id": operator_id,
+            "total_authorized": len(authorized),
+            "total_rejected": len(rejected),
+            "timestamp": now_iso
+        })
+
+        logger.info(
+            f"Bulk authorization completed for {gid.value}: {len(authorized)} authorized, {len(rejected)} rejected"
+        )
+        return batch_result

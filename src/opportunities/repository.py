@@ -368,8 +368,20 @@ class OpportunityRepository:
     # Helper
     # --------------------------------------------------------------------------
     def _row_to_opportunity(self, row: sqlite3.Row) -> Opportunity:
-        tech_domains = json.loads(row["technical_domains"]) if row["technical_domains"] else []
-        evidence_urls = json.loads(row["official_evidence_urls"]) if row["official_evidence_urls"] else []
+        tech_domains = []
+        if row["technical_domains"]:
+            try:
+                tech_domains = json.loads(row["technical_domains"])
+            except Exception:
+                tech_domains = [d.strip() for d in row["technical_domains"].split(",") if d.strip()]
+
+        evidence_urls = []
+        if row["official_evidence_urls"]:
+            try:
+                evidence_urls = json.loads(row["official_evidence_urls"])
+            except Exception:
+                evidence_urls = [u.strip() for u in row["official_evidence_urls"].split(",") if u.strip()]
+
         breakdown = None
         if row["score_breakdown"]:
             try:

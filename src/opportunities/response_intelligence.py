@@ -29,10 +29,11 @@ Implements:
 """
 
 import re
+import json
 import logging
 import sqlite3
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, Any, List, Optional, Tuple
@@ -548,4 +549,255 @@ class ProductionOutcomeReconciler:
             "tracker_classified_replies": tracker_classified,
             "checkpoint_timestamp": self.checkpoint_timestamp
         }
+
+
+class InboundRecordClassification(str, Enum):
+    CONFIRMED_RETRIEVED_AND_CLASSIFIED = "CONFIRMED_RETRIEVED_AND_CLASSIFIED"
+    STATUS_MARKED_AWAITING_BODY_RETRIEVAL = "STATUS_MARKED_AWAITING_BODY_RETRIEVAL"
+    UNMATCHED_INBOUND = "UNMATCHED_INBOUND"
+    ATS_CONFIRMATION_RECEIPT = "ATS_CONFIRMATION_RECEIPT"
+
+
+@dataclass
+class UIDCheckpoint:
+    mailbox: str
+    uid_validity: int
+    last_seen_uid: int
+    checkpoint_timestamp: str
+    processed_count: int
+    is_valid: bool = True
+    uidvalidity_changed: bool = False
+
+
+class InboundMessageIndexer:
+    """
+    Category-independent inbound message indexer supporting:
+    1. Parsing RFC822 headers: In-Reply-To, References, Message-ID, Subject, From, To
+    2. Correlating inbound threads against:
+       - Outbound sent emails (via In-Reply-To, References, sender email)
+       - Portal / ATS application confirmation receipts (via CONF-*, REQ-* or sender domain)
+    3. Maintaining durable IMAP UID checkpoints with UIDVALIDITY cache & duplicate suppression.
+    4. Categorizing records strictly into:
+       - CONFIRMED_RETRIEVED_AND_CLASSIFIED (payload downloaded and parsed)
+       - STATUS_MARKED_AWAITING_BODY_RETRIEVAL (status logged in outbound tracker, but raw RFC822 body not yet fetched)
+    5. Surfacing high-priority interview queue (with automated_reply_permitted=False).
+    """
+
+    def __init__(self, checkpoint_file: Optional[Path] = None):
+        self.classifier = ResponseIntelligenceEngine()
+        self.checkpoint_file = checkpoint_file or (
+            Path(__file__).parent.parent.parent / "data" / "imap_uid_checkpoint.json"
+        )
+        self.checkpoints: Dict[str, UIDCheckpoint] = self._load_checkpoints()
+
+    def _load_checkpoints(self) -> Dict[str, UIDCheckpoint]:
+        if self.checkpoint_file.exists():
+            try:
+                with open(self.checkpoint_file, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return {
+                        mb: UIDCheckpoint(**cp) for mb, cp in data.items()
+                    }
+            except Exception as e:
+                logger.warning(f"Could not load IMAP UID checkpoint file: {e}")
+        return {}
+
+    def save_checkpoints(self) -> None:
+        self.checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+        data = {mb: asdict(cp) for mb, cp in self.checkpoints.items()}
+        with open(self.checkpoint_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
+
+    def parse_rfc822_headers(self, headers: Dict[str, str]) -> Dict[str, Any]:
+        """Parses RFC822 message headers for thread matching."""
+        norm = {k.lower(): v for k, v in headers.items()}
+
+        msg_id = norm.get("message-id", "").strip("<> ").strip()
+        in_reply_to = norm.get("in-reply-to", "").strip("<> ").strip()
+        raw_refs = norm.get("references", "")
+        refs = [r.strip("<> ").strip() for r in re.findall(r"<([^>]+)>", raw_refs)]
+        if not refs and raw_refs:
+            refs = [r.strip() for r in raw_refs.split() if r.strip()]
+
+        from_hdr = norm.get("from", "")
+        from_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", from_hdr)
+        from_email = from_match.group(0).lower() if from_match else from_hdr.lower().strip()
+
+        to_hdr = norm.get("to", "")
+        to_match = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", to_hdr)
+        to_email = to_match.group(0).lower() if to_match else to_hdr.lower().strip()
+
+        subject = norm.get("subject", "").strip()
+
+        return {
+            "message_id": msg_id,
+            "in_reply_to": in_reply_to,
+            "references": refs,
+            "sender_email": from_email,
+            "recipient_email": to_email,
+            "subject": subject
+        }
+
+    def extract_application_id(self, text: str) -> Optional[str]:
+        """Extracts application or confirmation reference IDs from email body or subject."""
+        patterns = [
+            r"CONF-[A-Z0-9\-_]{4,24}",
+            r"REQ-[A-Z0-9\-_]{4,24}",
+            r"APP-[A-Z0-9\-_]{4,24}",
+            r"(?:confirmation|application|reference)\s*(?:number|id|#)[:\s]+([A-Z0-9\-_]{4,20})"
+        ]
+        for pat in patterns:
+            m = re.search(pat, text, re.IGNORECASE)
+            if m:
+                res = m.group(0)
+                if any(p in res.upper() for p in ["CONF-", "REQ-", "APP-"]):
+                    return res
+                return m.group(1)
+        return None
+
+    def update_uid_checkpoint(
+        self,
+        mailbox: str,
+        uid_validity: int,
+        highest_uid: int,
+        messages_processed: int = 0
+    ) -> UIDCheckpoint:
+        """
+        Updates IMAP UID checkpoint. Handles UIDVALIDITY resets safely:
+        If UIDVALIDITY differs from stored value, flags uidvalidity_changed=True.
+        """
+        existing = self.checkpoints.get(mailbox)
+        uidvalidity_changed = False
+        if existing and existing.uid_validity != uid_validity:
+            uidvalidity_changed = True
+            logger.warning(
+                f"IMAP UIDVALIDITY changed for {mailbox} from {existing.uid_validity} to {uid_validity}. "
+                "Local UIDs invalidated; full resync required."
+            )
+
+        new_cp = UIDCheckpoint(
+            mailbox=mailbox,
+            uid_validity=uid_validity,
+            last_seen_uid=highest_uid,
+            checkpoint_timestamp=datetime.now(timezone.utc).isoformat(),
+            processed_count=(existing.processed_count if existing and not uidvalidity_changed else 0) + messages_processed,
+            is_valid=not uidvalidity_changed,
+            uidvalidity_changed=uidvalidity_changed
+        )
+        self.checkpoints[mailbox] = new_cp
+        self.save_checkpoints()
+        return new_cp
+
+    def index_inbound_record(
+        self,
+        headers: Dict[str, str],
+        body: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Indexes an inbound email record and categorizes it:
+        - If body is present: CONFIRMED_RETRIEVED_AND_CLASSIFIED
+        - If body is absent (tracker status only): STATUS_MARKED_AWAITING_BODY_RETRIEVAL
+        - Detects ATS confirmations.
+        """
+        parsed_h = self.parse_rfc822_headers(headers)
+        app_id = self.extract_application_id(f"{parsed_h['subject']} {body or ''}")
+
+        # Check ATS confirmation
+        ats_info = self.classifier.correlate_ats_confirmation(
+            email_subject=parsed_h["subject"],
+            email_body=body or "",
+            sender_address=parsed_h["sender_email"]
+        )
+
+        if ats_info:
+            return {
+                "message_id": parsed_h["message_id"],
+                "in_reply_to": parsed_h["in_reply_to"],
+                "references": parsed_h["references"],
+                "sender_email": parsed_h["sender_email"],
+                "recipient_email": parsed_h["recipient_email"],
+                "subject": parsed_h["subject"],
+                "application_id": app_id or ats_info["confirmation_id"],
+                "ats_system": ats_info["ats_system"],
+                "classification_status": InboundRecordClassification.ATS_CONFIRMATION_RECEIPT,
+                "intent": ReplyIntent.ACKNOWLEDGEMENT_ONLY,
+                "is_high_priority": False,
+                "requires_manual_action": False,
+                "automated_reply_permitted": False,
+                "raw_body_available": bool(body),
+                "summary": f"ATS acknowledgement from {ats_info['ats_system']} (ID: {ats_info['confirmation_id']})",
+                "indexed_at": datetime.now(timezone.utc).isoformat()
+            }
+
+        if not body:
+            return {
+                "message_id": parsed_h["message_id"],
+                "in_reply_to": parsed_h["in_reply_to"],
+                "references": parsed_h["references"],
+                "sender_email": parsed_h["sender_email"],
+                "recipient_email": parsed_h["recipient_email"],
+                "subject": parsed_h["subject"],
+                "application_id": app_id,
+                "classification_status": InboundRecordClassification.STATUS_MARKED_AWAITING_BODY_RETRIEVAL,
+                "intent": None,
+                "is_high_priority": False,
+                "requires_manual_action": False,
+                "automated_reply_permitted": False,
+                "raw_body_available": False,
+                "summary": "Delivery status marked REPLIED in outbound tracker; raw RFC822 body awaiting IMAP retrieval.",
+                "indexed_at": datetime.now(timezone.utc).isoformat()
+            }
+
+        # Classify retrieved body
+        classification = self.classifier.classify_reply(
+            subject=parsed_h["subject"],
+            body=body,
+            sender_email=parsed_h["sender_email"]
+        )
+
+        return {
+            "message_id": parsed_h["message_id"],
+            "in_reply_to": parsed_h["in_reply_to"],
+            "references": parsed_h["references"],
+            "sender_email": parsed_h["sender_email"],
+            "recipient_email": parsed_h["recipient_email"],
+            "subject": parsed_h["subject"],
+            "application_id": app_id,
+            "classification_status": InboundRecordClassification.CONFIRMED_RETRIEVED_AND_CLASSIFIED,
+            "intent": classification.classification,
+            "confidence": classification.confidence,
+            "is_high_priority": classification.is_high_priority,
+            "requires_manual_action": classification.is_high_priority,
+            "automated_reply_permitted": False,
+            "action_required": classification.action_required,
+            "summary": classification.summary,
+            "snippet": body[:250],
+            "raw_body_available": True,
+            "indexed_at": datetime.now(timezone.utc).isoformat()
+        }
+
+    def get_high_priority_interview_queue(self, prod_db_path: Optional[Path] = None) -> List[Dict[str, Any]]:
+        """
+        Extracts high-priority items (such as Prof. Bodner at MIT) requiring manual operator review and reply.
+        Strictly enforces automated_reply_permitted = False.
+        """
+        reconciler = ProductionOutcomeReconciler(prod_db_path=prod_db_path)
+        res = reconciler.reconcile_production_outcomes()
+
+        queue = []
+        for item in res.get("high_priority_items", []):
+            queue.append({
+                "message_id": item.get("message_id"),
+                "sender": item.get("sender"),
+                "professor_id": item.get("professor_id"),
+                "subject": item.get("subject"),
+                "classification": item.get("classification"),
+                "confidence": item.get("confidence"),
+                "action_required": item.get("action_required"),
+                "automated_reply_permitted": False,
+                "manual_action_required": True,
+                "recommendation": "OPERATOR_DIRECT_MANUAL_REPLY",
+                "snippet": item.get("snippet", "")
+            })
+        return queue
 

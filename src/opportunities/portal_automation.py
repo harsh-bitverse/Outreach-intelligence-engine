@@ -43,6 +43,15 @@ class PortalCompatibilityTier(str, Enum):
     MOCK_ONLY_SUPPORT = "MOCK_ONLY_SUPPORT"
 
 
+class PortalVerificationStatus(str, Enum):
+    REAL_BROWSER_INSPECTED = "REAL_BROWSER_INSPECTED"
+    REAL_FORM_FILLED_NOT_SUBMITTED = "REAL_FORM_FILLED_NOT_SUBMITTED"
+    MOCK_TESTED_ONLY = "MOCK_TESTED_ONLY"
+    LOGIN_OR_MFA_BLOCKED = "LOGIN_OR_MFA_BLOCKED"
+    UNSUPPORTED = "UNSUPPORTED"
+    EXPIRED_OR_INVALID_POSTING = "EXPIRED_OR_INVALID_POSTING"
+
+
 class ApplicationStage(str, Enum):
     STAGE_1_DISCOVERY = "STAGE_1_DISCOVERY"
     STAGE_2_PREPARATION = "STAGE_2_PREPARATION"
@@ -132,6 +141,37 @@ class RealPortalFormInspector:
         if any(kw in val for kw in ["greenhouse.io", "ashbyhq.com", "lever.co"]):
             return PortalCompatibilityTier.BROWSER_TESTED_COMPATIBLE
         return PortalCompatibilityTier.MOCK_ONLY_SUPPORT
+
+    @classmethod
+    def determine_verification_status(
+        cls,
+        url_or_portal: str,
+        form_fields: Optional[Dict[str, Any]] = None,
+        http_status: Optional[int] = None,
+        requires_login: bool = False,
+        is_browser_inspected: bool = False,
+        is_form_filled: bool = False
+    ) -> PortalVerificationStatus:
+        """
+        Distinguishes all 6 portal verification statuses:
+        - REAL_BROWSER_INSPECTED
+        - REAL_FORM_FILLED_NOT_SUBMITTED
+        - MOCK_TESTED_ONLY
+        - LOGIN_OR_MFA_BLOCKED
+        - UNSUPPORTED
+        - EXPIRED_OR_INVALID_POSTING
+        """
+        if http_status in (404, 410) or (form_fields and form_fields.get("is_expired")):
+            return PortalVerificationStatus.EXPIRED_OR_INVALID_POSTING
+        if requires_login or (form_fields and (form_fields.get("requires_login") or form_fields.get("requires_mfa"))):
+            return PortalVerificationStatus.LOGIN_OR_MFA_BLOCKED
+        if any(unsupp in str(url_or_portal).lower() for unsupp in ["taleo", "brassring", "successfactors"]):
+            return PortalVerificationStatus.UNSUPPORTED
+        if is_form_filled:
+            return PortalVerificationStatus.REAL_FORM_FILLED_NOT_SUBMITTED
+        if is_browser_inspected:
+            return PortalVerificationStatus.REAL_BROWSER_INSPECTED
+        return PortalVerificationStatus.MOCK_TESTED_ONLY
 
     @classmethod
     def evaluate_safety_stops(cls, form_fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:

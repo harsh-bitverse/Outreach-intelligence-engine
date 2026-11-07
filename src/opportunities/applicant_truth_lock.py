@@ -28,6 +28,10 @@ class UnsupportedTechnicalClaimError(Exception):
     pass
 
 
+# Backward-compatibility alias
+ApplicantTruthViolationError = UnsupportedTechnicalClaimError
+
+
 class ApplicantTruthLock:
     """
     Immutable registry and validation gate enforcing strict evidence grounding for candidate Harshith N.
@@ -113,10 +117,16 @@ class ApplicantTruthLock:
 
         # 1. Check global prohibited phrases
         for phrase in cls.get_global_prohibited_phrases():
-            # Use word-boundary regex when possible to prevent partial substring false-positives
-            pattern = r"\b" + re.escape(phrase.lower()) + r"\b"
-            if re.search(pattern, lower_text):
-                violations.append(f"Contains prohibited global phrase: '{phrase}'")
+            clean_phrase = phrase.lower().strip()
+            if not clean_phrase:
+                continue
+            if "-" in clean_phrase or "–" in clean_phrase or "/" in clean_phrase or "%" in clean_phrase:
+                if clean_phrase in lower_text:
+                    violations.append(f"Contains prohibited global phrase: '{phrase}'")
+            else:
+                pattern = r"\b" + re.escape(clean_phrase) + r"\b"
+                if re.search(pattern, lower_text):
+                    violations.append(f"Contains prohibited global phrase: '{phrase}'")
 
         # 2. Check project-specific prohibitions if project is known
         if project_key:

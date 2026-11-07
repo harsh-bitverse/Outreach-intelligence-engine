@@ -461,10 +461,10 @@ class DomainAdaptivePersonalizer:
                 "recipient": "Robotics Vision Team",
                 "email": "careers@cynlr.com",
                 "domain": "Robot Vision & Visual Servoing",
-                "relevance": "depth-agnostic robotic manipulation and real-time kinematic control",
+                "relevance": "depth-agnostic robotic manipulation and perception under uncertainty",
                 "matched_proj": "SuRGE microdrone work",
                 "problem": "dynamic visual feedback loops require microsecond sensor telemetry integration to prevent control instability",
-                "proposed": "designing robust C++ telemetry pipelines and visual odometry integration routines for real-time robotic servo loops"
+                "proposed": "investigating mathematical state estimation under uncertainty and perception-planning coordination for robotic manipulation"
             },
             {
                 "company": "Modular",
@@ -484,7 +484,7 @@ class DomainAdaptivePersonalizer:
                 "relevance": "thermodynamic fluid modeling and real-gas combustor simulation",
                 "matched_proj": "C++ Peng–Robinson EOS solver",
                 "problem": "cryogenic propellants operate near supercritical conditions where ideal-gas assumptions fail, requiring fast cubic equation of state evaluations",
-                "proposed": "integrating robust C++17 cubic equation-of-state flash routines and numerical root solvers into combustion chamber simulation pipelines"
+                "proposed": "integrating robust C++17 Peng-Robinson cubic equation-of-state PVT calculations and departure function routines into cryogenic fluid simulation pipelines"
             },
             {
                 "company": "Modal Labs",
@@ -745,9 +745,9 @@ class DomainAdaptivePersonalizer:
                 "recipient": "Industrial Embedded Systems Team",
                 "email": "bcai-careers@bosch.com",
                 "domain": "Embedded AI & Industrial Systems Control",
-                "relevance": "real-time kinematic state estimation, vehicle dynamics telemetry, and edge microcontroller deployment",
+                "relevance": "state estimation under uncertainty, vehicle dynamics telemetry, and embedded system constraints",
                 "matched_proj": "SuRGE microdrone work",
-                "proposed": "implementing deterministic multi-axis kinematic control loops and visual odometry integration routines in C++ for embedded testbeds"
+                "proposed": "evaluating state estimation models and trajectory tracking formulations under sensing limitations and uncertainty"
             }
         ]
 
@@ -778,7 +778,7 @@ class DomainAdaptivePersonalizer:
                 "domain": "Multiphysics Simulation & High-Performance Computing",
                 "relevance": "computational thermodynamics, supercritical fluid simulation, and exascale numerical solver development",
                 "matched_proj": "C++ Peng–Robinson EOS solver",
-                "proposed": "integrating robust C++17 cubic equation-of-state flash routines and numerical root solvers into Argonne multiphysics flow simulation codes"
+                "proposed": "integrating robust C++17 Peng-Robinson cubic equation-of-state PVT solvers and thermodynamic departure functions into flow property evaluation codes"
             },
             {
                 "org": "Institute of Science and Technology Austria (ISTA)",
@@ -794,9 +794,9 @@ class DomainAdaptivePersonalizer:
                 "recipient": "MPI-IS Fellowships Committee",
                 "email": "fellowships@is.mpg.de",
                 "domain": "Physical Intelligence & Autonomous Robotics",
-                "relevance": "bio-inspired robotics, real-time kinematic control, visual odometry, and dynamic stabilization under uncertainty",
+                "relevance": "autonomous robotics, state estimation, planning, and control interactions under limited sensing and uncertainty",
                 "matched_proj": "SuRGE microdrone work",
-                "proposed": "developing C++ visual-inertial state estimation routines and testing closed-loop kinematic stabilization on agile autonomous testbeds"
+                "proposed": "investigating mathematical representations for environment mapping and trajectory planning under uncertainty"
             }
         ]
 

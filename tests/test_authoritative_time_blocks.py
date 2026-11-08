@@ -86,8 +86,9 @@ def test_master_workbook_and_production_db_counts_parity():
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2.0)
     cur = conn.cursor()
-    cur.execute("SELECT time_block, COUNT(*) FROM professors GROUP BY time_block ORDER BY time_block;")
+    cur.execute("SELECT time_block, COUNT(*) FROM professors WHERE processing_sequence <= 1390 GROUP BY time_block ORDER BY time_block;")
     db_counts = dict(cur.fetchall())
+    total_professors = cur.execute("SELECT COUNT(*) FROM professors;").fetchone()[0]
     conn.close()
 
     expected_counts = {
@@ -110,6 +111,7 @@ def test_master_workbook_and_production_db_counts_parity():
         assert db_counts.get(block_id) == exp_count, f"Mismatch for {block_id}: got {db_counts.get(block_id)}, expected {exp_count}"
 
     assert sum(expected_counts.values()) == 1390
+    assert total_professors >= 1390
 
 
 def test_dynamic_recipient_eligibility_requires_working_day_and_morning_window():

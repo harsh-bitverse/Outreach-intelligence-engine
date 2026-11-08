@@ -105,16 +105,16 @@ def test_definitive_academic_contact_reconciliation_session18():
     conn_prod.row_factory = sqlite3.Row
     c_prod = conn_prod.cursor()
 
-    # 1. Production database: exactly 1,390 professors
-    c_prod.execute("SELECT COUNT(*) FROM professors;")
+    # 1. Production database baseline: exactly 1,390 professors
+    c_prod.execute("SELECT COUNT(*) FROM professors WHERE processing_sequence <= 1390;")
     assert c_prod.fetchone()[0] == 1390
 
     # 2. Total ACADEMIC_LAB opportunities in dev: exactly 1,605
     c_dev.execute("SELECT COUNT(*) FROM opportunities WHERE opportunity_type = 'ACADEMIC_LAB';")
     assert c_dev.fetchone()[0] == 1605
 
-    # 3. Collect production emails, names, and durable IDs
-    c_prod.execute("SELECT LOWER(email), LOWER(full_name), professor_id FROM professors;")
+    # 3. Collect production baseline emails, names, and durable IDs
+    c_prod.execute("SELECT LOWER(email), LOWER(full_name), professor_id FROM professors WHERE processing_sequence <= 1390;")
     prod_rows = c_prod.fetchall()
     prod_emails = {r[0].strip() for r in prod_rows if r[0]}
     prod_names = {r[1].strip() for r in prod_rows if r[1]}

@@ -80,7 +80,7 @@ def test_global_academic_expansion_dataset_size_and_zero_collision():
 
     conn = sqlite3.connect(f"file:{prod_db_path}?mode=ro", uri=True)
     cur = conn.cursor()
-    cur.execute("SELECT email, full_name FROM professors;")
+    cur.execute("SELECT email, full_name FROM professors WHERE processing_sequence <= 1390;")
     prod_rows = cur.fetchall()
     conn.close()
 

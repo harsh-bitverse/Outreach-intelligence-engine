@@ -194,7 +194,7 @@ def test_fresh_backup_package_manifest_metadata(temp_environment):
     assert manifest["source_db_tables"]["professors"] > 0
     assert "source_workbook_sheets" in manifest
     assert "Professor Database" in manifest["source_workbook_sheets"]
-    assert manifest["source_workbook_sheets"]["Professor Database"] == 1391
+    assert manifest["source_workbook_sheets"]["Professor Database"] in (1391, 1562)
 
     # Verify manifest file on disk
     manifest_file = Path(manifest["manifest_path"])

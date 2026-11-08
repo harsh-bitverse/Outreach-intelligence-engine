@@ -402,6 +402,23 @@ class OpportunityWorkbookSync:
                 if ws_target and ws_target.max_row > 1:
                     ws_target.delete_rows(2, ws_target.max_row - 1)
 
+            # Query authoritative queue status lookup from SQLite if available
+            queue_lookup = {}
+            seen_queue_emails = set()
+            try:
+                import sqlite3
+                db_p = settings.SQLITE_DB_PATH
+                if db_p.exists():
+                    conn_db = sqlite3.connect(f"file:{db_p.as_posix()}?mode=ro", uri=True)
+                    cur_db = conn_db.cursor()
+                    has_uq = cur_db.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='unified_outreach_queue';").fetchone()[0]
+                    if has_uq:
+                        for qr in cur_db.execute("SELECT opportunity_id, recipient_email, queue_status FROM unified_outreach_queue;").fetchall():
+                            queue_lookup[qr[0]] = {"status": qr[2], "email": str(qr[1] or "").strip().lower()}
+                    conn_db.close()
+            except Exception as e:
+                logger.debug(f"Queue lookup non-fatal: {e}")
+
             # Sort opportunities by score descending
             sorted_opps = sorted(opportunities, key=lambda o: o.qualification_score, reverse=True)
 
@@ -436,7 +453,22 @@ class OpportunityWorkbookSync:
 
                 # 6. Unified Outreach Queue (if verified email contact is present)
                 if opp.contact_email and opp.contact_verification_status == "VERIFIED" and ws_queue:
-                    self._append_outreach_queue_row(ws_queue, opp, org_name)
+                    clean_em = opp.contact_email.strip().lower()
+                    st_override = None
+                    na_override = None
+                    if opp.opportunity_id in queue_lookup:
+                        db_st = queue_lookup[opp.opportunity_id]["status"]
+                        if db_st == "SCHEDULED_FOR_DISPATCH":
+                            if clean_em in seen_queue_emails:
+                                st_override = "SUPPRESSED_DUPLICATE"
+                                na_override = "SUPPRESSED_SAME_RECIPIENT_COLLISION"
+                            else:
+                                seen_queue_emails.add(clean_em)
+                                st_override = "SCHEDULED_FOR_DISPATCH"
+                                na_override = "DISPATCH_IN_ASSIGNED_TIME_BLOCK"
+                        else:
+                            st_override = db_st
+                    self._append_outreach_queue_row(ws_queue, opp, org_name, status_override=st_override, next_action_override=na_override)
                     counts["Unified Outreach Queue"] += 1
 
                 # 7. Application Tracker (all opportunities)
@@ -817,8 +849,17 @@ class OpportunityWorkbookSync:
         ]
         self._write_row(ws, row_idx, values)
 
-    def _append_outreach_queue_row(self, ws, opp: Opportunity, org_name: str) -> None:
+    def _append_outreach_queue_row(
+        self,
+        ws,
+        opp: Opportunity,
+        org_name: str,
+        status_override: Optional[str] = None,
+        next_action_override: Optional[str] = None
+    ) -> None:
         row_idx = ws.max_row + 1
+        st = status_override or "QUEUED_FOR_REVIEW"
+        na = next_action_override or opp.next_action or "Review Email"
         values = [
             f"q_{opp.opportunity_id[:8]}",
             opp.opportunity_type,
@@ -828,11 +869,11 @@ class OpportunityWorkbookSync:
             opp.contact_email,
             opp.iana_timezone,
             opp.qualification_score,
-            "QUEUED_FOR_REVIEW",
+            st,
             None,
             None,
             "UNSENT",
-            opp.next_action or "Review Email"
+            na
         ]
         self._write_row(ws, row_idx, values)
 

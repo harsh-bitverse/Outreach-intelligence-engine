@@ -502,6 +502,74 @@ class AutonomousCampaignLoop:
                 break
 
         wb.close()
+
+        # Check unified_outreach_queue in database for scheduled multi-category items
+        if not limit or len(candidates) < limit:
+            try:
+                import sqlite3
+                with get_db() as conn:
+                    conn.row_factory = sqlite3.Row
+                    has_uq = conn.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='unified_outreach_queue';").fetchone()[0]
+                    if has_uq:
+                        needed = (limit - len(candidates)) if limit else 100
+                        q_rows = conn.execute("""
+                            SELECT uq.queue_id, uq.opportunity_id, uq.category, uq.organization_name,
+                                   uq.recipient_name, uq.recipient_email, uq.assigned_block_id,
+                                   uq.iana_timezone, o.title, o.technical_domains,
+                                   o.technical_relevance_summary, o.matched_project_id,
+                                   o.potential_contribution, o.official_evidence_urls, o.application_url, o.location
+                            FROM unified_outreach_queue uq
+                            LEFT JOIN opportunities o ON uq.opportunity_id = o.opportunity_id
+                            WHERE uq.assigned_block_id = ?
+                              AND uq.queue_status = 'SCHEDULED_FOR_DISPATCH'
+                              AND uq.delivery_channel = 'SMTP_GATEWAY'
+                            ORDER BY 
+                                CASE uq.category
+                                    WHEN 'ACADEMIC_LAB' THEN 1
+                                    WHEN 'STARTUP' THEN 2
+                                    WHEN 'FRONTIER_COMPANY' THEN 3
+                                    WHEN 'INSTITUTIONAL_PROGRAM' THEN 4
+                                    ELSE 5
+                                END,
+                                uq.created_at ASC
+                            LIMIT ?;
+                        """, (target_norm, needed)).fetchall()
+
+                        for qr in q_rows:
+                            em = str(qr["recipient_email"] or "").strip().lower()
+                            if not em or em in excluded_set or em in suppressed_emails or em.endswith("@iitd.ac.in"):
+                                continue
+                            if any(c["email"].lower() == em for c in candidates):
+                                continue
+
+                            cand_dict = {
+                                "row_index": 0,
+                                "block_id": target_norm,
+                                "full_name": qr["recipient_name"] or "Faculty / Team Lead",
+                                "title": qr["title"] or "Professor / Team Lead",
+                                "department": qr["location"] or qr["category"],
+                                "email": qr["recipient_email"],
+                                "university": qr["organization_name"],
+                                "country": qr["location"] or "",
+                                "qs_rank": 999,
+                                "research_areas": qr["technical_domains"] or "",
+                                "research_overlap": qr["technical_relevance_summary"] or "",
+                                "cv_skill_project": qr["matched_project_id"] or "",
+                                "potential_contribution": qr["potential_contribution"] or "",
+                                "evidence_url": qr["official_evidence_urls"] or "",
+                                "profile_url": qr["application_url"] or "",
+                                "iana_timezone": qr["iana_timezone"] or "UTC",
+                                "outreach_eligibility": "SCHEDULED_FOR_DISPATCH",
+                                "category": qr["category"],
+                                "opportunity_id": qr["opportunity_id"],
+                                "queue_id": qr["queue_id"]
+                            }
+                            candidates.append(cand_dict)
+                            if limit and len(candidates) >= limit:
+                                break
+            except Exception as uq_err:
+                logger.debug(f"Unified outreach queue traversal non-fatal: {uq_err}")
+
         return candidates
 
     # --------------------------------------------------------------------------
@@ -631,6 +699,11 @@ class AutonomousCampaignLoop:
             ],
             "factual_grounding_verified": True
         }
+        from src.opportunities.applicant_truth_lock import ApplicantTruthLock
+        is_grounded, truth_violations = ApplicantTruthLock.validate_text(full_body)
+        if not is_grounded:
+            raise DraftValidationError(f"ApplicantTruthLock violation for {prof_row.get('email')}: {truth_violations}")
+
         is_valid, val_errs = self.validate_draft(fallback_draft, prof_row)
         if not is_valid:
             raise DraftValidationError(f"Fallback draft validation failed for {prof_row.get('email')}: {val_errs}")
@@ -694,7 +767,7 @@ class AutonomousCampaignLoop:
 
         # 5. Subject Line Check
         subj = draft["subject"]
-        subj_pattern = r"^Summer 2027 Research Internship\s*[\u2014\u2013\-—–]\s*.+\s*\|\s*IIT Delhi$"
+        subj_pattern = r"^Summer 2027 (?:Research|Engineering) Internship\s*[\u2014\u2013\-—–]\s*.+\s*\|\s*IIT Delhi$"
         if not re.match(subj_pattern, subj):
             errors.append(f"SUBJECT_FORMAT_INVALID: Subject '{subj}' violates required structure")
 
@@ -849,6 +922,16 @@ class AutonomousCampaignLoop:
                     INSERT INTO professors (professor_id, university_name, country, full_name, email, outreach_status, notes, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """, (prof_id, prof_row.get("university", ""), prof_row.get("country", ""), prof_row["full_name"], email, status_code, f"{status_code}:{message_id}", now_iso, now_iso))
+
+            if prof_row.get("queue_id"):
+                cur.execute("""
+                    UPDATE unified_outreach_queue
+                    SET queue_status = ?,
+                        smtp_message_id = ?,
+                        dispatched_at = ?,
+                        updated_at = ?
+                    WHERE queue_id = ?;
+                """, ("SENT" if not dry_run else "SIMULATED_SENT", message_id, now_iso, now_iso, prof_row["queue_id"]))
             conn.commit()
 
         # 2. Update Excel row in SAME 'Time Blocks & Distribution' sheet with retry policy

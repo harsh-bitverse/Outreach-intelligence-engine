@@ -652,6 +652,22 @@ class DynamicWorkbookSync:
                             ws_p.cell(r_idx, 9).value = "INVALID"
                         break
 
+            # 2b. Also update 'Unified Outreach Queue' sheet if present
+            if "Unified Outreach Queue" in wb.sheetnames:
+                ws_uq = wb["Unified Outreach Queue"]
+                for r_idx in range(2, ws_uq.max_row + 1):
+                    val = ws_uq.cell(r_idx, 6).value  # Column 6: Contact Email
+                    if val and str(val).strip().lower() == target_email:
+                        ws_uq.cell(r_idx, 9).value = status  # Column 9: Outreach Status
+                        if sent_at:
+                            ws_uq.cell(r_idx, 10).value = now_iso  # Column 10: Dispatched Timestamp
+                        if msg_id:
+                            ws_uq.cell(r_idx, 11).value = msg_id  # Column 11: Message-ID
+                        if delivery_status:
+                            ws_uq.cell(r_idx, 12).value = delivery_status  # Column 12: Delivery Status
+                        ws_uq.cell(r_idx, 13).value = "MONITOR_DELIVERY_IN_FLIGHT"  # Column 13: Next Action
+                        break
+
             # 3. Save atomically via temp file
             temp_path = self.workbook_path.with_suffix(f".tmp_{os.getpid()}_{int(time.time()*1000)}.xlsx")
             wb.save(str(temp_path))

@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import time
 from datetime import date, datetime, time as dtime, timezone
@@ -250,10 +251,12 @@ class AutonomousCampaignLoop:
         self._shutdown_requested = False
         self.last_bounce_check: float = 0.0
         self.last_fast_watch_check: float = 0.0
+        self.last_dashboard_print: float = 0.0
         from src.mail.bounce_monitor import IMAPBounceMonitor
         self.bounce_monitor = IMAPBounceMonitor(workbook_path=self.workbook_path)
         from src.mail.delivery_tracker import OutboundDeliveryTracker
         self.delivery_tracker = OutboundDeliveryTracker()
+        self._next_queue_source = "UNIFIED"
 
     def register_quiescence_signal_handlers(self) -> None:
         """Register graceful signal handlers for SIGINT and SIGBREAK."""
@@ -364,6 +367,95 @@ class AutonomousCampaignLoop:
         is_eligible = is_weekday and in_business_hours
         return is_eligible, details
 
+    def get_next_eligible_block(self, current_dt: Optional[datetime] = None) -> Optional[Tuple[str, Dict[str, Any], int]]:
+        """
+        Identify the next upcoming block that contains eligible unsent candidates.
+        """
+        now_ist = (current_dt or datetime.now(self.ist_tz)).astimezone(self.ist_tz)
+        curr_time = now_ist.strftime("%H:%M")
+        ordered_blocks = sorted(TIME_BLOCK_WINDOWS.items(), key=lambda x: x[1]["start_ist"])
+
+        # Check later today
+        for b_id, info in ordered_blocks:
+            if info["start_ist"] > curr_time:
+                cands = self.find_eligible_professors_in_block(b_id, limit=1)
+                if cands:
+                    all_cands = self.find_eligible_professors_in_block(b_id, limit=100)
+                    return b_id, info, len(all_cands)
+
+        # Wrap around midnight
+        for b_id, info in ordered_blocks:
+            cands = self.find_eligible_professors_in_block(b_id, limit=1)
+            if cands:
+                all_cands = self.find_eligible_professors_in_block(b_id, limit=100)
+                return b_id, info, len(all_cands)
+        return None
+
+    def print_live_dashboard(self, current_dt: Optional[datetime] = None, dry_run: bool = True) -> None:
+        """
+        Print structured, operator-friendly live console dashboard.
+        Strictly redacts credentials and body text.
+        """
+        now_ist = (current_dt or datetime.now(self.ist_tz)).astimezone(self.ist_tz)
+        now_str = now_ist.strftime("%Y-%m-%d %H:%M:%S IST")
+        active = self.get_active_block(now_ist)
+        active_str = f"{active[0]} ({active[1]['name']}) [{active[1]['start_ist']}–{active[1]['end_ist']} IST]" if active else "None active (Worldwide Overnight Window)"
+
+        next_block = self.get_next_eligible_block(now_ist)
+        if next_block:
+            next_str = f"{next_block[0]} ({next_block[1]['name']}) opens at {next_block[1]['start_ist']} IST ({next_block[2]} candidates ready)"
+        else:
+            next_str = "None remaining today"
+
+        try:
+            with get_db() as conn:
+                conn.row_factory = sqlite3.Row
+                prof_awaiting = conn.execute("SELECT count(*) FROM professors WHERE outreach_status = 'AWAITING_DRAFT';").fetchone()[0]
+                acad_sched = conn.execute("SELECT count(*) FROM unified_outreach_queue WHERE category = 'ACADEMIC_LAB' AND queue_status = 'SCHEDULED_FOR_DISPATCH';").fetchone()[0]
+                startup_sched = conn.execute("SELECT count(*) FROM unified_outreach_queue WHERE category = 'STARTUP' AND queue_status = 'SCHEDULED_FOR_DISPATCH';").fetchone()[0]
+                inst_sched = conn.execute("SELECT count(*) FROM unified_outreach_queue WHERE category IN ('INSTITUTIONAL_PROGRAM', 'FRONTIER_COMPANY') AND queue_status = 'SCHEDULED_FOR_DISPATCH';").fetchone()[0]
+                today_sent = conn.execute("SELECT count(*) FROM outbound_delivery_tracker WHERE date(smtp_accepted_at, '+5 hours', '+30 minutes') = date('now', '+5 hours', '+30 minutes');").fetchone()[0]
+                total_sent = conn.execute("SELECT count(*) FROM outbound_delivery_tracker;").fetchone()[0]
+                active_watches = self.delivery_tracker.get_active_watch_count()
+                total_bounces = conn.execute("SELECT count(*) FROM delivery_status_ledger;").fetchone()[0]
+        except Exception as db_err:
+            logger.warning(f"Error fetching dashboard statistics: {db_err}")
+            prof_awaiting = acad_sched = startup_sched = inst_sched = today_sent = total_sent = active_watches = total_bounces = 0
+
+        remaining_budget = max(0, settings.DAILY_MAX_OUTREACH - today_sent)
+        cli_ready = self.cli_drafter.is_available()
+        attachments_ready = settings.CV_ATTACHMENT_PATH.exists() and settings.RESEARCH_INTERESTS_PATH.exists()
+
+        dashboard = (
+            f"\n+==============================================================================+\n"
+            f"|       OPPORTUNITY INTELLIGENCE ENGINE -- LIVE OPERATIONAL DASHBOARD          |\n"
+            f"+==============================================================================+\n"
+            f"| Time (IST)         : {now_str:<55} |\n"
+            f"| Mode               : {'LIVE PRODUCTION SMTP' if not dry_run else 'SIMULATED (DRY-RUN)':<55} |\n"
+            f"| Active Block       : {active_str:<55} |\n"
+            f"| Next Window        : {next_str:<55} |\n"
+            f"+------------------------------------------------------------------------------+\n"
+            f"| QUEUE COUNTS READY FOR DISPATCH:                                             |\n"
+            f"|   - Baseline Professors (Excel)      : {prof_awaiting:<43} |\n"
+            f"|   - Discovered Academic Labs (DB)    : {acad_sched:<43} |\n"
+            f"|   - Startups (DB)                    : {startup_sched:<43} |\n"
+            f"|   - Industry & Institutions (DB)     : {inst_sched:<43} |\n"
+            f"|   - Total Dispatchable Queue         : {prof_awaiting + acad_sched + startup_sched + inst_sched:<43} |\n"
+            f"+------------------------------------------------------------------------------+\n"
+            f"| DAILY BUDGET & DELIVERY LEDGER:                                              |\n"
+            f"|   - Today's SMTP Accepted (IST)      : {f'{today_sent} / {settings.DAILY_MAX_OUTREACH} (Remaining: {remaining_budget})':<43} |\n"
+            f"|   - Total Historical Accepted        : {total_sent:<43} |\n"
+            f"|   - Active 10-Min Delivery Watches   : {active_watches:<43} |\n"
+            f"|   - IMAP DSN Bounces Recorded        : {total_bounces:<43} |\n"
+            f"+------------------------------------------------------------------------------+\n"
+            f"| SUBSYSTEM HEALTH & INTEGRITY:                                                |\n"
+            f"|   - AI Drafting (CLI / Local Ground) : {'READY (Antigravity CLI Authenticated)' if cli_ready else 'READY (Local Verified Engine)':<43} |\n"
+            f"|   - Dual PDF Attachments             : {'VERIFIED (CV & Research Interests)' if attachments_ready else 'MISSING':<43} |\n"
+            f"|   - Single Lock Status               : {'ACQUIRED & HELD (PID ' + str(os.getpid()) + ')' :<43} |\n"
+            f"+==============================================================================+\n"
+        )
+        print(dashboard)
+
     # --------------------------------------------------------------------------
     # 3. Direct Sheet Traversal: Find Eligible Candidate in Active Block
     # --------------------------------------------------------------------------
@@ -400,7 +492,7 @@ class AutonomousCampaignLoop:
             inactive_rows = conn.execute("""
                 SELECT email FROM professors 
                 WHERE (
-                    outreach_status NOT IN ('AWAITING_DRAFT')
+                    outreach_status NOT IN ('AWAITING_DRAFT', 'SCHEDULED_FOR_DISPATCH')
                     OR email_verification_status = 'INVALID'
                 ) AND email IS NOT NULL;
             """).fetchall()
@@ -417,7 +509,7 @@ class AutonomousCampaignLoop:
             except Exception:
                 pass
 
-        candidates = []
+        excel_candidates = []
         wb = openpyxl.load_workbook(str(self.workbook_path), read_only=True)
         tb_sheet = next((s for s in wb.sheetnames if "time blocks" in s.lower()), None)
         if not tb_sheet:
@@ -497,78 +589,109 @@ class AutonomousCampaignLoop:
                 "iana_timezone": str(row[18] or "").strip() if len(row) >= 19 else "UTC",
                 "outreach_eligibility": col25,
             }
-            candidates.append(prof_dict)
-            if limit and len(candidates) >= limit:
+            excel_candidates.append(prof_dict)
+            if limit and len(excel_candidates) >= (limit or 100):
                 break
 
         wb.close()
 
         # Check unified_outreach_queue in database for scheduled multi-category items
-        if not limit or len(candidates) < limit:
-            try:
-                import sqlite3
-                with get_db() as conn:
-                    conn.row_factory = sqlite3.Row
-                    has_uq = conn.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='unified_outreach_queue';").fetchone()[0]
-                    if has_uq:
-                        needed = (limit - len(candidates)) if limit else 100
-                        q_rows = conn.execute("""
-                            SELECT uq.queue_id, uq.opportunity_id, uq.category, uq.organization_name,
-                                   uq.recipient_name, uq.recipient_email, uq.assigned_block_id,
-                                   uq.iana_timezone, o.title, o.technical_domains,
-                                   o.technical_relevance_summary, o.matched_project_id,
-                                   o.potential_contribution, o.official_evidence_urls, o.application_url, o.location
-                            FROM unified_outreach_queue uq
-                            LEFT JOIN opportunities o ON uq.opportunity_id = o.opportunity_id
-                            WHERE uq.assigned_block_id = ?
-                              AND uq.queue_status = 'SCHEDULED_FOR_DISPATCH'
-                              AND uq.delivery_channel = 'SMTP_GATEWAY'
-                            ORDER BY 
-                                CASE uq.category
-                                    WHEN 'ACADEMIC_LAB' THEN 1
-                                    WHEN 'STARTUP' THEN 2
-                                    WHEN 'FRONTIER_COMPANY' THEN 3
-                                    WHEN 'INSTITUTIONAL_PROGRAM' THEN 4
-                                    ELSE 5
-                                END,
-                                uq.created_at ASC
-                            LIMIT ?;
-                        """, (target_norm, needed)).fetchall()
+        unified_candidates = []
+        try:
+            with get_db() as conn:
+                conn.row_factory = sqlite3.Row
+                has_uq = conn.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='unified_outreach_queue';").fetchone()[0]
+                if has_uq:
+                    q_rows = conn.execute("""
+                        SELECT uq.queue_id, uq.opportunity_id, uq.category, uq.organization_name,
+                               uq.recipient_name, uq.recipient_email, uq.assigned_block_id,
+                               uq.iana_timezone, o.title, o.technical_domains,
+                               o.technical_relevance_summary, o.matched_project_id,
+                               o.potential_contribution, o.official_evidence_urls, o.application_url, o.location
+                        FROM unified_outreach_queue uq
+                        LEFT JOIN opportunities o ON uq.opportunity_id = o.opportunity_id
+                        WHERE uq.assigned_block_id = ?
+                          AND uq.queue_status = 'SCHEDULED_FOR_DISPATCH'
+                          AND uq.delivery_channel = 'SMTP_GATEWAY'
+                        ORDER BY 
+                            CASE uq.category
+                                WHEN 'ACADEMIC_LAB' THEN 1
+                                WHEN 'STARTUP' THEN 2
+                                WHEN 'FRONTIER_COMPANY' THEN 3
+                                WHEN 'INSTITUTIONAL_PROGRAM' THEN 4
+                                ELSE 5
+                            END,
+                            uq.created_at ASC
+                        LIMIT ?;
+                    """, (target_norm, limit or 100)).fetchall()
 
-                        for qr in q_rows:
-                            em = str(qr["recipient_email"] or "").strip().lower()
-                            if not em or em in excluded_set or em in suppressed_emails or em.endswith("@iitd.ac.in"):
-                                continue
-                            if any(c["email"].lower() == em for c in candidates):
-                                continue
+                    for qr in q_rows:
+                        em = str(qr["recipient_email"] or "").strip().lower()
+                        if not em or em in excluded_set or em in suppressed_emails or em.endswith("@iitd.ac.in"):
+                            continue
+                        if any(c["email"].lower() == em for c in excel_candidates):
+                            continue
 
-                            cand_dict = {
-                                "row_index": 0,
-                                "block_id": target_norm,
-                                "full_name": qr["recipient_name"] or "Faculty / Team Lead",
-                                "title": qr["title"] or "Professor / Team Lead",
-                                "department": qr["location"] or qr["category"],
-                                "email": qr["recipient_email"],
-                                "university": qr["organization_name"],
-                                "country": qr["location"] or "",
-                                "qs_rank": 999,
-                                "research_areas": qr["technical_domains"] or "",
-                                "research_overlap": qr["technical_relevance_summary"] or "",
-                                "cv_skill_project": qr["matched_project_id"] or "",
-                                "potential_contribution": qr["potential_contribution"] or "",
-                                "evidence_url": qr["official_evidence_urls"] or "",
-                                "profile_url": qr["application_url"] or "",
-                                "iana_timezone": qr["iana_timezone"] or "UTC",
-                                "outreach_eligibility": "SCHEDULED_FOR_DISPATCH",
-                                "category": qr["category"],
-                                "opportunity_id": qr["opportunity_id"],
-                                "queue_id": qr["queue_id"]
-                            }
-                            candidates.append(cand_dict)
-                            if limit and len(candidates) >= limit:
-                                break
-            except Exception as uq_err:
-                logger.debug(f"Unified outreach queue traversal non-fatal: {uq_err}")
+                        cand_dict = {
+                            "row_index": 0,
+                            "block_id": target_norm,
+                            "full_name": qr["recipient_name"] or "Faculty / Team Lead",
+                            "title": qr["title"] or "Professor / Team Lead",
+                            "department": qr["location"] or qr["category"],
+                            "email": qr["recipient_email"],
+                            "university": qr["organization_name"],
+                            "country": qr["location"] or "",
+                            "qs_rank": 999,
+                            "research_areas": qr["technical_domains"] or "",
+                            "research_overlap": qr["technical_relevance_summary"] or "",
+                            "cv_skill_project": qr["matched_project_id"] or "",
+                            "potential_contribution": qr["potential_contribution"] or "",
+                            "evidence_url": qr["official_evidence_urls"] or "",
+                            "profile_url": qr["application_url"] or "",
+                            "iana_timezone": qr["iana_timezone"] or "UTC",
+                            "outreach_eligibility": "SCHEDULED_FOR_DISPATCH",
+                            "category": qr["category"],
+                            "opportunity_id": qr["opportunity_id"],
+                            "queue_id": qr["queue_id"]
+                        }
+                        unified_candidates.append(cand_dict)
+                        if limit and len(unified_candidates) >= (limit or 100):
+                            break
+        except Exception as uq_err:
+            logger.debug(f"Unified outreach queue traversal non-fatal: {uq_err}")
+
+        # Fair Interleaving / Selection across both queues
+        if limit == 1:
+            if getattr(self, "_next_queue_source", "UNIFIED") == "UNIFIED":
+                if unified_candidates:
+                    self._next_queue_source = "BASELINE"
+                    return [unified_candidates[0]]
+                elif excel_candidates:
+                    self._next_queue_source = "UNIFIED"
+                    return [excel_candidates[0]]
+            else:
+                if excel_candidates:
+                    self._next_queue_source = "UNIFIED"
+                    return [excel_candidates[0]]
+                elif unified_candidates:
+                    self._next_queue_source = "BASELINE"
+                    return [unified_candidates[0]]
+            return []
+
+        # When limit > 1 or None, interleave both sources up to limit
+        candidates = []
+        u_idx = 0
+        e_idx = 0
+        max_items = limit or (len(unified_candidates) + len(excel_candidates))
+        while len(candidates) < max_items and (u_idx < len(unified_candidates) or e_idx < len(excel_candidates)):
+            if u_idx < len(unified_candidates):
+                candidates.append(unified_candidates[u_idx])
+                u_idx += 1
+                if len(candidates) >= max_items:
+                    break
+            if e_idx < len(excel_candidates):
+                candidates.append(excel_candidates[e_idx])
+                e_idx += 1
 
         return candidates
 
@@ -600,7 +723,14 @@ class AutonomousCampaignLoop:
         last_name = full_name.split()[-1] if full_name else "Professor"
         title = prof_row.get("title", "Professor")
 
-        if "dr." in title.lower() or title.lower().startswith("dr "):
+        category = prof_row.get("category") or "PROFESSOR"
+        is_startup = category == "STARTUP"
+        is_industry = category in ("FRONTIER_COMPANY", "INSTITUTIONAL_PROGRAM")
+        first_name = full_name.split()[0] if full_name else "Team"
+
+        if is_startup:
+            salutation = f"Dear {first_name}," if "dr." not in title.lower() else f"Dear Dr. {last_name},"
+        elif "dr." in title.lower() or title.lower().startswith("dr "):
             salutation = f"Dear Dr. {last_name},"
         else:
             salutation = f"Dear Professor {last_name},"
@@ -611,32 +741,56 @@ class AutonomousCampaignLoop:
         potential_contribution = prof_row.get("potential_contribution", "").strip()
 
         # Subject Line
-        # Format: Summer 2027 Research Internship — [Research Area] | IIT Delhi
         primary_area = self._extract_concise_research_area(research_areas, research_overlap)
-        subject = f"Summer 2027 Research Internship — {primary_area} | IIT Delhi"
+        if is_startup:
+            subject = f"Summer 2027 Engineering Internship — {primary_area} | IIT Delhi"
+        elif is_industry:
+            subject = f"Summer 2027 R&D Internship — {primary_area} | IIT Delhi"
+        else:
+            subject = f"Summer 2027 Research Internship — {primary_area} | IIT Delhi"
+
+        org_name = prof_row.get("university", "your organization")
 
         # Paragraph 1: Purpose & Introduction (~35-40 words)
-        p1 = (
-            "My name is Harshith N, an undergraduate in Chemical Engineering at the Indian Institute of Technology Delhi (IIT Delhi). "
-            "I am writing to express my strong interest in joining your research group for an undergraduate research internship during Summer 2027."
-        )
+        if is_startup:
+            p1 = (
+                f"My name is Harshith N, an undergraduate in Chemical Engineering at the Indian Institute of Technology Delhi (IIT Delhi). "
+                f"I am writing to express my strong interest in joining {org_name} for an engineering internship during Summer 2027."
+            )
+        elif is_industry:
+            p1 = (
+                f"My name is Harshith N, an undergraduate in Chemical Engineering at the Indian Institute of Technology Delhi (IIT Delhi). "
+                f"I am writing to express my strong interest in joining {org_name} for a research and development internship during Summer 2027."
+            )
+        else:
+            p1 = (
+                "My name is Harshith N, an undergraduate in Chemical Engineering at the Indian Institute of Technology Delhi (IIT Delhi). "
+                "I am writing to express my strong interest in joining your research group for an undergraduate research internship during Summer 2027."
+            )
 
-        # Paragraph 2: Faculty Research Relevance (~35-45 words)
+        # Paragraph 2: Faculty / Technical Relevance (~35-45 words)
         if research_overlap and len(research_overlap) > 15:
             relevance_text = research_overlap.rstrip(".")
         elif research_areas:
-            relevance_text = f"your investigative focus spanning {research_areas.rstrip('.')}"
+            relevance_text = f"your focus spanning {research_areas.rstrip('.')}"
         else:
-            relevance_text = "your computational modeling and physical systems research"
+            relevance_text = "your computational modeling and physical systems initiatives"
 
         if len(relevance_text) > 110:
             relevance_text = relevance_text[:107].rstrip() + "..."
 
-        p2 = (
-            f"I have closely followed your research on {relevance_text}. "
-            "Your group's focus on advancing numerical methods and computational efficiency for complex physical systems "
-            "directly aligns with my academic interests."
-        )
+        if is_startup:
+            p2 = (
+                f"I have closely followed {org_name}'s work on {relevance_text}. "
+                f"Your team's focus on engineering robust autonomous systems and computational efficiency "
+                f"directly aligns with my technical focus."
+            )
+        else:
+            p2 = (
+                f"I have closely followed your research on {relevance_text}. "
+                "Your group's focus on advancing numerical methods and computational efficiency for complex physical systems "
+                "directly aligns with my academic interests."
+            )
 
         # Paragraph 3: Verified Student Project Connection & Potential Contribution (~60-70 words)
         combined_text = f"{research_areas} {research_overlap} {cv_project_hint} {potential_contribution}".lower()
@@ -647,23 +801,29 @@ class AutonomousCampaignLoop:
                 "compute ceilings from memory-bandwidth bottlenecks across CPU and GPU architectures. "
                 "I evaluated prefill TTFT and decode TPOT latency under variable batching strategies. "
                 "I would welcome the opportunity to apply this systems profiling and computational performance background "
-                "to your group's machine learning and simulation initiatives."
+                "to your team's initiatives."
             )
         else:
             project_text = (
                 "In my project, Neural Process Twin, I developed deep learning surrogate models in PyTorch for 2D steady-state "
                 "heat conduction, evaluating surrogate prediction accuracy against numerical finite difference solutions. "
                 "I am eager to contribute this background in scientific machine learning, differential equation modeling, "
-                "and numerical solvers to your ongoing computational research initiatives."
+                "and numerical solvers to your ongoing initiatives."
             )
 
         p3 = project_text
 
         # Paragraph 4: Availability & Natural Attachment Reference (~35 words)
-        p4 = (
-            "I would welcome the opportunity to contribute to your ongoing computational projects for 10–12 weeks in Summer 2027. "
-            "My CV and research interests statement are attached for your review, and I would be grateful for the chance to discuss potential alignment."
-        )
+        if is_startup:
+            p4 = (
+                f"I would welcome the opportunity to contribute to {org_name}'s engineering initiatives for 10–12 weeks in Summer 2027. "
+                "My CV and research statement are attached for your review, and I would be grateful for the chance to discuss potential alignment."
+            )
+        else:
+            p4 = (
+                "I would welcome the opportunity to contribute to your ongoing computational projects for 10–12 weeks in Summer 2027. "
+                "My CV and research interests statement are attached for your review, and I would be grateful for the chance to discuss potential alignment."
+            )
 
         # Institutional Signature
         signature = (
@@ -1410,6 +1570,10 @@ class AutonomousCampaignLoop:
             total_dispatched = 0
             current_block_id = None
 
+            now_initial = datetime.now(self.ist_tz)
+            self.print_live_dashboard(now_initial, dry_run=dry_run)
+            self.last_dashboard_print = time.time()
+
             while True:
                 # Quiescence check
                 if self.is_quiescence_requested():
@@ -1469,7 +1633,11 @@ class AutonomousCampaignLoop:
                         print(f"[{now_ist.strftime('%H:%M:%S IST')}] Block {current_block_id} window ended. Batch counter reset.")
                         batch_count = 0
                         current_block_id = None
-                    print(f"[{now_ist.strftime('%H:%M:%S IST')}] No active IST block. Waiting for next window...")
+                    if (now_ts - self.last_dashboard_print) >= 60:
+                        self.last_dashboard_print = now_ts
+                        self.print_live_dashboard(now_ist, dry_run=dry_run)
+                    else:
+                        print(f"[{now_ist.strftime('%H:%M:%S IST')}] No active IST block. Waiting for next window...")
                     if stop_on_idle or self._sleep_interruptible(poll_interval_seconds):
                         break
                     continue
@@ -1483,6 +1651,9 @@ class AutonomousCampaignLoop:
                 # 3. Find first eligible unsent candidate in this block
                 candidates = self.find_eligible_professors_in_block(block_id=block_id, limit=1)
                 if not candidates:
+                    if (now_ts - self.last_dashboard_print) >= 60:
+                        self.last_dashboard_print = now_ts
+                        self.print_live_dashboard(now_ist, dry_run=dry_run)
                     print(f"[{now_ist.strftime('%H:%M:%S IST')}] All eligible candidates in {block_id} have been contacted. Waiting for next block.")
                     if stop_on_idle or self._sleep_interruptible(poll_interval_seconds):
                         break

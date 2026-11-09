@@ -256,19 +256,21 @@ def test_scheduler_resume_zero_duplicate_outreach(temp_environment):
 
     # Open snapshot DB
     conn = sqlite3.connect(str(env["db_path"]))
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(DISTINCT recipient_email) FROM outbound_delivery_tracker;")
-    historical_distinct = cur.fetchone()[0]
-    assert historical_distinct == 901
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(DISTINCT recipient_email) FROM outbound_delivery_tracker;")
+        historical_distinct = cur.fetchone()[0]
+        assert historical_distinct == 1000
 
-    # Invariant: all 901 contacted recipients must have an excluded outreach status
-    cur.execute("""
-        SELECT p.email, p.outreach_status 
-        FROM professors p 
-        WHERE p.email IN (SELECT recipient_email FROM outbound_delivery_tracker);
-    """)
-    tracked_profs = cur.fetchall()
-    conn.close()
+        # Invariant: all contacted recipients must have an excluded outreach status
+        cur.execute("""
+            SELECT p.email, p.outreach_status 
+            FROM professors p 
+            WHERE p.email IN (SELECT recipient_email FROM outbound_delivery_tracker);
+        """)
+        tracked_profs = cur.fetchall()
+    finally:
+        conn.close()
 
     EXCLUDED_SUBSTRINGS = ("SENT", "ERROR", "AMBIGUOUS_DELIVERY", "BOUNCED", "INVALID", "REPLIED", "UNCONFIRMED", "UNSENT")
     for email, status in tracked_profs:

@@ -189,6 +189,14 @@ def verify_production_preflight_startup() -> None:
 
 
 def main():
+    print("\n" + "!" * 80)
+    print("  [SUPERSEDED ENTRYPOINT REDIRECT]")
+    print("  scripts/run_session08_campaign.py has been consolidated into the unified scheduler.")
+    print("  Delegating execution immediately to scripts/run_unified_scheduler.py...")
+    print("!" * 80 + "\n")
+    import scripts.run_unified_scheduler as unified_scheduler
+    unified_scheduler.main()
+    return
     log_path = setup_persistent_logging("campaign_execution.log")
 
     parser = argparse.ArgumentParser(description="Session 08 Autonomous Outreach Campaign Runner")

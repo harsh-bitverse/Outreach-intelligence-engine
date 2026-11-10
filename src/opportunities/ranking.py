@@ -73,6 +73,17 @@ class OpportunityRanker:
             "weight": 9.0
         },
         {
+            "project_id": "Frontier Intelligent Hardware & Computer Architecture Research Alignment",
+            "keywords": [
+                "in-memory computing", "memristor", "memristive", "analog ai", "neuromorphic",
+                "compute-in-memory", "cim", "ai chip", "emerging nonvolatile memory", "photonic computing",
+                "optical ai", "spintronic", "reconfigurable accelerator", "heterogeneous accelerator",
+                "energy-efficient ai hardware", "hardware/software co-design", "hw/sw co-design", "edge ai",
+                "brain-inspired computing", "neuromorphic hardware"
+            ],
+            "weight": 11.0
+        },
+        {
             "project_id": "Peng-Robinson Real-Gas Cubic Equation of State Solver",
             "keywords": [
                 "c++17", "thermodynamics", "chemical engineering", "materials", "equation of state",
@@ -81,6 +92,67 @@ class OpportunityRanker:
             "weight": 8.0
         }
     ]
+
+    @classmethod
+    def classify_alignment_tier(cls, opp: Opportunity) -> str:
+        """
+        Classifies opportunity into one of the 7 standardized research alignment tiers:
+        - CORE_AI_ML
+        - AI_SYSTEMS_SOFTWARE
+        - FRONTIER_AI_HARDWARE
+        - ROBOTICS_EMBODIED_AI
+        - SCIENTIFIC_ML
+        - INTERDISCIPLINARY_AI_APPLICATION
+        - ADJACENT_COMPUTATIONAL_RESEARCH
+        """
+        text = f"{' '.join(opp.technical_domains or [])} {opp.technical_relevance_summary or ''} {opp.title or ''}".lower()
+        
+        # 1. Frontier Hardware
+        hw_keywords = [
+            "in-memory computing", "memristor", "analog ai", "neuromorphic", "compute-in-memory",
+            "ai chip", "nonvolatile memory", "photonic", "spintronic", "co-design", "edge ai",
+            "brain-inspired", "rram", "mram", "hardware accelerator"
+        ]
+        if any(k in text for k in hw_keywords) or bool(re.search(r"\bcim\b", text)):
+            return "FRONTIER_AI_HARDWARE"
+            
+        # 2. Robotics & Embodied Intelligence
+        if any(k in text for k in [
+            "robotics", "embodied", "drone", "uav", "microdrone", "kinematics", "slam", "ros",
+            "autonomous flight", "manipulation", "locomotion", "spatial intelligence", "bipedal"
+        ]):
+            return "ROBOTICS_EMBODIED_AI"
+            
+        # 3. Scientific ML
+        if any(k in text for k in [
+            "sciml", "scientific ml", "scientific machine learning", "pinn", "physics-informed",
+            "neural operator", "fno", "deeponet", "surrogate model", "pde", "numerical solver"
+        ]):
+            return "SCIENTIFIC_ML"
+            
+        # 4. AI Systems & Software
+        if any(k in text for k in [
+            "llm inference", "inference optimization", "inference system", "triton", "cuda",
+            "gpu kernel", "onnx", "compiler", "serving", "hpc", "distributed computing", "agentic", "ai infra"
+        ]):
+            return "AI_SYSTEMS_SOFTWARE"
+            
+        # 5. Core AI/ML
+        if any(k in text for k in [
+            "foundation model", "deep learning", "neural network", "reinforcement learning",
+            "multimodal", "generative ai", "continual learning", "representation learning", "machine learning", "ai/ml"
+        ]):
+            return "CORE_AI_ML"
+            
+        # 6. Interdisciplinary AI Application
+        if any(k in text for k in [
+            "chemical engineering", "materials science", "computational biology", "energy systems",
+            "fluid mechanics", "cfd", "thermodynamics", "process systems", "transport phenomena"
+        ]) and any(k in text for k in ["ai", "ml", "learning", "computational", "neural", "simulation"]):
+            return "INTERDISCIPLINARY_AI_APPLICATION"
+            
+        # 7. Adjacent Computational Research
+        return "ADJACENT_COMPUTATIONAL_RESEARCH"
 
     @classmethod
     def score_opportunity(cls, opp: Opportunity, org: Optional[Any] = None) -> Opportunity:
@@ -155,6 +227,8 @@ class OpportunityRanker:
 
         tier = cls.compute_priority_tier(total, is_strictly_ineligible)
         opp.priority_tier = tier
+        if not opp.academic_classification or opp.academic_classification in ["PROSPECTIVE_INQUIRY", "PROSPECTIVE_OUTREACH_TARGET", "NEEDS_VERIFICATION"]:
+            opp.academic_classification = cls.classify_alignment_tier(opp)
 
         return total, breakdown, discovery_status, matched_project
 

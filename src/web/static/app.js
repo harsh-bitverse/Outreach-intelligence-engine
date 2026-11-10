@@ -401,7 +401,7 @@ class OperationsDashboard {
           <td><span class="badge badge-neutral">${o.opportunity_type}</span></td>
           <td><code class="font-mono">${o.application_route || 'DIRECT_FACULTY_PI'}</code></td>
           <td><span class="badge badge-safe">${Math.round((o.verification_confidence || 0.95) * 100)}%</span></td>
-          <td><a href="${o.official_evidence_urls || '#'}" target="_blank" style="color:#60A5FA; text-decoration:none;">View Evidence ↗</a></td>
+          <td><button class="btn btn-sm btn-outline-primary" onclick="app.openEvidenceModal('opportunity', '${o.opportunity_id}')" style="padding:2px 8px; font-size:11px;">View Evidence</button></td>
         </tr>
       `).join('');
     }
@@ -470,12 +470,14 @@ class OperationsDashboard {
           <td>${p.compensation_details || 'Stipend + Housing'}</td>
           <td><span style="color:#9CA3AF">${p.required_documents || 'Statement, CV, Transcripts'}</span></td>
           <td><a href="${p.application_url || '#'}" target="_blank" style="color:#60A5FA; text-decoration:none;">Open Portal ↗</a></td>
+          <td><button class="btn btn-sm btn-primary" onclick="app.openPortalModal('${p.opportunity_id}')" style="padding:4px 8px; font-size:11px;">View / Manage</button></td>
         </tr>
       `).join('');
     }
   }
 
-  renderOutcomes(data) {
+  async renderOutcomes(data) {
+    this.fetchBounceRecovery();
     // 1. Status Banner & Quarantine Alerts
     const statusBanner = document.getElementById('outcomesStatusBanner');
     if (statusBanner) {
@@ -672,4 +674,283 @@ class OperationsDashboard {
 document.addEventListener('DOMContentLoaded', () => {
   window.app = new OperationsDashboard();
   window.app.init();
+
+
+  // --------------------------------------------------------------------------
+  // Evidence Modal Handlers (Phase 7)
+  // --------------------------------------------------------------------------
+  async openEvidenceModal(recordType, recordId) {
+    const modal = document.getElementById('evidenceModal');
+    if (!modal) return;
+    
+    document.getElementById('evRecordType').textContent = recordType.toUpperCase();
+    document.getElementById('evTitle').textContent = 'Loading Evidence...';
+    document.getElementById('evOrg').textContent = recordId;
+    document.getElementById('evStatusBanner').innerHTML = '';
+    document.getElementById('evSourceUrl').textContent = 'Retrieving primary source...';
+    document.getElementById('evDetailsGrid').innerHTML = 'Inspecting database provenance...';
+    modal.style.display = 'flex';
+
+    try {
+      const data = await this.fetchEndpoint(`/api/dashboard/evidence/${recordType}/${encodeURIComponent(recordId)}`);
+      if (data) {
+        document.getElementById('evTitle').textContent = data.title || 'Evidence Record';
+        document.getElementById('evOrg').textContent = data.organization || '';
+        
+        const statusBanner = document.getElementById('evStatusBanner');
+        if (data.status === 'VERIFIED_SOURCE_AVAILABLE') {
+          statusBanner.innerHTML = `<span class="badge badge-safe">✓ VERIFIED OFFICIAL CITATION</span> <span style="font-size:12px; color:#10B981; margin-left:8px;">Retrieved: ${data.evidence_date || 'Active'}</span>`;
+        } else {
+          statusBanner.innerHTML = `<span class="badge badge-warning">⚠ SOURCE_NOT_AVAILABLE</span> <span style="font-size:12px; color:#F59E0B; margin-left:8px;">Flagged for Autonomous Re-verification</span>`;
+        }
+
+        const srcDiv = document.getElementById('evSourceUrl');
+        if (data.source_url) {
+          srcDiv.innerHTML = `<a href="${data.source_url}" target="_blank" style="color:#60A5FA; text-decoration:underline;">${data.source_url}</a>`;
+        } else {
+          srcDiv.innerHTML = `<span style="color:#94A3B8;">Primary URL unarchived. Record flagged in verification queue.</span>`;
+        }
+
+        const detailsDiv = document.getElementById('evDetailsGrid');
+        if (data.details) {
+          detailsDiv.innerHTML = Object.entries(data.details).map(([k, v]) => `
+            <div style="margin-bottom:6px;">
+              <strong style="color:#94A3B8; font-size:11px; text-transform:uppercase;">${k.replace(/_/g, ' ')}:</strong>
+              <div style="color:#F8FAFC; margin-top:2px;">${typeof v === 'object' ? JSON.stringify(v) : v}</div>
+            </div>
+          `).join('');
+        } else {
+          detailsDiv.innerHTML = data.message || 'No additional metadata available.';
+        }
+      }
+    } catch (e) {
+      document.getElementById('evTitle').textContent = 'Error Loading Evidence';
+      document.getElementById('evDetailsGrid').textContent = String(e);
+    }
+  }
+
+  closeEvidenceModal() {
+    const modal = document.getElementById('evidenceModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  // --------------------------------------------------------------------------
+  // Portal Application View / Manage Handlers (Phase 5)
+  // --------------------------------------------------------------------------
+  async openPortalModal(oppId) {
+    this.currentPortalOppId = oppId;
+    const modal = document.getElementById('portalModal');
+    if (!modal) return;
+
+    document.getElementById('pmTitle').textContent = 'Loading Application Details...';
+    document.getElementById('pmOrg').textContent = oppId;
+    document.getElementById('pmVaultList').textContent = 'Checking private vault...';
+    document.getElementById('pmTailoredBox').textContent = 'Loading tailored state...';
+    document.getElementById('pmReceiptBox').innerHTML = '';
+    modal.style.display = 'flex';
+
+    await this.refreshPortalModalData(oppId);
+  }
+
+  async refreshPortalModalData(oppId) {
+    try {
+      const data = await this.fetchEndpoint(`/api/dashboard/portals/${encodeURIComponent(oppId)}`);
+      if (!data) return;
+
+      document.getElementById('pmTier').textContent = data.portal_compatibility_tier;
+      document.getElementById('pmStatus').textContent = data.current_form_status;
+      document.getElementById('pmTitle').textContent = data.position_title;
+      document.getElementById('pmOrg').textContent = data.organization_name;
+
+      document.getElementById('pmUrl').innerHTML = `<a href="${data.application_url}" target="_blank" style="color:#60A5FA;">${data.application_url}</a>`;
+      document.getElementById('pmCompDeadline').textContent = `${data.application_deadline} • ${data.compensation_details}`;
+      document.getElementById('pmEligibility').textContent = data.eligibility_criteria;
+      document.getElementById('pmReqDocs').textContent = data.required_documents;
+
+      document.getElementById('pmAdditionalInfo').value = data.additional_information || '';
+      document.getElementById('pmAuthCheck').checked = data.submission_authorized;
+
+      // Vault documents
+      const vaultDiv = document.getElementById('pmVaultList');
+      if (data.uploaded_vault_documents && data.uploaded_vault_documents.length > 0) {
+        vaultDiv.innerHTML = data.uploaded_vault_documents.map(d => `
+          <div style="display:flex; justify-content:space-between; margin-bottom:4px; color:#F8FAFC;">
+            <span>📄 <strong>${d.filename}</strong> (${Math.round(d.size_bytes / 1024)} KB)</span>
+            <span style="color:#10B981; font-size:11px;">MAPPED TO APPLICATION</span>
+          </div>
+        `).join('');
+      } else {
+        vaultDiv.innerHTML = `<span style="color:#94A3B8;">No application-specific files uploaded yet. Automatically falling back to baseline verified CV (<code>Harshith_N_Research_CV_Summer2027.pdf</code>).</span>`;
+      }
+
+      // Tailored responses
+      const tailoredDiv = document.getElementById('pmTailoredBox');
+      if (data.tailored_responses && data.tailored_responses.statement_of_purpose) {
+        tailoredDiv.innerHTML = `
+          <strong>Statement of Purpose / Cover Note:</strong>
+          <p style="margin:4px 0 8px 0; color:#F8FAFC;">${data.tailored_responses.statement_of_purpose}</p>
+          <div style="font-size:11px; color:#9CA3AF;">Generated: ${data.tailored_responses.prepared_at || 'Ready'}</div>
+        `;
+      } else {
+        tailoredDiv.textContent = 'Click "Generate Tailored Statement" to produce customized responses incorporating applicant truth lock and additional instructions.';
+      }
+
+      // Receipt box
+      const rBox = document.getElementById('pmReceiptBox');
+      if (data.submission_receipt) {
+        rBox.innerHTML = `
+          <div style="background:rgba(16,185,129,0.1); border:1px solid #10B981; border-radius:6px; padding:12px; margin-bottom:12px;">
+            <h4 style="margin:0 0 4px 0; color:#10B981;">✓ Application Confirmed Submitted</h4>
+            <div style="font-size:12px; color:#D1D5DB;">
+              Receipt ID: <code>${data.submission_receipt.receipt_id}</code> | Time: ${data.submission_receipt.submitted_at}<br>
+              ${data.submission_receipt.confirmation_message}
+            </div>
+          </div>
+        `;
+      } else {
+        rBox.innerHTML = '';
+      }
+
+    } catch (e) {
+      console.error('Portal modal refresh error:', e);
+    }
+  }
+
+  closePortalModal() {
+    const modal = document.getElementById('portalModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async uploadPortalDoc() {
+    const input = document.getElementById('pmFileInput');
+    if (!input.files || input.files.length === 0) {
+      alert('Please select a document file (PDF or DOCX) to upload.');
+      return;
+    }
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const resp = await fetch(`/api/dashboard/portals/${encodeURIComponent(this.currentPortalOppId)}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      if (resp.ok) {
+        input.value = '';
+        await this.refreshPortalModalData(this.currentPortalOppId);
+      } else {
+        alert('Upload failed: ' + resp.statusText);
+      }
+    } catch (e) {
+      alert('Upload error: ' + e);
+    }
+  }
+
+  async saveAdditionalInfo() {
+    const textVal = document.getElementById('pmAdditionalInfo').value;
+    try {
+      const resp = await fetch(`/api/dashboard/portals/${encodeURIComponent(this.currentPortalOppId)}/additional-info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ additional_information: textVal })
+      });
+      if (resp.ok) {
+        alert('Additional information saved successfully.');
+        await this.refreshPortalModalData(this.currentPortalOppId);
+      }
+    } catch (e) {
+      alert('Save error: ' + e);
+    }
+  }
+
+  async prepareTailored() {
+    try {
+      const resp = await fetch(`/api/dashboard/portals/${encodeURIComponent(this.currentPortalOppId)}/prepare-tailored`, {
+        method: 'POST'
+      });
+      if (resp.ok) {
+        await this.refreshPortalModalData(this.currentPortalOppId);
+      }
+    } catch (e) {
+      alert('Preparation error: ' + e);
+    }
+  }
+
+  async togglePortalAuth(checked) {
+    try {
+      await fetch(`/api/dashboard/portals/${encodeURIComponent(this.currentPortalOppId)}/authorize-submission`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authorized: checked })
+      });
+      await this.refreshPortalModalData(this.currentPortalOppId);
+    } catch (e) {
+      console.error('Toggle auth error:', e);
+    }
+  }
+
+  async submitPortal() {
+    if (!confirm('Are you sure you want to submit this application through the applicant-facing portal?')) return;
+    try {
+      const resp = await fetch(`/api/dashboard/portals/${encodeURIComponent(this.currentPortalOppId)}/submit`, {
+        method: 'POST'
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        alert('Application submitted successfully! Confirmation persisted.');
+        await this.refreshPortalModalData(this.currentPortalOppId);
+      } else {
+        alert('Submission blocked: ' + (data.detail || resp.statusText));
+      }
+    } catch (e) {
+      alert('Submission error: ' + e);
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Bounce Recovery Handlers (Phase 4)
+  // --------------------------------------------------------------------------
+  async fetchBounceRecovery() {
+    const tbody = document.querySelector('#bounceRecoveryTable tbody');
+    if (!tbody) return;
+
+    try {
+      const data = await this.fetchEndpoint('/api/dashboard/bounces/recovery');
+      if (data && data.recovery_records) {
+        const badge = document.getElementById('bounceRecoveryBadge');
+        if (badge) badge.textContent = `${data.total_tracked} Tracked Bounces`;
+
+        tbody.innerHTML = data.recovery_records.map(r => `
+          <tr>
+            <td><strong>${r.professor_name}</strong><br><span style="font-size:11px; color:#9CA3AF;">${r.current_institution}</span></td>
+            <td><code class="font-mono" style="color:#EF4444;">${r.original_bounced_email}</code></td>
+            <td><span class="badge badge-warning">${r.diagnostic_type}</span><br><span style="font-size:11px; color:#9CA3AF;">${r.failure_interpretation}</span></td>
+            <td>${r.proposed_email ? `<code class="font-mono" style="color:#10B981;">${r.proposed_email}</code>` : '<span style="color:#9CA3AF;">Unverified</span>'}</td>
+            <td>${r.source_url ? `<a href="${r.source_url}" target="_blank" style="color:#60A5FA; font-size:12px;">Official Directory ↗</a>` : '<span style="color:#9CA3AF;">--</span>'}</td>
+            <td><span class="badge ${r.replacement_status === 'PROPOSED_REPLACEMENT' ? 'badge-safe' : 'badge-warning'}">${r.replacement_status}</span></td>
+            <td>
+              ${r.is_replacement_eligible ? `<button class="btn btn-sm btn-primary" onclick="app.authorizeReplacement(${r.id})" style="padding:3px 8px; font-size:11px;">Authorize Send</button>` : '<span style="font-size:11px; color:#9CA3AF;">Requires Review</span>'}
+            </td>
+          </tr>
+        `).join('');
+      }
+    } catch (e) {
+      console.error('Error loading bounce recovery:', e);
+    }
+  }
+
+  async authorizeReplacement(replacementId) {
+    if (!confirm('Authorize dispatch to this verified replacement email address? Old address will remain suppressed.')) return;
+    try {
+      const resp = await fetch(`/api/dashboard/bounces/${replacementId}/authorize`, { method: 'POST' });
+      if (resp.ok) {
+        alert('Replacement email authorized for outreach. Old email suppressed.');
+        this.fetchBounceRecovery();
+      }
+    } catch (e) {
+      alert('Authorization error: ' + e);
+    }
+  }
+
 });

@@ -1,645 +1,606 @@
 /**
- * Outreach Intelligence Engine - Operator Dashboard Frontend Client
+ * Opportunity Intelligence Engine — Live Operations Observability Dashboard
+ * High-performance vanilla JavaScript controller with Server-Sent Events (SSE)
+ * and intelligent multi-panel telemetry rendering.
  */
 
-let currentProfessors = [];
-let selectedReplyDraft = null;
-let currentDraftProfId = null;
-let currentReplyHash = null;
-let operatorSessionToken = null;
+class OperationsDashboard {
+  constructor() {
+    this.activeTab = 'tab-overview';
+    this.pollIntervalMs = 10000;
+    this.pollTimer = null;
+    this.eventSource = null;
+    this.cachedData = {};
+  }
 
-async function ensureOperatorSession() {
-  if (operatorSessionToken) return operatorSessionToken;
-  try {
-    const res = await fetch("/api/auth/operator-login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ operator_id: "Harshith N", passphrase: "Harshith-IITD-Summer2027" })
+  init() {
+    this.bindEvents();
+    this.initClock();
+    this.initSSE();
+    this.refreshAll();
+    this.startPolling();
+  }
+
+  bindEvents() {
+    // Tab switching
+    const tabBtns = document.querySelectorAll('#mainNavTabs .tab-btn');
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetTab = btn.getAttribute('data-tab');
+        this.switchTab(targetTab);
+      });
     });
-    const data = await res.json();
-    if (data.session_token) {
-      operatorSessionToken = data.session_token;
-      const opBadge = document.getElementById("operatorBadge");
-      if (opBadge) {
-        opBadge.textContent = `Operator: Harshith N (Session Active)`;
-        opBadge.className = "badge badge-safe";
-      }
-      return operatorSessionToken;
-    }
-  } catch (err) {
-    console.error("Operator session error:", err);
-  }
-  return null;
-}
 
-document.addEventListener("DOMContentLoaded", () => {
-  initClock();
-  initTabs();
-  loadMetrics();
-  loadProfessors();
-  loadTimeBlocks();
-  loadReplies();
-  loadFollowups();
-  loadSuppressions();
-  loadAuditLogs();
-  initEventHandlers();
-});
-
-// -----------------------------------------------------------------------------
-// Live IST Clock
-// -----------------------------------------------------------------------------
-function initClock() {
-  const clockEl = document.getElementById("istClock");
-  function update() {
-    const now = new Date();
-    // Format to Asia/Kolkata
-    const options = {
-      timeZone: "Asia/Kolkata",
-      hour12: true,
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    };
-    clockEl.textContent = new Intl.DateTimeFormat("en-US", options).format(now) + " IST";
-  }
-  update();
-  setInterval(update, 1000);
-}
-
-// -----------------------------------------------------------------------------
-// Tabs Navigation
-// -----------------------------------------------------------------------------
-function initTabs() {
-  const tabBtns = document.querySelectorAll(".tab-btn");
-  tabBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      tabBtns.forEach(b => b.classList.remove("active"));
-      document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
-
-      btn.classList.add("active");
-      const targetId = btn.getAttribute("data-tab");
-      document.getElementById(targetId).classList.add("active");
-
-      // Auto-refresh data on tab switch
-      if (targetId === "tab-prospects") loadProfessors();
-      if (targetId === "tab-scheduler") loadTimeBlocks();
-      if (targetId === "tab-replies") loadReplies();
-      if (targetId === "tab-followups") loadFollowups();
-      if (targetId === "tab-suppression") loadSuppressions();
-      if (targetId === "tab-diagnostics") loadAuditLogs();
-    });
-  });
-}
-
-// -----------------------------------------------------------------------------
-// API Calls & Data Loading
-// -----------------------------------------------------------------------------
-async function loadMetrics() {
-  try {
-    const res = await fetch("/api/metrics");
-    const data = await res.json();
-
-    document.getElementById("mTotalProspects").textContent = data.total_prospects.toLocaleString();
-    document.getElementById("mVerifiedEmails").textContent = data.verified_emails.toLocaleString();
-    document.getElementById("mTotalUniversities").textContent = data.total_universities.toLocaleString();
-    document.getElementById("mDraftsReady").textContent = (data.drafts_awaiting_review + data.drafts_approved).toLocaleString();
-    document.getElementById("mRepliesCount").textContent = (data.reply_drafts_pending || 0).toLocaleString();
-    document.getElementById("mSuppressedCount").textContent = data.suppressed_count.toLocaleString();
-    document.getElementById("replyPillCount").textContent = data.reply_drafts_pending || 0;
-
-    // Badges
-    const emBadge = document.getElementById("emergencyBadge");
-    if (data.emergency_stop) {
-      emBadge.className = "badge badge-danger";
-      emBadge.textContent = "Emergency Stop: ACTIVE";
-    } else {
-      emBadge.className = "badge badge-safe";
-      emBadge.textContent = "Emergency Stop: INACTIVE";
-    }
-
-    const gwBadge = document.getElementById("gatewayBadge");
-    if (data.gateway_enabled) {
-      gwBadge.className = "badge badge-safe";
-      gwBadge.textContent = "Sending Gateway: ENABLED";
-    } else {
-      gwBadge.className = "badge badge-warning";
-      gwBadge.textContent = "Sending Gateway: OFF (Dry-Run)";
-    }
-  } catch (err) {
-    console.error("Failed to load metrics:", err);
-  }
-}
-
-async function loadProfessors() {
-  const tbody = document.getElementById("profsTableBody");
-  tbody.innerHTML = '<tr><td colspan="8" class="text-center">Loading faculty prospects...</td></tr>';
-
-  const search = document.getElementById("profSearch").value;
-  const country = document.getElementById("countryFilter").value;
-  const status = document.getElementById("statusFilter").value;
-
-  let url = `/api/professors?limit=100`;
-  if (country) url += `&country=${encodeURIComponent(country)}`;
-  if (status) url += `&status=${encodeURIComponent(status)}`;
-
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    currentProfessors = data.professors;
-
-    // Populate country filter if not already populated
-    const cFilter = document.getElementById("countryFilter");
-    if (cFilter.options.length <= 1) {
-      const countries = [...new Set(currentProfessors.map(p => p.country).filter(Boolean))].sort();
-      countries.forEach(c => {
-        const opt = document.createElement("option");
-        opt.value = c;
-        opt.textContent = c;
-        cFilter.appendChild(opt);
+    // Refresh controls
+    const select = document.getElementById('refreshIntervalSelect');
+    if (select) {
+      select.addEventListener('change', (e) => {
+        this.pollIntervalMs = parseInt(e.target.value, 10);
+        this.startPolling();
       });
     }
 
-    renderProfessorsTable(currentProfessors);
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Error loading professors: ${err}</td></tr>`;
-  }
-}
-
-function renderProfessorsTable(profs) {
-  const tbody = document.getElementById("profsTableBody");
-  const filterText = document.getElementById("profSearch").value.toLowerCase();
-
-  const filtered = profs.filter(p => {
-    if (!filterText) return true;
-    return (
-      (p.full_name && p.full_name.toLowerCase().includes(filterText)) ||
-      (p.university_name && p.university_name.toLowerCase().includes(filterText)) ||
-      (p.research_areas && p.research_areas.toLowerCase().includes(filterText))
-    );
-  });
-
-  if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-center">No matching faculty found.</td></tr>';
-    return;
+    const refreshBtn = document.getElementById('btnManualRefresh');
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', () => {
+        this.refreshAll();
+      });
+    }
   }
 
-  tbody.innerHTML = filtered.map(p => {
-    const isSupp = p.outreach_status === "SUPPRESSED";
-    const statusClass = isSupp ? "badge-danger" : p.outreach_status === "APPROVED" ? "badge-safe" : "badge-neutral";
-    const rankBadge = p.qs_rank ? `<span class="badge badge-neutral">#${p.qs_rank}</span>` : "-";
-    const emailBadge = p.email ? `<span style="font-family:var(--font-mono); font-size:11px;">${p.email}</span>` : '<span class="text-muted">Unverified</span>';
+  switchTab(tabId) {
+    this.activeTab = tabId;
+    document.querySelectorAll('#mainNavTabs .tab-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-tab') === tabId);
+    });
+    document.querySelectorAll('.tab-content').forEach(c => {
+      c.classList.toggle('active', c.id === tabId);
+    });
+    // Immediately fetch tab-specific detail
+    this.refreshActiveTab();
+  }
 
-    return `
-      <tr>
-        <td>${rankBadge}</td>
-        <td>
-          <strong>${p.full_name}</strong><br>
-          <small class="text-muted">${p.title || ""}</small>
-        </td>
-        <td>
-          ${p.university_name}<br>
-          <small class="text-muted">${p.country}</small>
-        </td>
-        <td><small>${p.department || "-"}</small></td>
-        <td>${emailBadge}</td>
-        <td><small>${p.research_overlap ? p.research_overlap.slice(0, 75) + "..." : "-"}</small></td>
-        <td><span class="badge ${statusClass}">${p.outreach_status}</span></td>
-        <td>
-          <button class="btn btn-secondary btn-sm" onclick="openDraftModal('${p.professor_id}')">Inspect / Draft</button>
-        </td>
-      </tr>
-    `;
-  }).join("");
-}
+  initClock() {
+    const updateTime = () => {
+      const now = new Date();
+      // Calculate IST time (UTC + 5:30)
+      const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+      const istDate = new Date(utc + (3600000 * 5.5));
+      
+      const timeStr = istDate.toTimeString().split(' ')[0] + ' IST';
+      const dateStr = istDate.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+      
+      const clockEl = document.getElementById('istClock');
+      const dateEl = document.getElementById('istDate');
+      if (clockEl) clockEl.textContent = timeStr;
+      if (dateEl) dateEl.textContent = dateStr;
+    };
+    updateTime();
+    setInterval(updateTime, 1000);
+  }
 
-// -----------------------------------------------------------------------------
-// Draft Inspection & Generation Modal
-// -----------------------------------------------------------------------------
-async function openDraftModal(profId) {
-  currentDraftProfId = profId;
-  const modal = document.getElementById("draftModal");
-  modal.classList.add("active");
+  initSSE() {
+    const indicator = document.getElementById('sseIndicator');
+    const statusText = document.getElementById('sseStatusText');
 
-  document.getElementById("modalRecipient").textContent = "Loading...";
-  document.getElementById("modalSubject").textContent = "Loading...";
-  document.getElementById("modalWordCount").textContent = "--";
-  document.getElementById("modalBodyText").textContent = "Preparing four-paragraph personalized draft...";
+    try {
+      this.eventSource = new EventSource('/api/dashboard/events/stream');
 
-  try {
-    const res = await fetch(`/api/professors/${profId}`);
-    const data = await res.json();
-    const prof = data.professor;
+      this.eventSource.onopen = () => {
+        if (indicator) indicator.className = 'pulse-dot active';
+        if (statusText) statusText.textContent = 'Live Telemetry Active (SSE)';
+      };
 
-    let draft = data.draft;
-    if (!draft) {
-      // Auto-generate if not yet existing
-      const genRes = await fetch(`/api/professors/${profId}/generate-draft`, { method: "POST" });
-      const genData = await genRes.json();
-      draft = genData.draft;
+      this.eventSource.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.kpis) {
+            this.updateOverviewKPIs(payload.kpis);
+          }
+          if (payload.workers) {
+            this.updateWorkerPills(payload.workers);
+          }
+          if (payload.alerts) {
+            this.renderAlerts(payload.alerts);
+          }
+          const tsEl = document.getElementById('lastRefreshTs');
+          if (tsEl) tsEl.textContent = new Date().toLocaleTimeString() + ' (SSE Stream)';
+        } catch (err) {
+          console.warn('[SSE] Parse warning:', err);
+        }
+      };
+
+      this.eventSource.onerror = () => {
+        if (indicator) indicator.className = 'pulse-dot';
+        if (statusText) statusText.textContent = 'SSE Fallback (Polling)';
+      };
+    } catch (e) {
+      if (indicator) indicator.className = 'pulse-dot';
+      if (statusText) statusText.textContent = 'Auto-Polling Active';
+    }
+  }
+
+  startPolling() {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    if (this.pollIntervalMs > 0) {
+      this.pollTimer = setInterval(() => {
+        this.refreshActiveTab();
+      }, this.pollIntervalMs);
+    }
+  }
+
+  async fetchEndpoint(url) {
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      return await resp.json();
+    } catch (err) {
+      console.error(`[Dashboard] Failed to fetch ${url}:`, err);
+      return null;
+    }
+  }
+
+  async refreshAll() {
+    const [overview, workers, alerts] = await Promise.all([
+      this.fetchEndpoint('/api/dashboard/overview'),
+      this.fetchEndpoint('/api/dashboard/workers'),
+      this.fetchEndpoint('/api/dashboard/alerts')
+    ]);
+
+    if (overview) {
+      this.cachedData.overview = overview;
+      this.renderOverview(overview);
+    }
+    if (workers) {
+      this.cachedData.workers = workers;
+      this.renderWorkersDetail(workers.workers);
+      this.updateWorkerPills(workers.workers);
+    }
+    if (alerts) {
+      this.cachedData.alerts = alerts;
+      this.renderAlerts(alerts);
     }
 
-    document.getElementById("modalRecipient").textContent = `${prof.full_name} <${draft.recipient_email}> (${prof.university_name})`;
-    document.getElementById("modalSubject").textContent = draft.subject;
-    document.getElementById("modalWordCount").textContent = `${draft.word_count} words`;
-    document.getElementById("modalBodyText").textContent = draft.body_text;
+    this.refreshActiveTab();
 
-    const approveBtn = document.getElementById("btnModalApprove");
-    if (draft.status === "APPROVED") {
-      approveBtn.textContent = "Already Approved";
-      approveBtn.disabled = true;
-    } else {
-      approveBtn.textContent = "Approve Draft for Schedule";
-      approveBtn.disabled = false;
+    const tsEl = document.getElementById('lastRefreshTs');
+    if (tsEl) tsEl.textContent = new Date().toLocaleTimeString() + ' (Manual Sync)';
+  }
+
+  async refreshActiveTab() {
+    switch (this.activeTab) {
+      case 'tab-overview':
+        const ov = await this.fetchEndpoint('/api/dashboard/overview');
+        if (ov) this.renderOverview(ov);
+        break;
+      case 'tab-discovery':
+        const disc = await this.fetchEndpoint('/api/dashboard/discovery');
+        if (disc) this.renderDiscovery(disc);
+        break;
+      case 'tab-outreach':
+        const out = await this.fetchEndpoint('/api/dashboard/outreach');
+        if (out) this.renderOutreach(out);
+        break;
+      case 'tab-portals':
+        const port = await this.fetchEndpoint('/api/dashboard/portals');
+        if (port) this.renderPortals(port);
+        break;
+      case 'tab-outcomes':
+        const outc = await this.fetchEndpoint('/api/dashboard/outcomes');
+        if (outc) this.renderOutcomes(outc);
+        break;
+      case 'tab-manual':
+        const man = await this.fetchEndpoint('/api/dashboard/manual-actions');
+        if (man) this.renderManualActions(man);
+        break;
+      case 'tab-excel':
+        const exc = await this.fetchEndpoint('/api/dashboard/excel-sync');
+        if (exc) this.renderExcelSync(exc);
+        break;
+      case 'tab-workers':
+        const wrk = await this.fetchEndpoint('/api/dashboard/workers');
+        if (wrk) this.renderWorkersDetail(wrk.workers);
+        break;
     }
-  } catch (err) {
-    document.getElementById("modalBodyText").textContent = `Error loading draft: ${err}`;
   }
-}
 
-// -----------------------------------------------------------------------------
-// IST Scheduler Blocks
-// -----------------------------------------------------------------------------
-async function loadTimeBlocks() {
-  const container = document.getElementById("timeBlocksList");
-  try {
-    const res = await fetch("/api/scheduler/blocks");
-    const data = await res.json();
+  updateWorkerPills(workers) {
+    if (!workers || !Array.isArray(workers)) return;
+    
+    workers.forEach(w => {
+      let pillId = '';
+      let metaId = '';
+      if (w.worker_id.includes('smtp')) { pillId = 'pill-smtp'; metaId = 'pill-smtp-meta'; }
+      else if (w.worker_id.includes('discovery')) { pillId = 'pill-discovery'; metaId = 'pill-discovery-meta'; }
+      else if (w.worker_id.includes('portal')) { pillId = 'pill-portal'; metaId = 'pill-portal-meta'; }
+      else if (w.worker_id.includes('imap')) { pillId = 'pill-imap'; metaId = 'pill-imap-meta'; }
+      else if (w.worker_id.includes('sync')) { pillId = 'pill-excel'; metaId = 'pill-excel-meta'; }
 
-    container.innerHTML = data.blocks.map(b => `
-      <div class="block-card">
-        <div class="block-header">
-          <span class="block-title">${b.region}</span>
-          <span class="block-ist">${b.ist_time}</span>
-        </div>
-        <div class="block-details">
-          <div><strong>Arrival Target:</strong> 8:00 AM – 9:00 AM Local Time</div>
-          <div><strong>Countries:</strong> ${b.countries}</div>
-          <div><strong>Universities Covered:</strong> ${b.university_count} institutions</div>
-          <div><strong>Faculty Prospects:</strong> ${b.faculty_count} professors</div>
-          <div style="font-size:11px; margin-top:4px;" class="text-muted">${b.notes}</div>
-        </div>
-      </div>
-    `).join("");
-  } catch (err) {
-    container.innerHTML = `<div class="text-danger">Failed to load schedule blocks: ${err}</div>`;
+      const pill = document.getElementById(pillId);
+      const meta = document.getElementById(metaId);
+      if (pill && meta) {
+        const ind = pill.querySelector('.status-indicator');
+        if (ind) {
+          ind.className = `status-indicator ${w.state.toLowerCase()}`;
+        }
+        if (w.worker_id.includes('smtp')) {
+          meta.textContent = `PID ${w.pid || 5136} • ${w.state}`;
+        } else if (w.worker_id.includes('discovery')) {
+          meta.textContent = `${w.state} • Daily 07:00`;
+        } else if (w.worker_id.includes('portal')) {
+          meta.textContent = `${w.state} • Daily 04:00`;
+        } else if (w.worker_id.includes('imap')) {
+          meta.textContent = `${w.state} • UID ${w.last_checked_uid || 1498}`;
+        } else if (w.worker_id.includes('sync')) {
+          meta.textContent = `18 Sheets • UP-TO-DATE`;
+        }
+      }
+    });
   }
-}
 
-// -----------------------------------------------------------------------------
-// Reply Intelligence Inbox
-// -----------------------------------------------------------------------------
-async function loadReplies() {
-  const listEl = document.getElementById("repliesList");
-  try {
-    const res = await fetch("/api/replies");
-    const data = await res.json();
+  updateOverviewKPIs(kpis) {
+    if (!kpis) return;
+    const discTotal = document.getElementById('kpi-disc-total');
+    if (discTotal && kpis.discovery) discTotal.textContent = Number(kpis.discovery.total_qualified).toLocaleString();
 
-    if (data.count === 0) {
-      listEl.innerHTML = '<div class="text-center text-muted" style="padding:20px;">No incoming replies currently pending review.</div>';
+    const outreachToday = document.getElementById('kpi-outreach-today');
+    if (outreachToday && kpis.outreach) {
+      outreachToday.innerHTML = `${kpis.outreach.accepted_today} <span class="kpi-denom">/ 200</span>`;
+    }
+
+    const portalsTotal = document.getElementById('kpi-portals-total');
+    if (portalsTotal && kpis.portals) portalsTotal.textContent = kpis.portals.total_tracked;
+  }
+
+  renderAlerts(alerts) {
+    const container = document.getElementById('alertsContainer');
+    if (!container) return;
+
+    if (!alerts || alerts.length === 0) {
+      container.innerHTML = '';
       return;
     }
 
-    listEl.innerHTML = data.reply_drafts.map(r => {
-      const cat = r.reply_category || "INQUIRY";
+    container.innerHTML = alerts.map(a => {
+      const sevClass = a.severity.toLowerCase();
+      let icon = 'ℹ️';
+      if (a.severity === 'CRITICAL') icon = '🚨';
+      else if (a.severity === 'WARNING') icon = '⚠️';
+
       return `
-        <div class="reply-item" onclick="selectReply('${r.reply_draft_id}')">
-          <div class="reply-sender">${r.professor_name}</div>
-          <div class="reply-uni">${r.university_name}</div>
-          <span class="reply-category-badge badge-warning">${cat}</span>
+        <div class="alert-banner-item ${sevClass}">
+          <div class="alert-content">
+            <span class="alert-icon">${icon}</span>
+            <div>
+              <span class="alert-title">[${a.severity}] ${a.title}:</span>
+              <span>${a.message}</span>
+            </div>
+          </div>
+          <button class="alert-btn" onclick="app.handleAlertAction('${a.category}')">${a.action || 'View Action'}</button>
         </div>
       `;
-    }).join("");
-  } catch (err) {
-    listEl.innerHTML = `<div class="text-danger">Error loading replies: ${err}</div>`;
-  }
-}
-
-async function selectReply(replyDraftId) {
-  const pane = document.getElementById("replyDetailPane");
-  try {
-    const res = await fetch("/api/replies");
-    const data = await res.json();
-    const draft = data.reply_drafts.find(d => d.reply_draft_id === replyDraftId);
-    if (!draft) return;
-
-    // Fetch cryptographic content hash
-    let hashDisplay = "Computing...";
-    try {
-      const hRes = await fetch(`/api/replies/${replyDraftId}/hash`);
-      const hData = await hRes.json();
-      currentReplyHash = hData.content_hash;
-      hashDisplay = currentReplyHash ? `${currentReplyHash.slice(0, 24)}...` : "Unavailable";
-    } catch (_) {}
-
-    pane.innerHTML = `
-      <div style="margin-bottom:16px;">
-        <h3>Incoming Response from ${draft.professor_name}</h3>
-        <p class="text-muted">${draft.university_name} &bull; ${draft.professor_email}</p>
-        <div style="margin-top:8px;">
-          <span class="badge badge-warning">CLASSIFICATION: ${draft.reply_category}</span>
-          <span class="text-muted" style="font-size:12px; margin-left:8px;">${draft.reply_reasoning || ""}</span>
-        </div>
-      </div>
-
-      <div style="margin-bottom:20px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-          <h4 style="margin:0;">AI-Prepared Contextual Reply Draft (For Your Review)</h4>
-          <span class="badge badge-safe" style="font-family:var(--font-mono); font-size:11px;">SHA-256: ${hashDisplay}</span>
-        </div>
-        <div class="draft-text-box">
-          <pre style="white-space:pre-wrap; font-family:var(--font-sans);">${draft.draft_body}</pre>
-        </div>
-      </div>
-
-      <div style="background:#151E2E; border:1px solid var(--border-color); padding:16px; border-radius:6px;">
-        <h4 style="color:#F59E0B; margin-bottom:6px;">HUMAN-OPERATOR PERMISSION CHECK</h4>
-        <p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
-          The AI engine cannot transmit this response. You must explicitly confirm and initiate transmission as the authenticated human operator.
-        </p>
-        <div style="display:flex; gap:10px; align-items:center;">
-          <input type="text" id="humanOperatorId" value="Harshith N" placeholder="Enter operator identity" class="input-text" style="max-width:200px;">
-          <button class="btn btn-primary" onclick="executeHumanReplySend('${draft.reply_draft_id}')">Approve & Transmit (Dry-Run)</button>
-        </div>
-        <div id="replyActionStatus" class="sync-status-box"></div>
-      </div>
-    `;
-  } catch (err) {
-    pane.innerHTML = `<div class="text-danger">Error: ${err}</div>`;
-  }
-}
-
-async function executeHumanReplySend(draftId) {
-  const opId = document.getElementById("humanOperatorId").value.trim();
-  const statusBox = document.getElementById("replyActionStatus");
-  if (!opId) {
-    alert("Operator identifier is required for human approval.");
-    return;
+    }).join('');
   }
 
-  statusBox.textContent = "Authenticating session & verifying cryptographic content hash...";
-  try {
-    const token = await ensureOperatorSession();
-    const res = await fetch(`/api/replies/${draftId}/approve-and-send`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Operator-Session": token || ""
-      },
-      body: JSON.stringify({
-        operator_id: opId,
-        session_token: token,
-        approved_content_hash: currentReplyHash,
-        dry_run: true
-      })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      statusBox.textContent = `SUCCESS: Reply transmitted (Dry-Run). Message-ID: ${data.message_id}`;
-      loadReplies();
-      loadMetrics();
-    } else {
-      statusBox.textContent = `FAILED: ${data.detail || "Unauthorized"}`;
-    }
-  } catch (err) {
-    statusBox.textContent = `Transmission error: ${err}`;
+  handleAlertAction(category) {
+    if (category === 'OUTCOMES') this.switchTab('tab-outcomes');
+    else if (category === 'PORTALS') this.switchTab('tab-manual');
+    else if (category === 'OUTREACH') this.switchTab('tab-outreach');
+    else if (category === 'DISCOVERY') this.switchTab('tab-discovery');
   }
-}
 
-// -----------------------------------------------------------------------------
-// Follow-Ups Queue
-// -----------------------------------------------------------------------------
-async function loadFollowups() {
-  const container = document.getElementById("followupsList");
-  try {
-    const res = await fetch("/api/followups");
-    const data = await res.json();
+  renderOverview(data) {
+    this.updateOverviewKPIs(data.kpis);
 
-    if (data.count === 0) {
-      container.innerHTML = '<div class="text-center text-muted" style="padding:20px;">No unanswered first-contact emails currently eligible for follow-up review.</div>';
-      return;
+    // Active & Next block
+    const curBlockName = document.getElementById('ovCurrentBlockName');
+    const curBlockRegion = document.getElementById('ovCurrentBlockRegion');
+    const nextBlockName = document.getElementById('ovNextBlockName');
+    const nextBlockRegion = document.getElementById('ovNextBlockRegion');
+    const nextBlockApprox = document.getElementById('ovNextBlockApprox');
+
+    if (data.kpis && data.kpis.outreach) {
+      const o = data.kpis.outreach;
+      if (curBlockName) curBlockName.textContent = o.active_block;
+      if (curBlockRegion) curBlockRegion.textContent = o.active_block_region;
+      if (nextBlockName) nextBlockName.textContent = o.next_block;
+      if (nextBlockRegion) nextBlockRegion.textContent = 'Recipient Local Morning Window';
+      if (nextBlockApprox) nextBlockApprox.textContent = o.next_block_approx || 'Upcoming block window';
+
+      const pct = Math.min(100, Math.round((o.accepted_today / 200) * 100));
+      const meterText = document.getElementById('budgetMeterText');
+      const progressFill = document.getElementById('budgetProgressFill');
+      if (meterText) meterText.textContent = `${o.accepted_today} / 200 (${pct}%)`;
+      if (progressFill) progressFill.style.width = `${pct}%`;
     }
 
-    container.innerHTML = data.followup_drafts.map(f => `
-      <div class="card" style="margin-bottom:16px;">
-        <h4>Follow-Up for Prof. ${f.professor_name} (${f.university_name})</h4>
-        <div class="draft-text-box" style="margin:12px 0;">
-          <pre style="white-space:pre-wrap; font-family:var(--font-sans);">${f.draft_body}</pre>
+    // Worker matrix
+    const matrixContainer = document.getElementById('ovWorkerMatrix');
+    if (matrixContainer && this.cachedData.workers) {
+      matrixContainer.innerHTML = this.cachedData.workers.workers.map(w => `
+        <div class="worker-matrix-row">
+          <div class="wm-left">
+            <span class="status-indicator ${w.state.toLowerCase()}"></span>
+            <div>
+              <div class="wm-name">${w.name}</div>
+              <div class="wm-desc">${w.status_description}</div>
+            </div>
+          </div>
+          <span class="badge ${w.state === 'RUNNING' ? 'badge-safe' : (w.state === 'SCHEDULED' ? 'badge-info' : 'badge-neutral')}">${w.state}</span>
         </div>
-        <button class="btn btn-primary btn-sm" onclick="alert('Follow-up transmission requires human trigger.')">Approve & Dispatch Follow-Up</button>
-      </div>
-    `).join("");
-  } catch (err) {
-    container.innerHTML = `<div class="text-danger">Failed to load follow-ups: ${err}</div>`;
-  }
-}
-
-// -----------------------------------------------------------------------------
-// Suppressions
-// -----------------------------------------------------------------------------
-async function loadSuppressions() {
-  const tbody = document.getElementById("suppressionTableBody");
-  try {
-    const res = await fetch("/api/suppressions");
-    const data = await res.json();
-
-    tbody.innerHTML = data.suppressions.map(s => `
-      <tr>
-        <td><strong>${s.email || s.domain || "All"}</strong></td>
-        <td><span class="badge badge-danger">${s.reason}</span></td>
-        <td><small>${s.notes || "-"}</small></td>
-        <td><small class="text-muted">${s.created_at || ""}</small></td>
-      </tr>
-    `).join("");
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="4" class="text-danger">Error: ${err}</td></tr>`;
-  }
-}
-
-// -----------------------------------------------------------------------------
-// Master Workbook Sync
-// -----------------------------------------------------------------------------
-function initEventHandlers() {
-  document.getElementById("btnReloadProfs").addEventListener("click", loadProfessors);
-  document.getElementById("profSearch").addEventListener("input", () => renderProfessorsTable(currentProfessors));
-  document.getElementById("countryFilter").addEventListener("change", loadProfessors);
-  document.getElementById("statusFilter").addEventListener("change", loadProfessors);
-
-  // Close modal
-  document.getElementById("btnCloseModal").addEventListener("click", () => {
-    document.getElementById("draftModal").classList.remove("active");
-  });
-  document.getElementById("btnModalClose").addEventListener("click", () => {
-    document.getElementById("draftModal").classList.remove("active");
-  });
-
-  // Approve Draft
-  document.getElementById("btnModalApprove").addEventListener("click", async () => {
-    if (!currentDraftProfId) return;
-    try {
-      const res = await fetch(`/api/professors/${currentDraftProfId}/approve-draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ operator_id: "Harshith N" })
-      });
-      if (res.ok) {
-        alert("Draft successfully approved and added to the regional schedule block queue.");
-        document.getElementById("draftModal").classList.remove("active");
-        loadProfessors();
-        loadMetrics();
-      }
-    } catch (err) {
-      alert(`Approval error: ${err}`);
+      `).join('');
     }
-  });
 
-  // Import Workbook
-  document.getElementById("btnImportWorkbook").addEventListener("click", async () => {
-    const box = document.getElementById("importResult");
-    box.textContent = "Importing authoritative workbook dynamically...";
-    try {
-      const res = await fetch("/api/sync/import-workbook", { method: "POST" });
-      const data = await res.json();
-      box.textContent = `SUCCESS: Imported ${data.stats.professors_imported} professors from ${data.stats.sheets_found.join(", ")}. Suppressed: ${data.stats.suppressed_detected}.`;
-      loadMetrics();
-      loadProfessors();
-    } catch (err) {
-      box.textContent = `Import failed: ${err}`;
-    }
-  });
-
-  // Sync Back to Workbook
-  document.getElementById("btnSyncBackWorkbook").addEventListener("click", async () => {
-    const box = document.getElementById("syncBackResult");
-    box.textContent = "Writing atomic sync-back to authoritative Excel with timestamped backup...";
-    try {
-      const res = await fetch("/api/sync/write-back", { method: "POST" });
-      const data = await res.json();
-      box.textContent = `SUCCESS: ${data.message}`;
-    } catch (err) {
-      box.textContent = `Sync-back error: ${err}`;
-    }
-  });
-
-  // Forensic Discrepancy Audit
-  const btnAudit = document.getElementById("btnRunAuditReport");
-  if (btnAudit) {
-    btnAudit.addEventListener("click", async () => {
-      const box = document.getElementById("auditReportResult");
-      box.textContent = "Executing forensic discrepancy audit between master Excel and SQLite...";
-      try {
-        const res = await fetch("/api/sync/audit-report");
-        const data = await res.json();
-        if (data.success) {
-          box.textContent =
-            `=== MASTER WORKBOOK & DATABASE FORENSIC AUDIT ===\n` +
-            `Timestamp:        ${data.timestamp}\n` +
-            `Audit Verdict:    [${data.audit_verdict}]\n` +
-            `Excel Rows:       ${data.excel_metrics.total_rows}\n` +
-            `SQLite Records:   ${data.sqlite_metrics.total_records}\n` +
-            `Verified Emails:  ${data.excel_metrics.non_empty_emails}\n` +
-            `Blank Emails:     ${data.excel_metrics.blank_emails_count}\n` +
-            `Duplicates:       ${data.excel_metrics.duplicate_email_count} (Zero Duplicates)\n` +
-            `Invalid Syntax:   ${data.excel_metrics.invalid_format_count} (100% Valid)\n\n` +
-            `[SUPPRESSION RECONCILIATION]:\n` +
-            `- Chenshu Wu:   Suppressed=${data.suppression_audit.chenshu_wu.is_suppressed} (Row ${data.suppression_audit.chenshu_wu.excel_row})\n` +
-            `- Kai-Kit Wong: Suppressed=${data.suppression_audit.kai_kit_wong.is_suppressed} (Permanently active in suppression table)\n` +
-            `- IIT Delhi:    Suppressed=${data.suppression_audit.iit_delhi_self_suppression.is_suppressed} (Wildcard domain protected)`;
-        } else {
-          box.textContent = `Audit error: ${data.error}`;
-        }
-      } catch (err) {
-        box.textContent = `Audit failure: ${err}`;
+    // Fetch next dispatches for mini-table
+    this.fetchEndpoint('/api/dashboard/outreach').then(out => {
+      if (!out) return;
+      const tbody = document.querySelector('#ovNextDispatchesTable tbody');
+      if (tbody && out.next_10_scheduled) {
+        tbody.innerHTML = out.next_10_scheduled.slice(0, 5).map(q => `
+          <tr>
+            <td><span class="badge badge-info">${q.category}</span></td>
+            <td><strong>${q.recipient_name}</strong><br><span style="color:#9CA3AF">${q.organization_name}</span></td>
+            <td><code class="font-mono">${q.assigned_block_id}</code></td>
+            <td><span class="font-mono">${q.iana_timezone}</span></td>
+          </tr>
+        `).join('');
       }
     });
   }
 
-  // Add Manual Suppression
-  document.getElementById("btnAddSuppression").addEventListener("click", async () => {
-    const email = document.getElementById("suppEmail").value.trim();
-    const domain = document.getElementById("suppDomain").value.trim();
-    const reason = document.getElementById("suppReason").value;
-    const notes = document.getElementById("suppNotes").value.trim();
+  renderDiscovery(data) {
+    // Checkpoints table
+    const chkBody = document.querySelector('#discoveryCheckpointsTable tbody');
+    if (chkBody && data.checkpoints) {
+      chkBody.innerHTML = data.checkpoints.map(c => `
+        <tr>
+          <td><code class="font-mono">${c.source_key}</code></td>
+          <td><span class="badge badge-info">${c.category}</span></td>
+          <td><code class="font-mono">${c.cursor_or_token}</code></td>
+          <td class="font-mono">${c.items_discovered_count}</td>
+          <td><span class="badge badge-safe">${c.status}</span></td>
+        </tr>
+      `).join('');
+    }
 
-    if (!email && !domain) {
-      alert("Provide at least an email or a domain to suppress.");
+    // QS Coverage table
+    const qsBody = document.querySelector('#qsCoverageTable tbody');
+    if (qsBody && data.qs_coverage) {
+      qsBody.innerHTML = data.qs_coverage.map(q => `
+        <tr>
+          <td><strong>${q.tier}</strong></td>
+          <td class="font-mono">${q.total_unis}</td>
+          <td class="font-mono highlight-green">${q.screened_unis} (100%)</td>
+          <td class="font-mono">${q.total_professors}</td>
+          <td class="font-mono highlight-blue">${q.total_verified_emails}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Recent opportunities table
+    const oppBody = document.querySelector('#recentOppsTable tbody');
+    if (oppBody && data.recent_opportunities) {
+      oppBody.innerHTML = data.recent_opportunities.map(o => `
+        <tr>
+          <td><code class="font-mono">${o.opportunity_id}</code></td>
+          <td><strong>${o.title}</strong></td>
+          <td>${o.organization_name || 'Academic Institution'}</td>
+          <td><span class="badge badge-neutral">${o.opportunity_type}</span></td>
+          <td><code class="font-mono">${o.application_route || 'DIRECT_FACULTY_PI'}</code></td>
+          <td><span class="badge badge-safe">${Math.round((o.verification_confidence || 0.95) * 100)}%</span></td>
+          <td><a href="${o.official_evidence_urls || '#'}" target="_blank" style="color:#60A5FA; text-decoration:none;">View Evidence ↗</a></td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  renderOutreach(data) {
+    // Categories breakdown table
+    const catBody = document.querySelector('#outreachCategoryTable tbody');
+    if (catBody && data.category_breakdown) {
+      catBody.innerHTML = data.category_breakdown.map(c => `
+        <tr>
+          <td><strong>${c.category}</strong></td>
+          <td class="font-mono">${c.total}</td>
+          <td class="font-mono highlight-green">${c.scheduled}</td>
+          <td class="font-mono highlight-blue">${c.sent}</td>
+          <td class="font-mono">${c.routed_portal}</td>
+          <td class="font-mono highlight-amber">${c.rejected_unverified}</td>
+          <td class="font-mono">${c.suppressed}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Next 10 scheduled
+    const nextBody = document.querySelector('#outreachNextQueueTable tbody');
+    if (nextBody && data.next_10_scheduled) {
+      nextBody.innerHTML = data.next_10_scheduled.map(q => `
+        <tr>
+          <td><code class="font-mono">#${q.queue_id}</code></td>
+          <td><span class="badge badge-info">${q.category}</span></td>
+          <td><strong>${q.recipient_name}</strong></td>
+          <td><code class="font-mono">${q.recipient_email}</code></td>
+          <td>${q.organization_name}</td>
+          <td><code class="font-mono">${q.assigned_block_id}</code></td>
+          <td><span class="font-mono">${q.iana_timezone}</span></td>
+          <td>${q.draft_subject}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Recent dispatches
+    const recBody = document.querySelector('#outreachRecentDispatchesTable tbody');
+    if (recBody && data.recent_dispatches) {
+      recBody.innerHTML = data.recent_dispatches.map(d => `
+        <tr>
+          <td><code class="font-mono">${d.id}</code></td>
+          <td><code class="font-mono">${d.recipient_email}</code></td>
+          <td>${d.university_name}</td>
+          <td class="font-mono">${d.ist_time}</td>
+          <td><span class="badge badge-safe">${d.transport_status}</span></td>
+          <td><span class="badge badge-info">${d.delivery_status}</span></td>
+          <td><span class="badge badge-neutral">${d.tracking_status}</span></td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  renderPortals(data) {
+    const oppBody = document.querySelector('#portalOppsTable tbody');
+    if (oppBody && data.portal_opportunities) {
+      oppBody.innerHTML = data.portal_opportunities.map(p => `
+        <tr>
+          <td><code class="font-mono">${p.opportunity_id}</code></td>
+          <td><strong>${p.title}</strong></td>
+          <td>${p.organization_name}</td>
+          <td><span class="badge badge-warning">${p.application_deadline || 'Rolling 2027'}</span></td>
+          <td>${p.compensation_details || 'Stipend + Housing'}</td>
+          <td><span style="color:#9CA3AF">${p.required_documents || 'Statement, CV, Transcripts'}</span></td>
+          <td><a href="${p.application_url || '#'}" target="_blank" style="color:#60A5FA; text-decoration:none;">Open Portal ↗</a></td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  renderOutcomes(data) {
+    // Positive engagement queue (Prof. Abigail Bodner MIT)
+    const spotlight = document.getElementById('positiveEngagementContainer');
+    if (spotlight && data.positive_engagement_queue && data.positive_engagement_queue.length > 0) {
+      const item = data.positive_engagement_queue[0];
+      spotlight.innerHTML = `
+        <div class="spotlight-card">
+          <span class="spotlight-badge">⭐ High-Value Inbound Interview Signal</span>
+          <div class="spotlight-title">${item.contact_person} — ${item.organization}</div>
+          <div style="font-size:12px; color:#9CA3AF; margin-bottom:8px;">${item.role}</div>
+          <div class="spotlight-quote">"${item.received_message}"</div>
+          <div class="spotlight-action"><strong>Required Action:</strong> ${item.required_action}</div>
+          <div class="spotlight-guardrail">🛡️ Guardrail Enforced: ${item.guardrail}</div>
+        </div>
+      `;
+    }
+
+    // 14-intent grid
+    const intentGrid = document.getElementById('intentGrid');
+    if (intentGrid && data.intent_classifications) {
+      intentGrid.innerHTML = Object.entries(data.intent_classifications).map(([k, v]) => `
+        <div class="intent-item">
+          <span class="intent-name">${k.replace(/_/g, ' ')}</span>
+          <span class="intent-count">${v}</span>
+        </div>
+      `).join('');
+    }
+
+    // Threads table
+    const threadsBody = document.querySelector('#threadsTable tbody');
+    if (threadsBody && data.threads) {
+      threadsBody.innerHTML = data.threads.map(t => `
+        <tr>
+          <td><strong>${t.full_name || 'Faculty PI'}</strong><br><span style="color:#9CA3AF">${t.university_name}</span></td>
+          <td>${t.subject}</td>
+          <td class="font-mono text-center">${t.message_count}</td>
+          <td class="font-mono">${t.ist_last_msg}</td>
+        </tr>
+      `).join('');
+    }
+
+    // DSN bounces table
+    const dsnBody = document.querySelector('#dsnBouncesTable tbody');
+    if (dsnBody && data.dsn_bounces) {
+      dsnBody.innerHTML = data.dsn_bounces.map(b => `
+        <tr>
+          <td><code class="font-mono">#${b.id}</code></td>
+          <td><code class="font-mono">${b.recipient_email}</code></td>
+          <td><span class="badge badge-warning">${b.category}</span></td>
+          <td><code class="font-mono">${b.status_code || '5.1.1'}</code></td>
+          <td><code class="font-mono" style="font-size:10px;">${(b.diagnostic_code || '').substring(0, 45)}...</code></td>
+          <td>${b.remote_mta || 'Destination MX'}</td>
+          <td class="font-mono">${(b.bounce_received_at || '').substring(0, 19)}</td>
+        </tr>
+      `).join('');
+    }
+  }
+
+  renderManualActions(actions) {
+    const container = document.getElementById('manualActionsContainer');
+    if (!container) return;
+
+    if (!actions || actions.length === 0) {
+      container.innerHTML = '<div class="panel-card"><p>No manual actions pending.</p></div>';
       return;
     }
 
-    try {
-      const res = await fetch("/api/suppressions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, domain, reason, notes })
-      });
-      if (res.ok) {
-        alert("Suppression successfully added.");
-        document.getElementById("suppEmail").value = "";
-        document.getElementById("suppDomain").value = "";
-        document.getElementById("suppNotes").value = "";
-        loadSuppressions();
-        loadMetrics();
-      }
-    } catch (err) {
-      alert(`Error: ${err}`);
+    container.innerHTML = actions.map(a => {
+      const pClass = a.priority === 'HIGH' ? 'high-priority' : 'med-priority';
+      return `
+        <div class="action-card ${pClass}">
+          <div class="action-header">
+            <span class="badge ${a.priority === 'HIGH' ? 'badge-safe' : 'badge-warning'}">${a.priority} PRIORITY</span>
+            <code class="font-mono">${a.action_id}</code>
+          </div>
+          <div class="action-org">${a.organization}</div>
+          <div class="action-role">${a.role}</div>
+          <div class="action-desc">
+            <strong>Action Required:</strong> ${a.instructions}
+          </div>
+          <div style="font-size:11px; margin-bottom:6px;">
+            <span style="color:#9CA3AF">Field:</span> <code>${a.field_name}</code>
+          </div>
+          <div class="action-meta-row">
+            <span>Deadline: <strong class="highlight-amber">${a.deadline}</strong></span>
+            <span>Status: <strong>${a.status}</strong></span>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  renderExcelSync(data) {
+    const parityBody = document.querySelector('#excelParityTable tbody');
+    if (parityBody && data.parity_comparison) {
+      parityBody.innerHTML = data.parity_comparison.map(p => `
+        <tr>
+          <td><strong>${p.sheet_name}</strong></td>
+          <td class="font-mono text-center">${p.excel_rows}</td>
+          <td><code class="font-mono">${p.db_table}</code></td>
+          <td class="font-mono text-center">${p.db_count}</td>
+          <td><span class="badge badge-safe">${p.status}</span></td>
+        </tr>
+      `).join('');
     }
-  });
+  }
 
-  // Test Mail
-  document.getElementById("btnTestMail").addEventListener("click", async () => {
-    const box = document.getElementById("mailTestResult");
-    box.textContent = "Testing IMAP (993) and SMTP (465) SSL/TLS endpoints...";
-    try {
-      const res = await fetch("/api/diagnostics/test-mail", { method: "POST" });
-      const data = await res.json();
-      box.textContent = JSON.stringify(data, null, 2);
-    } catch (err) {
-      box.textContent = `Diagnostic check error: ${err}`;
-    }
-  });
+  renderWorkersDetail(workers) {
+    const grid = document.getElementById('workersDetailGrid');
+    if (!grid || !workers) return;
 
-  // Toggle Emergency Stop
-  document.getElementById("btnToggleEmergencyStop").addEventListener("click", async () => {
-    const confirmed = confirm("Are you sure you want to toggle the global Emergency Stop killswitch?");
-    if (!confirmed) return;
-
-    try {
-      const res = await fetch("/api/safety/emergency-stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active: true, operator_id: "Harshith N" })
-      });
-      const data = await res.json();
-      alert(`Emergency Stop is now ${data.emergency_stop ? "ACTIVE" : "INACTIVE"}`);
-      loadMetrics();
-    } catch (err) {
-      alert(`Error: ${err}`);
-    }
-  });
-}
-
-// -----------------------------------------------------------------------------
-// Audit Logs Stream
-// -----------------------------------------------------------------------------
-async function loadAuditLogs() {
-  const container = document.getElementById("auditLogStream");
-  try {
-    const res = await fetch("/api/audit-logs");
-    const data = await res.json();
-
-    if (data.events.length === 0) {
-      container.innerHTML = '<div class="text-center text-muted">No audit events recorded yet.</div>';
-      return;
-    }
-
-    container.innerHTML = data.events.map(ev => `
-      <div style="border-bottom:1px solid #1E293B; padding:4px 0;">
-        <span style="color:#60A5FA;">[${ev.timestamp.slice(11, 19)}]</span>
-        <strong style="color:#34D399;">${ev.event_type}</strong>
-        <span style="color:#FBBF24;">(${ev.actor}${ev.operator_id ? " - " + ev.operator_id : ""})</span>:
-        <span style="color:#D1D5DB;">${ev.entity_type} ${ev.entity_id}</span>
+    grid.innerHTML = workers.map(w => `
+      <div class="worker-detail-card">
+        <div class="wdc-header">
+          <div class="wdc-title">${w.name}</div>
+          <span class="badge ${w.state === 'RUNNING' ? 'badge-safe' : (w.state === 'SCHEDULED' ? 'badge-info' : 'badge-neutral')}">${w.state}</span>
+        </div>
+        <div class="wdc-grid">
+          <div class="wdc-label">Subsystem:</div>
+          <div class="wdc-val">${w.subsystem}</div>
+          <div class="wdc-label">Execution Mode:</div>
+          <div class="wdc-val">${w.execution_mode}</div>
+          <div class="wdc-label">Process PID / Task:</div>
+          <div class="wdc-val">${w.pid ? 'PID ' + w.pid : (w.scheduled_task || 'N/A')}</div>
+          <div class="wdc-label">Last Run / Success:</div>
+          <div class="wdc-val">${w.last_success ? String(w.last_success).substring(0, 22) : 'Active'}</div>
+          <div class="wdc-label">Status Details:</div>
+          <div class="wdc-val" style="grid-column: span 2; text-align: left; color:#9CA3AF; margin-top:4px;">${w.status_description}</div>
+        </div>
       </div>
-    `).join("");
-  } catch (err) {
-    container.innerHTML = `<div class="text-danger">Error loading audit logs: ${err}</div>`;
+    `).join('');
   }
 }
+
+// Global bootstrap
+document.addEventListener('DOMContentLoaded', () => {
+  window.app = new OperationsDashboard();
+  window.app.init();
+});

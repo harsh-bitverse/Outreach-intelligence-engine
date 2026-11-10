@@ -14,6 +14,7 @@ from src.database.connection import initialize_database, get_db
 from src.database.repository import OutreachRepository
 from src.database.workbook_sync import DynamicWorkbookSync
 from src.web.routes.api import api_router
+from src.web.routes.dashboard_api import dashboard_router
 
 
 @asynccontextmanager
@@ -51,8 +52,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount API Router
+# Mount API Routers
 app.include_router(api_router)
+app.include_router(dashboard_router)
 
 # Mount Static UI Files
 static_dir = Path(__file__).parent / "static"

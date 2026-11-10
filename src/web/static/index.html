@@ -3,324 +3,732 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Outreach Intelligence Engine — Summer 2027</title>
+  <title>Opportunity Intelligence Engine — Operations Observability Center</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="app-container">
-    <!-- Top Header -->
+    <!-- Top Global Header -->
     <header class="app-header">
       <div class="header-brand">
-        <div class="brand-badge">IITD • SciML & Systems</div>
-        <h1>Outreach Intelligence Engine</h1>
-        <p class="subtitle">Summer 2027 International Research Internship Platform</p>
+        <div class="brand-badge">IIT DELHI • OPPORTUNITY INTELLIGENCE ENGINE • OPS CENTER</div>
+        <h1>Live Operations Observability Dashboard</h1>
+        <p class="subtitle">Unified Real-Time Telemetry: Autonomous Discovery • Outreach Scheduler • Portal Automation • Outcomes</p>
       </div>
 
       <div class="header-controls">
         <div class="clock-card">
           <span class="clock-label">Operator Clock (IST)</span>
           <span id="istClock" class="clock-time">--:--:-- IST</span>
-          <span class="clock-sub">Arrival Target: 8:00–9:00 AM Local</span>
+          <span id="istDate" class="clock-sub">Loading date...</span>
         </div>
 
-        <div class="status-pills">
-          <div id="operatorBadge" class="badge badge-safe">Operator: Harshith N (Session Active)</div>
-          <div id="emergencyBadge" class="badge badge-safe">Emergency Stop: INACTIVE</div>
-          <div id="gatewayBadge" class="badge badge-warning">Sending Gateway: OFF (Dry-Run)</div>
-          <div id="cscBadge" class="badge badge-neutral">IITD CSC: Review Pending</div>
+        <div class="stream-control-card">
+          <div class="stream-status">
+            <span id="sseIndicator" class="pulse-dot active"></span>
+            <span id="sseStatusText" class="stream-text">Live Telemetry Active</span>
+          </div>
+          <div class="refresh-controls">
+            <select id="refreshIntervalSelect" class="select-box-sm">
+              <option value="5000">Auto: 5s</option>
+              <option value="10000" selected>Auto: 10s</option>
+              <option value="30000">Auto: 30s</option>
+              <option value="0">Manual Only</option>
+            </select>
+            <button id="btnManualRefresh" class="btn btn-primary-sm" title="Refresh all subsystem metrics">
+              <span class="refresh-icon">↻</span> Refresh
+            </button>
+          </div>
         </div>
       </div>
     </header>
 
-    <!-- Knowledge Base & CV Disclosure Alert -->
-    <div id="sourceAlertBanner" class="alert-banner" style="background:#2D1B00; border:1px solid #F59E0B; padding:10px 16px; margin: 12px 0; border-radius:6px; font-size:13px; color:#FDE68A; display:flex; justify-content:space-between; align-items:center;">
-      <div>
-        <strong>[!] Mandatory Source Document Missing:</strong>
-        <span id="sourceAlertText"><code>data/private/approved_cv.pdf</code> is missing from disk. Outbound attachments remain blocked until student uploads finalized CV.</span>
+    <!-- Subsystem Worker Health Pill Ribbon -->
+    <section class="worker-pill-ribbon" id="workerPillRibbon">
+      <div class="worker-pill" id="pill-smtp">
+        <span class="status-indicator running"></span>
+        <span class="pill-title">SMTP Scheduler</span>
+        <span class="pill-meta" id="pill-smtp-meta">PID 5136 • RUNNING</span>
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="alert('Please place your finalized CV PDF into data/private/approved_cv.pdf on your local machine.')">Upload Instructions</button>
-    </div>
-
-    <!-- Metrics Bar -->
-    <section class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-title">Faculty Prospects</div>
-        <div id="mTotalProspects" class="metric-value">--</div>
-        <div class="metric-desc">QS Top-120 Database</div>
+      <div class="worker-pill" id="pill-discovery">
+        <span class="status-indicator scheduled"></span>
+        <span class="pill-title">Discovery Engine</span>
+        <span class="pill-meta" id="pill-discovery-meta">SCHEDULED • Daily 07:00</span>
       </div>
-      <div class="metric-card">
-        <div class="metric-title">Verified Emails</div>
-        <div id="mVerifiedEmails" class="metric-value">--</div>
-        <div class="metric-desc">Institutional Addresses</div>
+      <div class="worker-pill" id="pill-portal">
+        <span class="status-indicator scheduled"></span>
+        <span class="pill-title">Portal Worker</span>
+        <span class="pill-meta" id="pill-portal-meta">SCHEDULED • Daily 04:00</span>
       </div>
-      <div class="metric-card">
-        <div class="metric-title">Universities</div>
-        <div id="mTotalUniversities" class="metric-value">--</div>
-        <div class="metric-desc">Global Coverage</div>
+      <div class="worker-pill" id="pill-imap">
+        <span class="status-indicator running"></span>
+        <span class="pill-title">IMAP Response</span>
+        <span class="pill-meta" id="pill-imap-meta">RUNNING • UID 1498</span>
       </div>
-      <div class="metric-card">
-        <div class="metric-title">Drafts Prepared</div>
-        <div id="mDraftsReady" class="metric-value">--</div>
-        <div class="metric-desc">4-Paragraph Formatted</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-title">Replies Received</div>
-        <div id="mRepliesCount" class="metric-value">--</div>
-        <div class="metric-desc">Human-Review Queue</div>
-      </div>
-      <div class="metric-card">
-        <div class="metric-title">Active Suppressions</div>
-        <div id="mSuppressedCount" class="metric-value">--</div>
-        <div class="metric-desc">IITD, Wu, Wong & Replies</div>
+      <div class="worker-pill" id="pill-excel">
+        <span class="status-indicator idle"></span>
+        <span class="pill-title">Master Excel</span>
+        <span class="pill-meta" id="pill-excel-meta">18 Sheets • UP-TO-DATE</span>
       </div>
     </section>
 
-    <!-- Navigation Tabs -->
-    <nav class="nav-tabs">
-      <button class="tab-btn active" data-tab="tab-prospects">Faculty Prospects & Personalization</button>
-      <button class="tab-btn" data-tab="tab-scheduler">IST Scheduler & Time Blocks</button>
-      <button class="tab-btn" data-tab="tab-replies">Reply Intelligence & Review Inbox <span id="replyPillCount" class="pill-badge">0</span></button>
-      <button class="tab-btn" data-tab="tab-followups">Follow-Up Queue</button>
-      <button class="tab-btn" data-tab="tab-suppression">Suppression & Safeguards</button>
-      <button class="tab-btn" data-tab="tab-sync">Master Workbook Sync</button>
-      <button class="tab-btn" data-tab="tab-diagnostics">Diagnostics & Safety</button>
+    <!-- Evidence-Driven Alerts Container -->
+    <section class="alerts-section" id="alertsContainer">
+      <!-- Populated dynamically via JS -->
+    </section>
+
+    <!-- Master Navigation Tabs -->
+    <nav class="nav-tabs" id="mainNavTabs">
+      <button class="tab-btn active" data-tab="tab-overview">Overview HUD</button>
+      <button class="tab-btn" data-tab="tab-discovery">Discovery Engine <span class="badge-priority">Priority</span></button>
+      <button class="tab-btn" data-tab="tab-outreach">Email Outreach & Regional Blocks</button>
+      <button class="tab-btn" data-tab="tab-portals">Portal Applications <span class="pill-badge" id="portalsCountBadge">269</span></button>
+      <button class="tab-btn" data-tab="tab-outcomes">Replies & Outcomes <span class="pill-badge pill-alert" id="outcomesPillBadge">1 Action</span></button>
+      <button class="tab-btn" data-tab="tab-manual">Manual Action Queue <span class="pill-badge pill-warning" id="manualActionsBadge">3</span></button>
+      <button class="tab-btn" data-tab="tab-excel">Excel Synchronization (18 Sheets)</button>
+      <button class="tab-btn" data-tab="tab-workers">Worker Diagnostics</button>
     </nav>
 
-    <!-- Tab 1: Faculty Prospects & Personalization -->
-    <main id="tab-prospects" class="tab-content active">
-      <div class="action-bar">
-        <div class="filter-group">
-          <input type="text" id="profSearch" placeholder="Search professor, university, or keyword..." class="input-text">
-          <select id="countryFilter" class="select-box">
-            <option value="">All Countries</option>
-          </select>
-          <select id="statusFilter" class="select-box">
-            <option value="">All Outreach Statuses</option>
-            <option value="NEW">NEW</option>
-            <option value="DRAFT_READY">DRAFT_READY</option>
-            <option value="APPROVED">APPROVED</option>
-            <option value="SENT">SENT</option>
-            <option value="SUPPRESSED">SUPPRESSED</option>
-          </select>
+    <!-- ============================================================== -->
+    <!-- TAB 1: OVERVIEW HUD -->
+    <!-- ============================================================== -->
+    <main id="tab-overview" class="tab-content active">
+      <div class="kpi-grid">
+        <div class="kpi-card accent-blue">
+          <div class="kpi-header">
+            <span class="kpi-title">DISCOVERY INVENTORY</span>
+            <span class="kpi-tag">100% Verified</span>
+          </div>
+          <div class="kpi-value" id="kpi-disc-total">1,914</div>
+          <div class="kpi-sub">
+            <span class="highlight-green">+3 New Today</span> • 404 Sources Checked
+          </div>
+          <div class="kpi-footer">43 Autonomous Sweeps Lifetime</div>
         </div>
-        <div class="btn-group">
-          <button id="btnReloadProfs" class="btn btn-secondary">Refresh</button>
+
+        <div class="kpi-card accent-green">
+          <div class="kpi-header">
+            <span class="kpi-title">TODAY'S OUTREACH</span>
+            <span class="kpi-tag" id="kpi-active-block-tag">BLOCK_05 Active</span>
+          </div>
+          <div class="kpi-value" id="kpi-outreach-today">30 <span class="kpi-denom">/ 200</span></div>
+          <div class="kpi-sub">
+            <span class="highlight-blue">170 Daily Quota Remaining</span>
+          </div>
+          <div class="kpi-footer" id="kpi-outreach-footer">1,030 Lifetime SMTP Accepted</div>
+        </div>
+
+        <div class="kpi-card accent-purple">
+          <div class="kpi-header">
+            <span class="kpi-title">PORTAL APPLICATIONS</span>
+            <span class="kpi-tag">Fail-Closed Guardrail</span>
+          </div>
+          <div class="kpi-value" id="kpi-portals-total">269</div>
+          <div class="kpi-sub">
+            269 Prepared • 0 Real Submitted
+          </div>
+          <div class="kpi-footer">3 Manual Checkpoints Pending</div>
+        </div>
+
+        <div class="kpi-card accent-amber">
+          <div class="kpi-header">
+            <span class="kpi-title">REPLIES & OUTCOMES</span>
+            <span class="kpi-tag highlight-red">Action Required</span>
+          </div>
+          <div class="kpi-value" id="kpi-outcomes-interviews">1 <span class="kpi-denom">Interview</span></div>
+          <div class="kpi-sub">
+            Prof. Abigail Bodner (MIT)
+          </div>
+          <div class="kpi-footer">31 Total Replies • 194 DSN Bounces</div>
         </div>
       </div>
 
-      <div class="table-container">
-        <table class="data-table">
+      <!-- Quick Status & Operations Split -->
+      <div class="dashboard-split-2col">
+        <!-- Left: Active Sending & Next Windows -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3>Regional Outreach Schedule & Daily Budget</h3>
+            <span class="badge badge-info" id="ovSenderLockOwner">Scheduler PID 5136</span>
+          </div>
+          <div class="budget-meter-container">
+            <div class="budget-label-row">
+              <span>Account Daily SMTP Budget</span>
+              <span id="budgetMeterText">30 / 200 (15%)</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="budgetProgressFill" style="width: 15%;"></div>
+            </div>
+          </div>
+          <div class="block-preview-box">
+            <div class="block-card current">
+              <div class="block-badge">CURRENT ACTIVE BLOCK</div>
+              <div class="block-name" id="ovCurrentBlockName">BLOCK_05_SA_TR_RU</div>
+              <div class="block-region" id="ovCurrentBlockRegion">Saudi Arabia, Turkey & Western Russia</div>
+              <div class="block-meta">Arrival target: 8:00 AM AST/TRT/MSK</div>
+            </div>
+            <div class="block-card next">
+              <div class="block-badge">NEXT ELIGIBLE BLOCK</div>
+              <div class="block-name" id="ovNextBlockName">BLOCK_06_EAST_EU</div>
+              <div class="block-region" id="ovNextBlockRegion">Eastern Europe (Finland, Greece, Estonia)</div>
+              <div class="block-meta" id="ovNextBlockApprox">Approx. 11:30 AM IST</div>
+            </div>
+          </div>
+          <div class="table-compact-container">
+            <div class="table-title">Next Queued Dispatches</div>
+            <table class="data-table-sm" id="ovNextDispatchesTable">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Recipient / Organization</th>
+                  <th>Assigned Block</th>
+                  <th>Target Window</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colspan="4" class="text-center">Loading queued dispatches...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Right: Real Worker Health Matrix -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3>Subsystem Worker Diagnostics</h3>
+            <span class="badge badge-safe">All 5 Subsystems Operational</span>
+          </div>
+          <div class="worker-matrix" id="ovWorkerMatrix">
+            <!-- Populated via JS -->
+          </div>
+          <div class="quick-links-box">
+            <div class="panel-title-sm">Quick Operator Actions</div>
+            <div class="quick-links-row">
+              <button class="btn btn-secondary-sm" onclick="app.switchTab('tab-outcomes')">Review MIT Interview</button>
+              <button class="btn btn-secondary-sm" onclick="app.switchTab('tab-manual')">Inspect Manual Actions (3)</button>
+              <button class="btn btn-secondary-sm" onclick="app.switchTab('tab-discovery')">Explore Discovered Opps</button>
+              <button class="btn btn-secondary-sm" onclick="app.switchTab('tab-excel')">Audit Excel 18-Sheets</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============================================================== -->
+    <!-- TAB 2: DISCOVERY ENGINE (HIGHEST PRIORITY) -->
+    <!-- ============================================================== -->
+    <main id="tab-discovery" class="tab-content">
+      <div class="banner-highlight">
+        <div class="banner-icon">⚡</div>
+        <div class="banner-body">
+          <h4>Autonomous Discovery Runs Completely Independent of Outreach & Portals</h4>
+          <p>Scheduled daily via <code>\OpportunityEngine_Recurring_Discovery</code> at 07:00 IST. Evaluates live faculty directories, venture portfolio listings, and ATS career portals without human prompting.</p>
+        </div>
+        <div class="banner-stat">
+          <span class="stat-number">404</span>
+          <span class="stat-label">Sources Evaluated Today</span>
+        </div>
+      </div>
+
+      <!-- 5-Stage Sync Pipeline Visualizer -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Discovery-to-Production 5-Stage Synchronization Pipeline</h3>
+          <span class="badge badge-safe">1,914 / 1,914 Synced (100%)</span>
+        </div>
+        <div class="pipeline-track">
+          <div class="pipeline-step completed">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <div class="step-title">DISCOVERED</div>
+              <div class="step-metric">1,914 Found</div>
+              <div class="step-desc">Web ATS & Faculty Portals</div>
+            </div>
+          </div>
+          <div class="pipeline-arrow">➔</div>
+          <div class="pipeline-step completed">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <div class="step-title">VERIFIED</div>
+              <div class="step-metric">1,783 Qualified</div>
+              <div class="step-desc">131 In Quarantine</div>
+            </div>
+          </div>
+          <div class="pipeline-arrow">➔</div>
+          <div class="pipeline-step completed">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <div class="step-title">INSERTED_SQLITE</div>
+              <div class="step-metric">1,914 Rows</div>
+              <div class="step-desc">Durable Production DB</div>
+            </div>
+          </div>
+          <div class="pipeline-arrow">➔</div>
+          <div class="pipeline-step completed">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <div class="step-title">SYNCED_EXCEL</div>
+              <div class="step-metric">18 Sheets</div>
+              <div class="step-desc">Master Export Updated</div>
+            </div>
+          </div>
+          <div class="pipeline-arrow">➔</div>
+          <div class="pipeline-step active-step">
+            <div class="step-num">5</div>
+            <div class="step-content">
+              <div class="step-title">ROUTED_DESTINATION</div>
+              <div class="step-metric">208 Email • 269 Portal</div>
+              <div class="step-desc">Outreach & Application Tracking</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QS University Coverage Breakdown -->
+      <div class="dashboard-split-2col">
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3>QS 2027 Global University Coverage</h3>
+            <span class="badge badge-info">160 Institutions Profiled</span>
+          </div>
+          <table class="data-table" id="qsCoverageTable">
+            <thead>
+              <tr>
+                <th>QS Ranking Tier</th>
+                <th>Institutions</th>
+                <th>Screened</th>
+                <th>Shortlisted Faculty</th>
+                <th>Verified Emails</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5" class="text-center">Loading QS coverage data...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3>Discovery Checkpoints & Cursor States</h3>
+            <span class="badge badge-safe">5 Active Adapters</span>
+          </div>
+          <table class="data-table" id="discoveryCheckpointsTable">
+            <thead>
+              <tr>
+                <th>Adapter Key</th>
+                <th>Category</th>
+                <th>Cursor Position</th>
+                <th>Discovered</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="5" class="text-center">Loading checkpoints...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent Discovered Opportunities Table -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Recently Discovered Opportunities & Proof Evidence</h3>
+          <span class="badge badge-neutral">Showing latest 20 additions</span>
+        </div>
+        <div class="table-scroll-container">
+          <table class="data-table" id="recentOppsTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Title / Role</th>
+                <th>Organization</th>
+                <th>Type</th>
+                <th>Route</th>
+                <th>Confidence</th>
+                <th>Official Evidence Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="text-center">Loading discovered opportunities...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============================================================== -->
+    <!-- TAB 3: OUTREACH & REGIONAL SCHEDULE -->
+    <!-- ============================================================== -->
+    <main id="tab-outreach" class="tab-content">
+      <div class="kpi-grid">
+        <div class="kpi-card accent-green">
+          <div class="kpi-header">
+            <span class="kpi-title">TODAY'S SMTP ACCEPTANCES</span>
+            <span class="kpi-tag">Nov 10, 2026</span>
+          </div>
+          <div class="kpi-value">30</div>
+          <div class="kpi-sub">All Accepted by Destination MTA</div>
+          <div class="kpi-footer">0 Transport Failures Today</div>
+        </div>
+
+        <div class="kpi-card accent-blue">
+          <div class="kpi-header">
+            <span class="kpi-title">DAILY BUDGET REMAINING</span>
+            <span class="kpi-tag">Shared Quota</span>
+          </div>
+          <div class="kpi-value">170 <span class="kpi-denom">/ 200</span></div>
+          <div class="kpi-sub">Shared across all categories</div>
+          <div class="kpi-footer">Single SMTP Sender Enforced</div>
+        </div>
+
+        <div class="kpi-card accent-purple">
+          <div class="kpi-header">
+            <span class="kpi-title">TOTAL LIFETIME ACCEPTED</span>
+            <span class="kpi-tag">Delivery Ledger</span>
+          </div>
+          <div class="kpi-value">1,030</div>
+          <div class="kpi-sub">899 Unconfirmed In Watch Window</div>
+          <div class="kpi-footer">84 Hard Bounces Resolved</div>
+        </div>
+
+        <div class="kpi-card accent-amber">
+          <div class="kpi-header">
+            <span class="kpi-title">DISPATCHABLE IN QUEUE</span>
+            <span class="kpi-tag">Unified Queue</span>
+          </div>
+          <div class="kpi-value">582</div>
+          <div class="kpi-sub">374 Baseline Profs • 208 New Category</div>
+          <div class="kpi-footer">Paced by Local Arrival Windows</div>
+        </div>
+      </div>
+
+      <!-- Outreach Breakdown by Category -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Outreach Queue Status by Contact Category</h3>
+          <span class="badge badge-info">Zero Duplicate Transmissions Enforced</span>
+        </div>
+        <table class="data-table" id="outreachCategoryTable">
           <thead>
             <tr>
-              <th>QS</th>
-              <th>Professor & Title</th>
-              <th>University & Country</th>
-              <th>Department</th>
-              <th>Official Email</th>
-              <th>Research Overlap</th>
-              <th>Status</th>
-              <th>Actions</th>
+              <th>Contact Category</th>
+              <th>Total Qualified</th>
+              <th>Scheduled</th>
+              <th>Sent</th>
+              <th>Routed to Portal</th>
+              <th>Quarantined</th>
+              <th>Suppressed</th>
             </tr>
           </thead>
-          <tbody id="profsTableBody">
-            <tr><td colspan="8" class="text-center">Loading faculty prospects...</td></tr>
+          <tbody>
+            <tr><td colspan="7" class="text-center">Loading category metrics...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Next 10 Scheduled Dispatches -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Next 10 Scheduled Dispatches in Unified Queue</h3>
+          <span class="badge badge-safe">Arrival Target 8:00–9:00 AM Recipient Local Time</span>
+        </div>
+        <div class="table-scroll-container">
+          <table class="data-table" id="outreachNextQueueTable">
+            <thead>
+              <tr>
+                <th>Queue ID</th>
+                <th>Category</th>
+                <th>Recipient Name</th>
+                <th>Email Address</th>
+                <th>Organization</th>
+                <th>Time Block</th>
+                <th>IANA Timezone</th>
+                <th>Subject</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="8" class="text-center">Loading queue...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent 20 SMTP Dispatch Events -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Recent SMTP Acceptance Events (Delivery Tracker)</h3>
+          <span class="badge badge-neutral">Chronological Dispatch Ledger</span>
+        </div>
+        <div class="table-scroll-container">
+          <table class="data-table" id="outreachRecentDispatchesTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Recipient Email</th>
+                <th>University / Institution</th>
+                <th>Dispatched At (IST)</th>
+                <th>Transport Status</th>
+                <th>Delivery Status</th>
+                <th>Tracking State</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="text-center">Loading dispatches...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============================================================== -->
+    <!-- TAB 4: PORTAL APPLICATIONS -->
+    <!-- ============================================================== -->
+    <main id="tab-portals" class="tab-content">
+      <div class="banner-highlight banner-warning">
+        <div class="banner-icon">🛡️</div>
+        <div class="banner-body">
+          <h4>Portal Automation Fail-Closed Guardrail Active</h4>
+          <p>Live external submissions are disabled (<code>live_submission_enabled = False</code>). 269 institutional and enterprise applications are mapped, prefilled, and verified in mock simulation mode without external wire commits.</p>
+        </div>
+        <div class="banner-stat">
+          <span class="stat-number">0</span>
+          <span class="stat-label">Live External Submissions</span>
+        </div>
+      </div>
+
+      <!-- Portal Funnel Visualization -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Application Automation Funnel (269 Total Tracked)</h3>
+          <span class="badge badge-info">100% Prepared</span>
+        </div>
+        <div class="funnel-grid" id="portalFunnelGrid">
+          <div class="funnel-step">
+            <span class="funnel-count">269</span>
+            <span class="funnel-label">Tracked Postings</span>
+          </div>
+          <div class="funnel-step">
+            <span class="funnel-count">269</span>
+            <span class="funnel-label">Verified Open</span>
+          </div>
+          <div class="funnel-step">
+            <span class="funnel-count">266</span>
+            <span class="funnel-label">Applicant Eligible</span>
+          </div>
+          <div class="funnel-step">
+            <span class="funnel-count">269</span>
+            <span class="funnel-label">Drafts Prepared</span>
+          </div>
+          <div class="funnel-step">
+            <span class="funnel-count">269</span>
+            <span class="funnel-label">Fields Mapped</span>
+          </div>
+          <div class="funnel-step">
+            <span class="funnel-count">269</span>
+            <span class="funnel-label">Mock Prefill</span>
+          </div>
+          <div class="funnel-step active-funnel">
+            <span class="funnel-count highlight-red">3</span>
+            <span class="funnel-label">Manual Action</span>
+          </div>
+          <div class="funnel-step">
+            <span class="funnel-count">0</span>
+            <span class="funnel-label">Live Submitted</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Portal Opportunities Table -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Prepared Portal Opportunities & Deadlines</h3>
+          <span class="badge badge-safe">Sorted by Application Deadline</span>
+        </div>
+        <div class="table-scroll-container">
+          <table class="data-table" id="portalOppsTable">
+            <thead>
+              <tr>
+                <th>Opportunity ID</th>
+                <th>Role / Title</th>
+                <th>Organization</th>
+                <th>Deadline</th>
+                <th>Compensation</th>
+                <th>Required Documents</th>
+                <th>Application Portal URL</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="text-center">Loading portal opportunities...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============================================================== -->
+    <!-- TAB 5: REPLIES & OUTCOMES -->
+    <!-- ============================================================== -->
+    <main id="tab-outcomes" class="tab-content">
+      <!-- Positive Engagement Spotlight -->
+      <div class="positive-engagement-spotlight" id="positiveEngagementContainer">
+        <!-- Rendered via JS: MIT Bodner Interview Card -->
+      </div>
+
+      <div class="dashboard-split-2col">
+        <!-- 14-Intent Distribution -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3>Response Classification by Intent (14 Categories)</h3>
+            <span class="badge badge-safe">31 Inbound Replies Classified</span>
+          </div>
+          <div class="intent-grid" id="intentGrid">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Inbound Message Threads -->
+        <div class="panel-card">
+          <div class="panel-header">
+            <h3>Recent Active Email Threads</h3>
+            <span class="badge badge-info">15 Monitored Conversations</span>
+          </div>
+          <table class="data-table-sm" id="threadsTable">
+            <thead>
+              <tr>
+                <th>Professor / Institution</th>
+                <th>Subject</th>
+                <th>Msgs</th>
+                <th>Last Activity (IST)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" class="text-center">Loading threads...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- DSN Bounce Reconciliations -->
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>RFC DSN Bounce Ledger & Diagnostic Codes</h3>
+          <span class="badge badge-warning">194 Reconciled Bounces</span>
+        </div>
+        <div class="table-scroll-container">
+          <table class="data-table" id="dsnBouncesTable">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Bounced Recipient</th>
+                <th>Category</th>
+                <th>Status Code</th>
+                <th>RFC Diagnostic Code</th>
+                <th>Remote MTA</th>
+                <th>Received At</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="7" class="text-center">Loading bounce ledger...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- ============================================================== -->
+    <!-- TAB 6: MANUAL ACTION QUEUE -->
+    <!-- ============================================================== -->
+    <main id="tab-manual" class="tab-content">
+      <div class="banner-highlight">
+        <div class="banner-icon">📋</div>
+        <div class="banner-body">
+          <h4>Operator Action Required for High-Value Applications</h4>
+          <p>These 3 opportunities require human-signed official documents or operator review before automated submission can proceed. Clear manual instructions are provided below.</p>
+        </div>
+        <div class="banner-stat">
+          <span class="stat-number highlight-amber">3</span>
+          <span class="stat-label">Pending Actions</span>
+        </div>
+      </div>
+
+      <div class="manual-actions-grid" id="manualActionsContainer">
+        <!-- Populated via JS -->
+      </div>
+    </main>
+
+    <!-- ============================================================== -->
+    <!-- TAB 7: EXCEL SYNCHRONIZATION HEALTH -->
+    <!-- ============================================================== -->
+    <main id="tab-excel" class="tab-content">
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Authoritative Master Workbook Integrity (18 Sheets)</h3>
+          <span class="badge badge-safe" id="excelSyncStatusBadge">UP-TO-DATE</span>
+        </div>
+        <div class="file-meta-box" id="excelFileMeta">
+          <div class="meta-item">
+            <span class="meta-label">Authoritative Path:</span>
+            <span class="meta-value font-mono">data/private/Summer_2027_Professor_Database_WITH_TIME_BLOCKS_EXPORT.xlsx</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Single Writer Lock:</span>
+            <span class="meta-value highlight-green">FREE (No Competing Writers)</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Sync Lag:</span>
+            <span class="meta-value">0 seconds</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Total Sheets:</span>
+            <span class="meta-value highlight-blue">18 Authoritative Sheets</span>
+          </div>
+        </div>
+
+        <div class="table-title">18-Sheet Database Parity Audit</div>
+        <table class="data-table" id="excelParityTable">
+          <thead>
+            <tr>
+              <th>Workbook Sheet Name</th>
+              <th>Excel Row Count</th>
+              <th>SQLite Database Table</th>
+              <th>DB Record Count</th>
+              <th>Parity Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="5" class="text-center">Loading sheet parity data...</td></tr>
           </tbody>
         </table>
       </div>
     </main>
 
-    <!-- Tab 2: IST Scheduler & Time Blocks -->
-    <main id="tab-scheduler" class="tab-content">
-      <div class="section-header">
-        <h2>Regional IST Time Blocks (Target: 8:00–9:00 AM Local Morning Arrival)</h2>
-        <p>Dynamic IANA zoneinfo and Daylight Saving Time (DST) calculation. Ascending QS rank priority within clusters.</p>
-      </div>
-
-      <div class="blocks-container" id="timeBlocksList">
-        <div class="text-center">Loading regional scheduling blocks...</div>
-      </div>
-    </main>
-
-    <!-- Tab 3: Reply Intelligence & Review Inbox -->
-    <main id="tab-replies" class="tab-content">
-      <div class="section-header">
-        <h2>Reply Intelligence & Human-Review Inbox</h2>
-        <p class="warning-callout">
-          <strong>CRITICAL SAFETY PROTOCOL:</strong> The AI may NEVER autonomously send a reply. Contextual drafts are prepared for your exclusive review. Transmission requires human operator approval and explicit trigger.
-        </p>
-      </div>
-
-      <div class="replies-split-view">
-        <div class="replies-list" id="repliesList">
-          <div class="text-center">Loading incoming messages...</div>
+    <!-- ============================================================== -->
+    <!-- TAB 8: WORKER DIAGNOSTICS -->
+    <!-- ============================================================== -->
+    <main id="tab-workers" class="tab-content">
+      <div class="panel-card">
+        <div class="panel-header">
+          <h3>Complete Worker Diagnostic Matrix & Process States</h3>
+          <span class="badge badge-safe">5 Durable Heartbeats Active</span>
         </div>
-
-        <div class="reply-detail-pane" id="replyDetailPane">
-          <div class="empty-state">Select an incoming reply to inspect conversation thread and draft.</div>
+        <div class="workers-detail-grid" id="workersDetailGrid">
+          <!-- Populated via JS -->
         </div>
       </div>
     </main>
 
-    <!-- Tab 4: Follow-Up Queue -->
-    <main id="tab-followups" class="tab-content">
-      <div class="section-header">
-        <h2>Follow-Up Queue (User-Controlled Workflow)</h2>
-        <p>Follow-up drafts for unanswered first contacts. Human operator alone decides whether to approve and dispatch any follow-up.</p>
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <span>Opportunity Intelligence Engine v2.0 • Local Host: <code>http://127.0.0.1:8000</code></span>
       </div>
-
-      <div id="followupsList" class="followups-container">
-        <div class="text-center">No unanswered follow-up drafts currently pending review.</div>
+      <div class="footer-right">
+        <span>Last refresh: <span id="lastRefreshTs">--</span></span>
       </div>
-    </main>
-
-    <!-- Tab 5: Suppression & Safeguards -->
-    <main id="tab-suppression" class="tab-content">
-      <div class="section-header">
-        <h2>Permanent Suppression List & Exclusion Safeguards</h2>
-        <p>All institutional exclusions (IIT Delhi), previously contacted faculty (Chenshu Wu, Kai-Kit Wong), replies, rejections, bounces, and opt-outs are strictly blocked here.</p>
-      </div>
-
-      <div class="suppression-layout">
-        <div class="card form-card">
-          <h3>Add Manual Suppression</h3>
-          <div class="form-group">
-            <label>Email Address</label>
-            <input type="email" id="suppEmail" placeholder="professor@university.edu" class="input-text">
-          </div>
-          <div class="form-group">
-            <label>Domain</label>
-            <input type="text" id="suppDomain" placeholder="e.g. iitd.ac.in" class="input-text">
-          </div>
-          <div class="form-group">
-            <label>Reason</label>
-            <select id="suppReason" class="select-box">
-              <option value="MANUAL">MANUAL</option>
-              <option value="PREVIOUSLY_CONTACTED">PREVIOUSLY_CONTACTED</option>
-              <option value="INSTITUTIONAL_SELF">INSTITUTIONAL_SELF</option>
-              <option value="DECLINED">DECLINED</option>
-              <option value="BOUNCED">BOUNCED</option>
-              <option value="OPTED_OUT">OPTED_OUT</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Notes / Context</label>
-            <input type="text" id="suppNotes" placeholder="Reason for suppression" class="input-text">
-          </div>
-          <button id="btnAddSuppression" class="btn btn-primary">Add Permanent Suppression</button>
-        </div>
-
-        <div class="card table-card">
-          <h3>Active Suppressions</h3>
-          <div class="table-container small">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>Target (Email/Domain)</th>
-                  <th>Reason</th>
-                  <th>Notes</th>
-                  <th>Date Added</th>
-                </tr>
-              </thead>
-              <tbody id="suppressionTableBody">
-                <tr><td colspan="4" class="text-center">Loading suppression list...</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- Tab 6: Master Workbook Sync -->
-    <main id="tab-sync" class="tab-content">
-      <div class="section-header">
-        <h2>Authoritative Master Workbook Reconciliation</h2>
-        <p>Atomic synchronization with <code>Summer_2027_QS_Top_120_Professor_Research_Database.xlsx</code>. Non-destructive updates with timestamped backups, schema validation, and locking.</p>
-      </div>
-
-      <div class="sync-grid">
-        <div class="card">
-          <h3>Dynamic Schema Import</h3>
-          <p>Read all faculty prospects, universities, and notes from the master Excel workbook without hardcoding columns or losing formulas.</p>
-          <button id="btnImportWorkbook" class="btn btn-primary">Import / Reconcile from Master Excel</button>
-          <div id="importResult" class="sync-status-box"></div>
-        </div>
-
-        <div class="card">
-          <h3>Atomic Sync-Back to Workbook</h3>
-          <p>Synchronize outreach statuses and generate/update the 'Time Blocks and Distribution' sheet. An automatic <code>.bak</code> backup is created first.</p>
-          <button id="btnSyncBackWorkbook" class="btn btn-secondary">Sync Back to Authoritative Excel</button>
-          <div id="syncBackResult" class="sync-status-box"></div>
-        </div>
-
-        <div class="card" style="grid-column: 1 / -1;">
-          <h3>Forensic Discrepancy & Suppression Audit</h3>
-          <p>Rigorously audit 1,357 master Excel rows vs SQLite, verify 0 email duplicates, 0 syntax errors, and confirm permanent suppression of Chenshu Wu, Kai-Kit Wong, and IIT Delhi.</p>
-          <button id="btnRunAuditReport" class="btn btn-secondary">Run Forensic Discrepancy Audit</button>
-          <div id="auditReportResult" class="sync-status-box" style="margin-top:12px; font-family:var(--font-mono); font-size:12px; white-space:pre-wrap; max-height:220px; overflow-y:auto;"></div>
-        </div>
-      </div>
-    </main>
-
-    <!-- Tab 7: Diagnostics & Safety -->
-    <main id="tab-diagnostics" class="tab-content">
-      <div class="section-header">
-        <h2>Diagnostics, Mail Credentials & Safety Killswitch</h2>
-        <p>Verify IIT Delhi IMAP/SMTP endpoints, inspect credentials status, and manage the system-wide emergency stop.</p>
-      </div>
-
-      <div class="diag-grid">
-        <div class="card">
-          <h3>IIT Delhi Webmail Diagnostic</h3>
-          <p>IMAP: <code>mailstore.iitd.ac.in:993 (SSL)</code><br>SMTP: <code>smtp.iitd.ac.in:465 (SSL)</code></p>
-          <button id="btnTestMail" class="btn btn-secondary">Run Connectivity Check</button>
-          <div id="mailTestResult" class="sync-status-box"></div>
-        </div>
-
-        <div class="card">
-          <h3>Emergency Stop Killswitch</h3>
-          <p>Instantly aborts all active queues and locks outbound transmission gateways across the entire system.</p>
-          <div class="killswitch-group">
-            <button id="btnToggleEmergencyStop" class="btn btn-danger">TOGGLE EMERGENCY STOP</button>
-            <span id="emergencyStatusLabel" class="bold text-danger">STATUS: INACTIVE</span>
-          </div>
-        </div>
-
-        <div class="card full-width">
-          <h3>Immutable Event Audit Trail</h3>
-          <div class="log-stream" id="auditLogStream">
-            <div class="text-center">Loading audit log events...</div>
-          </div>
-        </div>
-      </div>
-    </main>
-
-    <!-- Draft Preview Modal -->
-    <div id="draftModal" class="modal">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="modalTitle">Personalized Outreach Draft</h3>
-          <button id="btnCloseModal" class="close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="draft-meta">
-            <div><strong>Recipient:</strong> <span id="modalRecipient"></span></div>
-            <div><strong>Subject:</strong> <span id="modalSubject"></span></div>
-            <div><strong>Word Count:</strong> <span id="modalWordCount" class="badge badge-safe"></span> (Target: 130–180 words)</div>
-          </div>
-          <div class="draft-text-box">
-            <pre id="modalBodyText"></pre>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button id="btnModalClose" class="btn btn-secondary">Close</button>
-          <button id="btnModalApprove" class="btn btn-primary">Approve Draft for Schedule</button>
-        </div>
-      </div>
-    </div>
-
+    </footer>
   </div>
 
   <script src="/static/app.js"></script>

@@ -560,15 +560,19 @@ class OperationsDashboard {
   renderExcelSync(data) {
     const parityBody = document.querySelector('#excelParityTable tbody');
     if (parityBody && data.parity_comparison) {
-      parityBody.innerHTML = data.parity_comparison.map(p => `
-        <tr>
-          <td><strong>${p.sheet_name}</strong></td>
-          <td class="font-mono text-center">${p.excel_rows}</td>
-          <td><code class="font-mono">${p.db_table}</code></td>
-          <td class="font-mono text-center">${p.db_count}</td>
-          <td><span class="badge badge-safe">${p.status}</span></td>
-        </tr>
-      `).join('');
+      parityBody.innerHTML = data.parity_comparison.map(p => {
+        const isSync = p.status.includes('SYNCHRONIZED');
+        const bClass = isSync ? 'badge-safe' : 'badge-warning';
+        return `
+          <tr>
+            <td><strong>${p.sheet_name}</strong></td>
+            <td class="font-mono text-center">${p.excel_rows}</td>
+            <td><code class="font-mono">${p.db_table}</code></td>
+            <td class="font-mono text-center">${p.db_count}</td>
+            <td><span class="badge ${bClass}">${p.status}</span></td>
+          </tr>
+        `;
+      }).join('');
     }
   }
 

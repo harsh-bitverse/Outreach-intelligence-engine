@@ -733,6 +733,94 @@ class OpportunityWorkbookSync:
         finally:
             self.release_lock()
 
+    def sync_delivery_log(self, db_conn=None) -> int:
+        """
+        Synchronizes all delivery tracking records from SQLite outbound_delivery_tracker
+        into the authoritative 'Email Delivery & Bounce Log' sheet.
+        """
+        self.acquire_lock()
+        try:
+            self.create_backup()
+            wb = openpyxl.load_workbook(str(self.workbook_path)) if self.workbook_path.exists() else openpyxl.Workbook()
+            sheet_title = "Email Delivery & Bounce Log"
+            ws = wb[sheet_title] if sheet_title in wb.sheetnames else wb.create_sheet(sheet_title)
+
+            headers = [
+                "Log ID", "Recipient Email", "Recipient Name", "Organization", "Category",
+                "Time Block", "SMTP Status", "Message-ID", "Timestamp (UTC)",
+                "Delivery State", "Bounce Type", "Bounce Diagnostic", "Attempt Count"
+            ]
+            self._format_header_row(ws, headers)
+
+            if ws.max_row > 1:
+                ws.delete_rows(2, ws.max_row - 1)
+
+            should_close = False
+            if db_conn is None:
+                import sqlite3
+                from config.settings import settings
+                db_conn = sqlite3.connect(f"file:{settings.SQLITE_DB_PATH.resolve()}?mode=ro", uri=True)
+                db_conn.row_factory = sqlite3.Row
+                should_close = True
+
+            cur = db_conn.cursor()
+            cur.execute("""
+                SELECT 
+                    t.id, 
+                    t.recipient_email, 
+                    COALESCE(p.full_name, uq.recipient_name, 'Contact') as recipient_name, 
+                    COALESCE(t.university_name, uq.organization_name, 'Organization') as organization_name,
+                    COALESCE(uq.category, 'ACADEMIC_LAB') as category,
+                    COALESCE(p.time_block, uq.assigned_block_id, 'BLOCK_01') as time_block,
+                    t.transport_status as smtp_status, 
+                    t.message_id, 
+                    t.smtp_accepted_at as sent_at_utc,
+                    t.delivery_status as delivery_state, 
+                    COALESCE(t.bounce_category, 'NONE') as bounce_type,
+                    COALESCE(t.bounce_diagnostic, 'None') as bounce_diagnostic, 
+                    COALESCE(t.address_attempt_number, 1) as attempt_count
+                FROM outbound_delivery_tracker t
+                LEFT JOIN professors p ON t.professor_id = p.professor_id
+                LEFT JOIN (
+                    SELECT recipient_email, category, organization_name, recipient_name, assigned_block_id
+                    FROM unified_outreach_queue
+                    WHERE recipient_email IS NOT NULL AND recipient_email != ''
+                    GROUP BY recipient_email
+                ) uq ON t.recipient_email = uq.recipient_email
+                ORDER BY t.smtp_accepted_at ASC;
+            """)
+            tracker_rows = cur.fetchall()
+            count = 0
+            for idx, r in enumerate(tracker_rows, start=2):
+                row_vals = [
+                    f"TRK-{r['id']:04d}",
+                    r["recipient_email"],
+                    r["recipient_name"],
+                    r["organization_name"],
+                    r["category"],
+                    r["time_block"],
+                    r["smtp_status"],
+                    r["message_id"],
+                    r["sent_at_utc"],
+                    r["delivery_state"],
+                    r["bounce_type"],
+                    r["bounce_diagnostic"],
+                    r["attempt_count"]
+                ]
+                self._write_row(ws, idx, row_vals)
+                count += 1
+
+            if should_close:
+                db_conn.close()
+
+            temp_path = self.workbook_path.with_suffix(f".tmp_sync_{os.getpid()}.xlsx")
+            wb.save(str(temp_path))
+            wb.close()
+            shutil.move(str(temp_path), str(self.workbook_path))
+            return count
+        finally:
+            self.release_lock()
+
     def _format_header_row(self, ws, headers: List[str]) -> None:
         ws.row_dimensions[1].height = 24
         for col_idx, h in enumerate(headers, start=1):

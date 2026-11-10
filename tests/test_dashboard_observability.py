@@ -47,8 +47,9 @@ def test_dashboard_overview_kpis(client):
     assert kpis["portals"]["execution_guardrail"] == "FAIL_CLOSED_SIMULATION"
 
     # Outcomes KPIs
-    assert kpis["outcomes"]["interviews_scheduled"] == 1
-    assert "Abigail Bodner" in kpis["outcomes"]["interview_lead"]
+    assert kpis["outcomes"]["interviews_scheduled"] == 0
+    assert "None Confirmed (0 Scheduled)" in kpis["outcomes"]["interview_lead"]
+    assert kpis["outcomes"]["total_replies"] == 31
 
     # Excel Sync KPIs
     assert kpis["excel_sync"]["sheet_count"] == 18
@@ -145,17 +146,21 @@ def test_dashboard_portals_fail_closed(client):
 
 
 def test_dashboard_outcomes_positive_signals(client):
-    """Verify MIT Bodner interview and 14-intent outcome classifications."""
+    """Verify 0 false interviews, 31 verified replies, and quarantined simulation."""
     response = client.get("/api/dashboard/outcomes")
     assert response.status_code == 200
     data = response.json()
 
-    assert len(data["positive_engagement_queue"]) == 1
-    item = data["positive_engagement_queue"][0]
-    assert item["event_id"] == "EVT-MIT-BODNER-01"
-    assert "Abigail Bodner" in item["contact_person"]
-    assert item["signal_type"] == "INTERVIEW_INVITATION"
-    assert "Zoom" in item["received_message"]
+    assert len(data["positive_engagement_queue"]) == 0
+    assert len(data["verified_replies"]) == 31
+    assert data["provenance_breakdown"]["VERIFIED_EMAIL"] == 31
+
+    # Check quarantine record
+    assert len(data["quarantined_claims"]) >= 1
+    q_item = data["quarantined_claims"][0]
+    assert "Bodner" in q_item["entity_name"]
+    assert q_item["verification_status"] == "UNVERIFIED_QUARANTINED"
+    assert q_item["item_type"] == "SIMULATED_TEST_FIXTURE"
 
     assert len(data["dsn_bounces"]) >= 1
     assert data["metrics"]["total_dsn_bounces"] == 194

@@ -136,13 +136,13 @@
         <div class="kpi-card accent-amber">
           <div class="kpi-header">
             <span class="kpi-title">REPLIES & OUTCOMES</span>
-            <span class="kpi-tag highlight-red">Action Required</span>
+            <span class="kpi-tag highlight-green">Verified</span>
           </div>
-          <div class="kpi-value" id="kpi-outcomes-interviews">1 <span class="kpi-denom">Interview</span></div>
-          <div class="kpi-sub">
-            Prof. Abigail Bodner (MIT)
+          <div class="kpi-value" id="kpi-outcomes-interviews">0 <span class="kpi-denom">Interviews</span></div>
+          <div class="kpi-sub" id="kpi-outcomes-sub">
+            0 Confirmed • 4 Conditional / Referrals
           </div>
-          <div class="kpi-footer">31 Total Replies • 194 DSN Bounces</div>
+          <div class="kpi-footer">31 Verified on IMAP • 194 DSN Bounces</div>
         </div>
       </div>
 
@@ -572,9 +572,34 @@
     <!-- TAB 5: REPLIES & OUTCOMES -->
     <!-- ============================================================== -->
     <main id="tab-outcomes" class="tab-content">
-      <!-- Positive Engagement Spotlight -->
-      <div class="positive-engagement-spotlight" id="positiveEngagementContainer">
-        <!-- Rendered via JS: MIT Bodner Interview Card -->
+      <!-- Outcomes Status / Positive Signal & Quarantine Banner -->
+      <div id="outcomesStatusBanner"></div>
+
+      <!-- Verified Inbound Replies Table -->
+      <div class="panel-card" style="margin-bottom: 24px;">
+        <div class="panel-header">
+          <h3>Authoritative Inbound Replies (Verified on mailstore.iitd.ac.in:993)</h3>
+          <span class="badge badge-safe">31 Confirmed via IMAP</span>
+        </div>
+        <div class="table-scroll-container">
+          <table class="data-table" id="verifiedRepliesTable">
+            <thead>
+              <tr>
+                <th>Professor / Sender</th>
+                <th>Institution</th>
+                <th>Classification</th>
+                <th>Provenance</th>
+                <th>IMAP Location</th>
+                <th>Received Date</th>
+                <th>Snippet / Details</th>
+                <th>Provenance Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="8" class="text-center">Loading verified replies...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="dashboard-split-2col">

@@ -59,20 +59,21 @@ def test_qs_top400_dataset_integrity():
 
 
 def test_7_tier_research_alignment_and_frontier_hardware():
-    """Verify all 7 standardized research alignment tiers and hardware co-design keywords."""
+    """Verify 7 research alignment tiers and enforce ApplicantTruthLock on TECH_MATCH_MATRIX."""
     ranker = OpportunityRanker()
 
-    # Verify frontier hardware co-design entry in TECH_MATCH_MATRIX
-    hw_matches = [
-        item for item in ranker.TECH_MATCH_MATRIX
-        if "Hardware" in item.get("project_id", "") or "Hardware" in item.get("tier", "")
-    ]
-    assert len(hw_matches) > 0
-    hw_item = hw_matches[0]
-    for kw in ["in-memory computing", "memristor", "neuromorphic", "analog", "co-design"]:
-        assert any(kw in s.lower() for s in hw_item["keywords"])
+    # Enforce ApplicantTruthLock: Only verified projects permitted in TECH_MATCH_MATRIX
+    project_ids = [item["project_id"] for item in ranker.TECH_MATCH_MATRIX]
+    assert "Neural Process Twin" in project_ids
+    assert "LLM Inference Intelligence Engine" in project_ids
+    assert "Finite-Difference PINN Error Estimation" in project_ids
+    assert "Sovereign On-Premise Agentic AI Workbench" in project_ids
+    assert "Humanoid Robotics & SuRGE Microdrone" in project_ids
+    assert "Peng-Robinson Real-Gas Cubic Equation of State Solver" in project_ids
+    # Fabricated hardware or Triton kernel projects MUST NOT exist in TECH_MATCH_MATRIX
+    assert not any("Frontier Intelligent Hardware" in pid for pid in project_ids)
 
-    # Test tier classifications
+    # Test tier classifications for external opportunities (e.g. lab working in neuromorphic hardware)
     opp_hardware = Opportunity(
         opportunity_id="test_hw_01",
         organization_id="org_hw",

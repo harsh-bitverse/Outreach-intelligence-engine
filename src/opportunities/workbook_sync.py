@@ -111,24 +111,40 @@ class OpportunityWorkbookSync:
 
     def __init__(self, workbook_path: Optional[Path] = None):
         self.workbook_path = Path(workbook_path or settings.MASTER_WORKBOOK_PATH)
-        self.lock_path = self.workbook_path.with_suffix(".opp_lock")
+        self.lock_path = self.workbook_path.with_suffix(".lock")
+        self.opp_lock_path = self.workbook_path.with_suffix(".opp_lock")
 
     def acquire_lock(self, timeout_seconds: int = 15) -> None:
+        """Acquires shared workbook lock, coordinating identically with DynamicWorkbookSync."""
         start_time = time.time()
         while time.time() - start_time < timeout_seconds:
+            if self.opp_lock_path.exists() or self.lock_path.exists():
+                time.sleep(0.15)
+                continue
             try:
                 fd = os.open(str(self.lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
                 os.write(fd, f"{os.getpid()} {datetime.now(timezone.utc).isoformat()}".encode("utf-8"))
                 os.close(fd)
+                try:
+                    fd_opp = os.open(str(self.opp_lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.close(fd_opp)
+                except Exception:
+                    pass
                 return
             except FileExistsError:
-                time.sleep(0.2)
+                time.sleep(0.15)
         raise TimeoutError(f"Could not acquire workbook lock at {self.lock_path} within {timeout_seconds}s")
 
     def release_lock(self) -> None:
+        """Releases both .lock and .opp_lock files."""
         try:
             if self.lock_path.exists():
                 self.lock_path.unlink()
+        except OSError:
+            pass
+        try:
+            if self.opp_lock_path.exists():
+                self.opp_lock_path.unlink()
         except OSError:
             pass
 

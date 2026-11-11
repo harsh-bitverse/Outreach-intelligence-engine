@@ -253,12 +253,13 @@ class PortalManagerService:
             "major": "Chemical Engineering (B.Tech 2025-2029)",
             "cgpa": "8.7 / 10.0",
             "statement_of_purpose": (
-                f"As an undergraduate at IIT Delhi specializing in accelerated scientific computing and AI systems, "
+                f"As an undergraduate in Chemical Engineering at IIT Delhi (CGPA 8.7/10), "
                 f"I am eager to contribute to {detail['organization_name']}'s {detail['position_title']}. "
-                f"My research and project experience includes implementing GPU-accelerated neural operators (Neural Process Twin), "
-                f"low-latency LLM inference optimizations (Roofline model and Triton kernels), and C++ thermodynamic solvers. "
+                f"My substantiated project experience includes developing learned surrogate models in PyTorch for 2D steady-state heat conduction (Neural Process Twin), "
+                f"profiling and benchmarking LLM inference latency and memory bounds using Roofline model diagnostics across PyTorch and ONNX Runtime backends, "
+                f"and implementing modular C++17 computational thermodynamic solvers (Peng-Robinson EOS). "
                 + (f"In particular: {add_info}. " if add_info else "")
-                + "I look forward to contributing high-throughput systems implementation to your team."
+                + "I look forward to contributing rigorous engineering and analytical capabilities to your research team."
             ),
             "relevant_coursework": "Data Structures & Algorithms, Transport Phenomena, Thermodynamics, Numerical Methods, Process Optimization",
             "github_profile": "https://github.com/harshith-n",

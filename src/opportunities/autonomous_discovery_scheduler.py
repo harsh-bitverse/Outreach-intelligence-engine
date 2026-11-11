@@ -397,20 +397,37 @@ class AutonomousDiscoveryScheduler:
 
             conn.commit()
             
-            # Update university stats in SQLite
+            # Update university stats in SQLite:
+            # INTEGRITY INVARIANT: Never mark 'SCREENED' while relevant departments remain unexamined.
+            # Count existing verified professors in SQLite for this university
+            cur.execute("""
+                SELECT COUNT(*) FROM professors 
+                WHERE university_name = ? 
+                  AND outreach_status != 'QUARANTINED_SYNTHETIC' 
+                  AND email_verification_status != 'QUARANTINED_SYNTHETIC'
+            """, (uni_name,))
+            existing_prof_count = cur.fetchone()[0]
+            
             shortlisted_count = len(new_faculty_records)
+            total_verified = existing_prof_count + shortlisted_count
+            
+            # Invariant: Never mark fully screened while relevant departments remain unexamined.
+            # Automated directory passes update profile metrics while preserving PARTIAL status
+            # until exhaustive verification across all relevant departments is completed.
+            review_status = 'PARTIAL – SCREENING INCOMPLETE' if total_verified > 0 else 'UNREVIEWED'
+            
             cur.execute("""
                 UPDATE universities 
                 SET profiles_screened = profiles_screened + ?,
-                    professors_shortlisted = professors_shortlisted + ?,
-                    verified_emails = verified_emails + ?,
-                    review_status = 'SCREENED',
+                    professors_shortlisted = ?,
+                    verified_emails = ?,
+                    review_status = ?,
                     departments_reviewed = ?,
                     last_updated = ?
                 WHERE university_name = ?
             """, (
-                profiles_screened, shortlisted_count, shortlisted_count,
-                ", ".join(departments), now_iso, uni_name
+                profiles_screened, total_verified, total_verified,
+                review_status, ", ".join(departments), now_iso, uni_name
             ))
             conn.commit()
             
@@ -470,71 +487,15 @@ class AutonomousDiscoveryScheduler:
 
     def _discover_faculty_for_institution(self, uni_meta: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Discovers and generates grounded candidate faculty profiles across the 7 research tiers
-        tailored to the specific university's actual research focus and departmental directory.
+        Discovers authentic faculty profiles from official departmental directories.
+        CRITICAL INTEGRITY INVARIANT:
+        - NEVER generates synthetic, placeholder or mock faculty records.
+        - Every candidate MUST have a verifiable official university-page evidence URL.
+        - If live crawler payload is not available for a department, returns an empty list.
         """
-        uni_name = uni_meta["institution_name"]
-        country = uni_meta["country"]
-        dir_url = uni_meta.get("official_directory_url", "https://www.eecs.mit.edu")
-        
-        # Determine domain prefix from university name
-        clean_domain = self._extract_uni_domain(uni_meta)
-        
-        candidates = [
-            {
-                "full_name": f"Prof. Alex Rivera",
-                "title": "Associate Professor of Computer Science",
-                "department": "Department of Computer Science",
-                "email": f"arivera@{clean_domain}",
-                "evidence_url": f"{dir_url}",
-                "domains": ["Large Language Models", "Inference Optimization", "GPU Kernels"],
-                "research_areas": "LLM Inference Systems, Distributed Training, Model Quantization",
-                "research_overlap": "Direct overlap with LLM Inference Intelligence Engine and GPU roofline performance modeling.",
-                "matched_project": "LLM Inference Intelligence Engine",
-                "potential_contribution": "Formulating low-latency tensor parallelism kernels and KV-cache compression algorithms.",
-                "alignment_tier": "AI_SYSTEMS_SOFTWARE"
-            },
-            {
-                "full_name": f"Prof. Elena Rostova",
-                "title": "Professor of Intelligent Hardware & Microelectronics",
-                "department": "School of Electrical & Computer Engineering",
-                "email": f"erostova@{clean_domain}",
-                "evidence_url": f"{dir_url}",
-                "domains": ["In-Memory Computing", "Memristive Accelerators", "Neuromorphic Hardware"],
-                "research_areas": "Frontier AI Hardware, Analog Neural Accelerators, Emerging Nonvolatile Memory",
-                "research_overlap": "Strong motivation aligning student's C++/CUDA performance benchmarking with hardware/software co-design inquiries.",
-                "matched_project": "Frontier Intelligent Hardware & Computer Architecture Research Alignment",
-                "potential_contribution": "Benchmarking software kernel performance against simulated crossbar array accelerators.",
-                "alignment_tier": "FRONTIER_AI_HARDWARE"
-            },
-            {
-                "full_name": f"Prof. David Chen",
-                "title": "Assistant Professor of Robotics and Autonomous Systems",
-                "department": "Robotics & Autonomous Systems Institute",
-                "email": f"dchen@{clean_domain}",
-                "evidence_url": f"{dir_url}",
-                "domains": ["Autonomous Flight", "Aerial Robotics", "Visual Odometry", "SLAM"],
-                "research_areas": "Microdrone Navigation, Visual Servoing, Embedded Telemetry",
-                "research_overlap": "Direct match with SuRGE Microdrone autonomy and 3D environment mapping exposure.",
-                "matched_project": "Humanoid Robotics & SuRGE Microdrone",
-                "potential_contribution": "Implementing agile trajectory optimization and visual-inertial odometry algorithms in C++.",
-                "alignment_tier": "ROBOTICS_EMBODIED_AI"
-            },
-            {
-                "full_name": f"Prof. Sophia Martinez",
-                "title": "Professor of Chemical & Process Systems Engineering",
-                "department": "Department of Chemical & Biomolecular Engineering",
-                "email": f"smartinez@{clean_domain}",
-                "evidence_url": f"{dir_url}",
-                "domains": ["Scientific ML", "PINNs", "Process Systems Engineering", "Transport PDEs"],
-                "research_areas": "Neural Process Twins, Finite-Difference Error Estimation, Surrogate Modeling",
-                "research_overlap": "Deep synergy with Neural Process Twin 2D heat equation and finite-difference PINN error estimation.",
-                "matched_project": "Neural Process Twin",
-                "potential_contribution": "Developing physics-constrained neural operator surrogates for transient chemical transport phenomena.",
-                "alignment_tier": "SCIENTIFIC_ML"
-            }
-        ]
-        return candidates
+        # Production invariant: Return only verified crawled/ingested candidates with official URLs.
+        # Zero synthetic/template faculty generation permitted.
+        return []
 
     def _extract_uni_domain(self, uni_meta: Dict[str, Any]) -> str:
         """Derives a clean institutional domain from directory URL or institution name."""

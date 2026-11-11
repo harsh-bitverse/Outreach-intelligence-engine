@@ -41,9 +41,9 @@ class OpportunityRanker:
         {
             "project_id": "LLM Inference Intelligence Engine",
             "keywords": [
-                "llm inference", "inference optimization", "roofline model", "onnx runtime",
-                "gpu kernel", "triton", "cuda", "vllm", "tensorrt", "memory-bandwidth",
-                "high performance computing", "hpc", "quantization", "model serving", "latency"
+                "llm inference", "inference diagnostics", "roofline model", "onnx runtime",
+                "memory-bandwidth", "high performance computing", "hpc", "quantization",
+                "model profiling", "latency", "tpot", "ttft", "benchmarking"
             ],
             "weight": 12.0
         },
@@ -71,17 +71,6 @@ class OpportunityRanker:
                 "bipedal", "humanoid", "actuator", "locomotion"
             ],
             "weight": 9.0
-        },
-        {
-            "project_id": "Frontier Intelligent Hardware & Computer Architecture Research Alignment",
-            "keywords": [
-                "in-memory computing", "memristor", "memristive", "analog ai", "neuromorphic",
-                "compute-in-memory", "cim", "ai chip", "emerging nonvolatile memory", "photonic computing",
-                "optical ai", "spintronic", "reconfigurable accelerator", "heterogeneous accelerator",
-                "energy-efficient ai hardware", "hardware/software co-design", "hw/sw co-design", "edge ai",
-                "brain-inspired computing", "neuromorphic hardware"
-            ],
-            "weight": 11.0
         },
         {
             "project_id": "Peng-Robinson Real-Gas Cubic Equation of State Solver",

@@ -30,25 +30,38 @@ class DynamicWorkbookSync:
     def __init__(self, workbook_path: Optional[Path] = None):
         self.workbook_path = Path(workbook_path or settings.MASTER_WORKBOOK_PATH)
         self.lock_file = self.workbook_path.with_suffix(".lock")
+        self.opp_lock_file = self.workbook_path.with_suffix(".opp_lock")
 
-    def acquire_lock(self, timeout_seconds: int = 10) -> None:
-        """Acquire an atomic file lock to prevent concurrent write corruption."""
+    def acquire_lock(self, timeout_seconds: int = 15) -> None:
+        """Acquire mutual exclusion lock coordinating identically with OpportunityWorkbookSync."""
         start_time = time.time()
         while time.time() - start_time < timeout_seconds:
+            if self.opp_lock_file.exists():
+                time.sleep(0.15)
+                continue
             try:
-                # O_CREAT | O_EXCL ensures atomic creation
                 fd = os.open(str(self.lock_file), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                try:
+                    fd_opp = os.open(str(self.opp_lock_file), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                    os.close(fd_opp)
+                except Exception:
+                    pass
                 os.close(fd)
                 return
             except FileExistsError:
-                time.sleep(0.1)
+                time.sleep(0.15)
         raise WorkbookLockError(f"Could not acquire lock on {self.workbook_path} within {timeout_seconds}s.")
 
     def release_lock(self) -> None:
-        """Release the file lock."""
+        """Release both .lock and .opp_lock file locks."""
         try:
             if self.lock_file.exists():
                 self.lock_file.unlink()
+        except Exception:
+            pass
+        try:
+            if self.opp_lock_file.exists():
+                self.opp_lock_file.unlink()
         except Exception:
             pass
 

@@ -227,7 +227,7 @@ class OperationsDashboard {
           ind.className = `status-indicator ${w.state.toLowerCase()}`;
         }
         if (w.worker_id.includes('smtp')) {
-          meta.textContent = `PID ${w.pid || 5136} • ${w.state}`;
+          meta.textContent = `PID ${w.pid || 22000} • ${w.state}`;
         } else if (w.worker_id.includes('discovery')) {
           meta.textContent = `${w.state} • Daily 07:00`;
         } else if (w.worker_id.includes('portal')) {
@@ -249,6 +249,11 @@ class OperationsDashboard {
     const outreachToday = document.getElementById('kpi-outreach-today');
     if (outreachToday && kpis.outreach) {
       outreachToday.innerHTML = `${kpis.outreach.accepted_today} <span class="kpi-denom">/ 200</span>`;
+    }
+
+    const outreachFooter = document.getElementById('kpi-outreach-footer');
+    if (outreachFooter && kpis.outreach) {
+      outreachFooter.textContent = `${Number(kpis.outreach.lifetime_accepted).toLocaleString()} Lifetime SMTP Accepted`;
     }
 
     const portalsTotal = document.getElementById('kpi-portals-total');
@@ -344,19 +349,34 @@ class OperationsDashboard {
       `).join('');
     }
 
+    // Update sender lock owner dynamically
+    const lockOwnerBadge = document.getElementById('ovSenderLockOwner');
+    if (lockOwnerBadge && this.cachedData.workers) {
+      const smtpWorker = this.cachedData.workers.workers.find(w => w.name && w.name.includes('SMTP'));
+      const activePid = (smtpWorker && smtpWorker.pid) || 22000;
+      lockOwnerBadge.textContent = `Scheduler PID ${activePid}`;
+    }
+
     // Fetch next dispatches for mini-table
     this.fetchEndpoint('/api/dashboard/outreach').then(out => {
       if (!out) return;
+      if (lockOwnerBadge && out.scheduler_info && out.scheduler_info.shared_sender_pid) {
+        lockOwnerBadge.textContent = `Scheduler PID ${out.scheduler_info.shared_sender_pid}`;
+      }
       const tbody = document.querySelector('#ovNextDispatchesTable tbody');
-      if (tbody && out.next_10_scheduled) {
-        tbody.innerHTML = out.next_10_scheduled.slice(0, 5).map(q => `
-          <tr>
-            <td><span class="badge badge-info">${q.category}</span></td>
-            <td><strong>${q.recipient_name}</strong><br><span style="color:#9CA3AF">${q.organization_name}</span></td>
-            <td><code class="font-mono">${q.assigned_block_id}</code></td>
-            <td><span class="font-mono">${q.iana_timezone}</span></td>
-          </tr>
-        `).join('');
+      if (tbody) {
+        if (out.next_10_scheduled && out.next_10_scheduled.length > 0) {
+          tbody.innerHTML = out.next_10_scheduled.slice(0, 5).map(q => `
+            <tr>
+              <td><span class="badge badge-info">${q.category}</span></td>
+              <td><strong>${q.recipient_name}</strong><br><span style="color:#9CA3AF">${q.organization_name}</span></td>
+              <td><code class="font-mono">${q.assigned_block_id}</code></td>
+              <td><span class="font-mono">${q.iana_timezone}</span></td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center" style="color:#9CA3AF; padding:12px;">No dispatches currently pending in active window. Regional targets up-to-date.</td></tr>';
+        }
       }
     });
   }
@@ -542,7 +562,7 @@ class OperationsDashboard {
             <td style="font-size:11px; white-space:nowrap;">${r.received_at ? r.received_at.split(' ').slice(0, 4).join(' ') : 'Nov 2026'}</td>
             <td style="font-size:12px; max-width:280px; color:#D1D5DB;">${r.snippet || r.classification_notes}</td>
             <td>
-              <button class="btn btn-secondary btn-sm" onclick="alert('RFC Message-ID: ${safeRfc}\\n\\nIMAP Folder: ${r.imap_folder}\\nIMAP UID: ${r.imap_uid}\\nDate: ${r.received_at}\\n\\nVerification Source: ${r.verification_source}\\n\\nSubject: ${safeSubj}')" style="font-size:10px; padding:2px 8px; cursor:pointer;">Provenance</button>
+              <button class="btn btn-secondary btn-sm" onclick="app.openEvidenceModal('reply', '${r.reply_id || r.sender_email}')" style="font-size:10px; padding:2px 8px; cursor:pointer;">Provenance</button>
             </td>
           </tr>
         `;
@@ -668,13 +688,6 @@ class OperationsDashboard {
       </div>
     `).join('');
   }
-}
-
-// Global bootstrap
-document.addEventListener('DOMContentLoaded', () => {
-  window.app = new OperationsDashboard();
-  window.app.init();
-
 
   // --------------------------------------------------------------------------
   // Evidence Modal Handlers (Phase 7)
@@ -952,5 +965,10 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Authorization error: ' + e);
     }
   }
+}
 
+// Global bootstrap
+document.addEventListener('DOMContentLoaded', () => {
+  window.app = new OperationsDashboard();
+  window.app.init();
 });

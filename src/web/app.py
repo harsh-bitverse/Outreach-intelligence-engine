@@ -62,6 +62,16 @@ static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
+@app.get("/favicon.ico")
+def serve_favicon():
+    """Serve favicon or 204 to suppress browser console 404s."""
+    favicon = static_dir / "favicon.ico"
+    if favicon.exists():
+        return FileResponse(str(favicon))
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 @app.get("/")
 def serve_dashboard():
     """Serve the main operator dashboard SPA."""

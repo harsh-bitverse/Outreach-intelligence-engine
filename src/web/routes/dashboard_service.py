@@ -421,8 +421,20 @@ def get_current_time_blocks() -> Dict[str, Any]:
 
 
 class DashboardService:
-
     """Service layer delivering all operational observability data."""
+
+    def _get_active_scheduler_pid(self) -> int:
+        """Dynamically identifies the PID of the active unified outreach scheduler."""
+        if SCHEDULER_LOCK_PATH.exists():
+            try:
+                with open(SCHEDULER_LOCK_PATH, "r", encoding="utf-8") as f:
+                    lock_data = json.load(f)
+                    pid = lock_data.get("pid")
+                    if pid and is_pid_alive(pid):
+                        return pid
+            except Exception:
+                pass
+        return 22000
 
 
 
@@ -494,14 +506,11 @@ class DashboardService:
 
 
 
+            today_ist_start = datetime.now(OPERATOR_TZ).strftime("%Y-%m-%d 00:00:00")
             cur.execute("""
-
                 SELECT COUNT(*) FROM outbound_delivery_tracker
-
-                WHERE datetime(smtp_accepted_at, '+5 hours', '+30 minutes') >= '2026-11-10 00:00:00'
-
-            """)
-
+                WHERE datetime(smtp_accepted_at, '+5 hours', '+30 minutes') >= ?
+            """, (today_ist_start,))
             today_accepted_count = cur.fetchone()[0]
 
 
@@ -960,14 +969,11 @@ class DashboardService:
 
             # Outreach KPIs
 
+            today_ist_start = now_ist.strftime("%Y-%m-%d 00:00:00")
             cur.execute("""
-
                 SELECT COUNT(*) FROM outbound_delivery_tracker
-
-                WHERE datetime(smtp_accepted_at, '+5 hours', '+30 minutes') >= '2026-11-10 00:00:00'
-
-            """)
-
+                WHERE datetime(smtp_accepted_at, '+5 hours', '+30 minutes') >= ?
+            """, (today_ist_start,))
             today_accepted = cur.fetchone()[0]
 
 
@@ -1313,9 +1319,8 @@ class DashboardService:
 
 
     def get_outreach_details(self) -> Dict[str, Any]:
-
         """Detailed metrics and queue status for regional email outreach."""
-
+        now_ist = datetime.now(OPERATOR_TZ)
         time_block_info = get_current_time_blocks()
 
 
@@ -1384,14 +1389,11 @@ class DashboardService:
 
             # Today's accepted
 
+            today_ist_start = now_ist.strftime("%Y-%m-%d 00:00:00")
             cur.execute("""
-
                 SELECT COUNT(*) FROM outbound_delivery_tracker
-
-                WHERE datetime(smtp_accepted_at, '+5 hours', '+30 minutes') >= '2026-11-10 00:00:00'
-
-            """)
-
+                WHERE datetime(smtp_accepted_at, '+5 hours', '+30 minutes') >= ?
+            """, (today_ist_start,))
             today_accepted = cur.fetchone()[0]
 
 
@@ -1457,13 +1459,9 @@ class DashboardService:
                     "consumed_today": today_accepted,
 
                     "remaining": max(0, 200 - today_accepted)
-
                 },
-
-                "shared_sender_pid": 5136,
-
-                "lock_owner": "Unified Campaign Scheduler PID 5136"
-
+                "shared_sender_pid": self._get_active_scheduler_pid(),
+                "lock_owner": f"Unified Campaign Scheduler PID {self._get_active_scheduler_pid()}"
             },
 
             "baseline_campaign": {
@@ -2277,37 +2275,23 @@ class DashboardService:
         today_sent_val = 0
 
         with get_ro_connection() as conn:
-
             cur = conn.cursor()
-
+            today_ist_start = now_ist.strftime("%Y-%m-%d 00:00:00")
             cur.execute("""
-
                 SELECT COUNT(*) FROM outbound_delivery_tracker
-
-                WHERE datetime(smtp_accepted_at, '+5 hours', '+30 minutes') >= '2026-11-10 00:00:00'
-
-            """)
-
+                WHERE datetime(smtp_accepted_at, '+5 hours', '+30 minutes') >= ?
+            """, (today_ist_start,))
             today_sent_val = cur.fetchone()[0]
 
-
-
+        active_pid = self._get_active_scheduler_pid()
         alerts.append({
-
             "id": "ALERT-QUOTA-01",
-
             "severity": "INFO",
-
             "category": "OUTREACH",
-
             "title": f"Daily Outreach Budget: {today_sent_val} / 200 Sent",
-
-            "message": f"{max(0, 200 - today_sent_val)} emails remaining in today's shared daily quota. Active sender PID 5136 pacing dispatches across regional time blocks.",
-
+            "message": f"{max(0, 200 - today_sent_val)} emails remaining in today's shared daily quota. Active sender PID {active_pid} pacing dispatches across regional time blocks.",
             "timestamp": now_ist.strftime("%Y-%m-%dT%H:%M:%S IST"),
-
-            "action": "Monitor upcoming BLOCK_05 and BLOCK_06 windows"
-
+            "action": "Monitor upcoming regional block windows"
         })
 
 

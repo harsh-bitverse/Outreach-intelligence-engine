@@ -510,19 +510,34 @@ class AutonomousCampaignLoop:
                 pass
 
         excel_candidates = []
-        wb = openpyxl.load_workbook(str(self.workbook_path), read_only=True)
-        tb_sheet = next((s for s in wb.sheetnames if "time blocks" in s.lower()), None)
-        if not tb_sheet:
-            wb.close()
-            return []
+        rows_data = []
+        for attempt in range(4):
+            try:
+                # If concurrent write lock held, wait briefly
+                if self.workbook_path.with_suffix(".lock").exists() or self.workbook_path.with_suffix(".opp_lock").exists():
+                    time.sleep(0.3)
+                wb = openpyxl.load_workbook(str(self.workbook_path), read_only=True)
+                tb_sheet = next((s for s in wb.sheetnames if "time blocks" in s.lower()), None)
+                if not tb_sheet:
+                    wb.close()
+                    return []
+                ws = wb[tb_sheet]
+                rows_data = list(ws.iter_rows(values_only=True))
+                wb.close()
+                break
+            except Exception as e:
+                if attempt < 3:
+                    time.sleep(0.4)
+                    continue
+                logger.warning(f"Error reading workbook in block {block_id}: {e}")
+                return []
 
-        ws = wb[tb_sheet]
         current_block = None
 
         # Normalized target block id e.g. "BLOCK_01"
         target_norm = block_id.upper().replace(" ", "_")
 
-        for r_idx, row in enumerate(ws.iter_rows(values_only=True), start=1):
+        for r_idx, row in enumerate(rows_data, start=1):
             if not row or not any(cell is not None for cell in row):
                 continue
 

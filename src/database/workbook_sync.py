@@ -16,6 +16,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from config.settings import settings
 from src.database.models import Professor, University
 from src.database.repository import OutreachRepository, compute_durable_professor_id
+from src.database.workbook_guard import UnifiedWorkbookLock, atomic_save_and_validate_workbook
 from src.security.audit_logger import audit_logger
 
 
@@ -33,38 +34,17 @@ class DynamicWorkbookSync:
         self.opp_lock_file = self.workbook_path.with_suffix(".opp_lock")
 
     def acquire_lock(self, timeout_seconds: int = 15) -> None:
-        """Acquire mutual exclusion lock coordinating identically with OpportunityWorkbookSync."""
-        start_time = time.time()
-        while time.time() - start_time < timeout_seconds:
-            if self.opp_lock_file.exists():
-                time.sleep(0.15)
-                continue
-            try:
-                fd = os.open(str(self.lock_file), os.O_CREAT | os.O_EXCL | os.O_RDWR)
-                try:
-                    fd_opp = os.open(str(self.opp_lock_file), os.O_CREAT | os.O_EXCL | os.O_RDWR)
-                    os.close(fd_opp)
-                except Exception:
-                    pass
-                os.close(fd)
-                return
-            except FileExistsError:
-                time.sleep(0.15)
-        raise WorkbookLockError(f"Could not acquire lock on {self.workbook_path} within {timeout_seconds}s.")
-
+        if not hasattr(self, '_coordinator'):
+            self._coordinator = UnifiedWorkbookLock(self.workbook_path)
+        try:
+            self._coordinator.acquire(timeout_seconds=float(timeout_seconds))
+        except TimeoutError as te:
+            raise WorkbookLockError(f'Could not acquire lock on {self.workbook_path}: {te}')
     def release_lock(self) -> None:
-        """Release both .lock and .opp_lock file locks."""
-        try:
-            if self.lock_file.exists():
-                self.lock_file.unlink()
-        except Exception:
-            pass
-        try:
-            if self.opp_lock_file.exists():
-                self.opp_lock_file.unlink()
-        except Exception:
-            pass
-
+        if hasattr(self, '_coordinator'):
+            self._coordinator.release()
+        else:
+            UnifiedWorkbookLock(self.workbook_path).release()
     def create_backup(self) -> Path:
         """Create a timestamped backup before any write operation."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -484,12 +464,8 @@ class DynamicWorkbookSync:
                 self._sync_time_blocks_sheet(wb, time_blocks_data)
 
             # 3. Write to temporary file
-            temp_path = self.workbook_path.with_suffix(f".tmp_{os.getpid()}.xlsx")
-            wb.save(str(temp_path))
+            atomic_save_and_validate_workbook(wb, self.workbook_path, create_backup=False)
             wb.close()
-
-            # 4. Atomic replace
-            shutil.move(str(temp_path), str(self.workbook_path))
 
             audit_logger.log_event(
                 event_type="WORKBOOK_SYNCED_BACK",
@@ -682,10 +658,8 @@ class DynamicWorkbookSync:
                         break
 
             # 3. Save atomically via temp file
-            temp_path = self.workbook_path.with_suffix(f".tmp_{os.getpid()}_{int(time.time()*1000)}.xlsx")
-            wb.save(str(temp_path))
+            atomic_save_and_validate_workbook(wb, self.workbook_path, create_backup=False)
             wb.close()
-            shutil.move(str(temp_path), str(self.workbook_path))
 
             audit_logger.log_event(
                 event_type="WORKBOOK_ROW_UPDATED",

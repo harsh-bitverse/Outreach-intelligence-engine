@@ -50,6 +50,7 @@ from src.opportunities.models import (
     DiscoveryStatus,
     ContactChannel
 )
+from src.database.workbook_guard import UnifiedWorkbookLock, atomic_save_and_validate_workbook
 from src.security.audit_logger import audit_logger
 
 logger = logging.getLogger(__name__)
@@ -115,38 +116,17 @@ class OpportunityWorkbookSync:
         self.opp_lock_path = self.workbook_path.with_suffix(".opp_lock")
 
     def acquire_lock(self, timeout_seconds: int = 15) -> None:
-        """Acquires shared workbook lock, coordinating identically with DynamicWorkbookSync."""
-        start_time = time.time()
-        while time.time() - start_time < timeout_seconds:
-            if self.opp_lock_path.exists() or self.lock_path.exists():
-                time.sleep(0.15)
-                continue
-            try:
-                fd = os.open(str(self.lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(fd, f"{os.getpid()} {datetime.now(timezone.utc).isoformat()}".encode("utf-8"))
-                os.close(fd)
-                try:
-                    fd_opp = os.open(str(self.opp_lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    os.close(fd_opp)
-                except Exception:
-                    pass
-                return
-            except FileExistsError:
-                time.sleep(0.15)
-        raise TimeoutError(f"Could not acquire workbook lock at {self.lock_path} within {timeout_seconds}s")
+        """Acquires shared workbook lock using UnifiedWorkbookLock coordinator."""
+        if not hasattr(self, '_coordinator'):
+            self._coordinator = UnifiedWorkbookLock(self.workbook_path)
+        self._coordinator.acquire(timeout_seconds=float(timeout_seconds))
 
     def release_lock(self) -> None:
-        """Releases both .lock and .opp_lock files."""
-        try:
-            if self.lock_path.exists():
-                self.lock_path.unlink()
-        except OSError:
-            pass
-        try:
-            if self.opp_lock_path.exists():
-                self.opp_lock_path.unlink()
-        except OSError:
-            pass
+        """Releases unified workbook lock."""
+        if hasattr(self, '_coordinator'):
+            self._coordinator.release()
+        else:
+            UnifiedWorkbookLock(self.workbook_path).release()
 
     def create_backup(self) -> Optional[Path]:
         if not self.workbook_path.exists():

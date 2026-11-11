@@ -30,6 +30,7 @@ import openpyxl
 from config.settings import settings
 from src.database.connection import get_db
 from src.database.models import OutreachDraft, OutreachQueueItem, Professor
+from src.database.workbook_guard import safe_read_workbook_snapshot
 from src.database.repository import OutreachRepository, compute_durable_professor_id
 from src.database.workbook_sync import DynamicWorkbookSync, WorkbookLockError
 from src.mail.credentials import CredentialManager
@@ -511,25 +512,26 @@ class AutonomousCampaignLoop:
 
         excel_candidates = []
         rows_data = []
-        for attempt in range(4):
+        for attempt in range(5):
             try:
                 # If concurrent write lock held, wait briefly
                 if self.workbook_path.with_suffix(".lock").exists() or self.workbook_path.with_suffix(".opp_lock").exists():
-                    time.sleep(0.3)
-                wb = openpyxl.load_workbook(str(self.workbook_path), read_only=True)
-                tb_sheet = next((s for s in wb.sheetnames if "time blocks" in s.lower()), None)
-                if not tb_sheet:
+                    time.sleep(0.2)
+                with safe_read_workbook_snapshot(self.workbook_path) as snapshot_path:
+                    wb = openpyxl.load_workbook(str(snapshot_path), read_only=True)
+                    tb_sheet = next((s for s in wb.sheetnames if "time blocks" in s.lower()), None)
+                    if not tb_sheet:
+                        wb.close()
+                        return []
+                    ws = wb[tb_sheet]
+                    rows_data = list(ws.iter_rows(values_only=True))
                     wb.close()
-                    return []
-                ws = wb[tb_sheet]
-                rows_data = list(ws.iter_rows(values_only=True))
-                wb.close()
                 break
             except Exception as e:
-                if attempt < 3:
-                    time.sleep(0.4)
+                if attempt < 4:
+                    time.sleep(0.3 * (attempt + 1))
                     continue
-                logger.warning(f"Error reading workbook in block {block_id}: {e}")
+                logger.warning(f"Error reading workbook in block {block_id} after retries: {e}")
                 return []
 
         current_block = None

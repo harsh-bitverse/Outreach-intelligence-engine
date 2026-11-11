@@ -3,12 +3,14 @@ FastAPI Web Application Server for Outreach Intelligence Engine.
 Serves both the REST API and the operator dashboard UI.
 """
 
+import hashlib
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from config.settings import settings
 from src.database.connection import initialize_database, get_db
 from src.database.repository import OutreachRepository
@@ -56,6 +58,22 @@ app.add_middleware(
 app.include_router(api_router)
 app.include_router(dashboard_router)
 
+
+@app.middleware("http")
+async def add_strict_cache_control_headers(request, call_next):
+    """Enforce strict no-cache headers across HTML, static assets, and API routes."""
+    response = await call_next(request)
+    if (
+        request.url.path.startswith("/static")
+        or request.url.path in ("/", "/favicon.ico")
+        or request.url.path.startswith("/api/dashboard")
+    ):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+
 # Mount Static UI Files
 static_dir = Path(__file__).parent / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
@@ -67,15 +85,38 @@ def serve_favicon():
     """Serve favicon or 204 to suppress browser console 404s."""
     favicon = static_dir / "favicon.ico"
     if favicon.exists():
-        return FileResponse(str(favicon))
-    from fastapi.responses import Response
+        return FileResponse(
+            str(favicon),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+        )
     return Response(status_code=204)
 
 
 @app.get("/")
 def serve_dashboard():
-    """Serve the main operator dashboard SPA."""
+    """Serve the main operator dashboard SPA with dynamic asset cache-busting."""
     index_file = static_dir / "index.html"
-    if index_file.exists():
-        return FileResponse(str(index_file))
-    return {"message": "Outreach Intelligence Engine API is online. UI assets loading."}
+    if not index_file.exists():
+        return {"message": "Outreach Intelligence Engine API is online. UI assets loading."}
+
+    html_content = index_file.read_text(encoding="utf-8")
+
+    # Compute content hashes for dynamic asset versioning
+    app_js_path = static_dir / "app.js"
+    style_css_path = static_dir / "style.css"
+
+    js_hash = hashlib.sha256(app_js_path.read_bytes()).hexdigest()[:10] if app_js_path.exists() else str(int(time.time()))
+    css_hash = hashlib.sha256(style_css_path.read_bytes()).hexdigest()[:10] if style_css_path.exists() else str(int(time.time()))
+
+    # Inject dynamic cache-busting version query parameters
+    html_content = html_content.replace('href="/static/style.css"', f'href="/static/style.css?v={css_hash}"')
+    html_content = html_content.replace('src="/static/app.js"', f'src="/static/app.js?v={js_hash}"')
+
+    return HTMLResponse(
+        content=html_content,
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )

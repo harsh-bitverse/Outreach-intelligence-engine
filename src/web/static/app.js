@@ -750,9 +750,13 @@ class OperationsDashboard {
   // --------------------------------------------------------------------------
   // Portal Application View / Manage Handlers (Phase 5)
   // --------------------------------------------------------------------------
+  openPortalManager(oppId) {
+    return this.openPortalModal(oppId);
+  }
+
   async openPortalModal(oppId) {
     this.currentPortalOppId = oppId;
-    const modal = document.getElementById('portalModal');
+    const modal = document.getElementById('pmModal') || document.getElementById('portalModal');
     if (!modal) return;
 
     document.getElementById('pmTitle').textContent = 'Loading Application Details...';
@@ -830,7 +834,7 @@ class OperationsDashboard {
   }
 
   closePortalModal() {
-    const modal = document.getElementById('portalModal');
+    const modal = document.getElementById('pmModal') || document.getElementById('portalModal');
     if (modal) modal.style.display = 'none';
   }
 
